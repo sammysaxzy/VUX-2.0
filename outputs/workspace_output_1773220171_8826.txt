@@ -1,0 +1,50 @@
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import type { User, Token, Client, MSTBox, Alert } from '../types';
+
+// Auth Store
+interface AuthState {
+  user: User | null;
+  token: string | null;
+  isAuthenticated: boolean;
+  login: (token: Token) => void;
+  logout: () => void;
+  updateUser: (user: Partial<User>) => void;
+}
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      login: (tokenData: Token) => set({
+        user: tokenData.user,
+        token: tokenData.access_token,
+        isAuthenticated: true,
+      }),
+      logout: () => set({
+        user: null,
+        token: null,
+        isAuthenticated: false,
+      }),
+      updateUser: (userData) => set((state) => ({
+        user: state.user ? { ...state.user, ...userData } : null,
+      })),
+    }),
+    {
+      name: 'isp-auth-storage',
+      partialize: (state) => ({
+        token: state.token,
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+      }),
+    }
+  )
+);
+
+// Map Store
+interface MapState {
+  selectedClientId: number | null;
+  selectedMstId: number | null;
+  selectedRouteId: number | null;

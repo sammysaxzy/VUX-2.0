@@ -20,6 +20,8 @@ import {
   buildKpis,
   createMockMstConnection,
   deleteMockCable,
+  deleteMockClosure,
+  deleteMockNode,
   mockActivities,
   mockAlerts,
   mockBranding,
@@ -315,6 +317,28 @@ export const apiClient = {
     return data;
   },
 
+  async deleteNetworkNode(payload: { nodeId: string }, tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return deleteMockNode(payload);
+    }
+    const { data } = await api.delete(`/network/nodes/${payload.nodeId}`, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async deleteClosure(payload: { closureId: string }, tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return deleteMockClosure(payload);
+    }
+    const { data } = await api.delete(`/network/closures/${payload.closureId}`, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
   async getClosures(tenantId: string, token?: string): Promise<ClosureBox[]> {
     if (USE_MOCKS) {
       await sleep(180);
@@ -493,3 +517,5 @@ export const apiClient = {
     return data;
   },
 };
+
+

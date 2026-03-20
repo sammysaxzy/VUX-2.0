@@ -38,9 +38,18 @@ type ClosureSpliceFormProps = {
     };
   }) => void;
   onDelete?: (payload: { closureId: string; spliceId: string }) => void;
+  onDeleteClosure?: (payload: { closureId: string }) => void;
 };
 
-export function ClosureSpliceForm({ open, closure, cables, onOpenChange, onSave, onDelete }: ClosureSpliceFormProps) {
+export function ClosureSpliceForm({
+  open,
+  closure,
+  cables,
+  onOpenChange,
+  onSave,
+  onDelete,
+  onDeleteClosure,
+}: ClosureSpliceFormProps) {
   const [editingSpliceId, setEditingSpliceId] = useState<string | undefined>();
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -99,6 +108,22 @@ export function ClosureSpliceForm({ open, closure, cables, onOpenChange, onSave,
             <p>
               <span className="text-muted-foreground">Coordinates:</span> {closure.location.lat.toFixed(5)}, {closure.location.lng.toFixed(5)}
             </p>
+            <div className="mt-2 space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Connected Fibres</p>
+              <div className="flex flex-wrap gap-1.5">
+                {closure.connectedCableIds.map((cableId) => {
+                  const cable = cables.find((entry) => entry.id === cableId);
+                  return (
+                    <span key={cableId} className="rounded-full border border-border px-2 py-0.5 text-[11px]">
+                      {cable?.name ?? cableId}
+                    </span>
+                  );
+                })}
+              </div>
+              {closure.connectedCableIds.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No connected fibre cable yet.</p>
+              ) : null}
+            </div>
           </div>
 
           <form className="space-y-3" onSubmit={submit}>
@@ -197,6 +222,18 @@ export function ClosureSpliceForm({ open, closure, cables, onOpenChange, onSave,
               </div>
             ))}
             {closure.splices.length === 0 ? <p className="text-xs text-muted-foreground">No splices yet.</p> : null}
+          </div>
+
+          <div className="rounded-xl border border-danger/40 bg-danger/5 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-danger">Danger Zone</p>
+            <Button
+              className="mt-2"
+              variant="danger"
+              disabled={!onDeleteClosure}
+              onClick={() => onDeleteClosure?.({ closureId: closure.id })}
+            >
+              Delete Closure
+            </Button>
           </div>
         </div>
       ) : (

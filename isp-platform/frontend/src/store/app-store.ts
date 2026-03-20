@@ -4,7 +4,7 @@ import type { AlertItem, DashboardRealtimePayload, EngineerActivity, KpiSnapshot
 
 type ThemeMode = "light" | "dark";
 type ActiveModal = "fibre-details" | "mst-details" | null;
-type ModalType = "mst-details" | "fiber-details" | "closure-details" | null;
+type ModalType = "mst-details" | "fiber-details" | "closure-details" | "customer-details" | null;
 type ActivePanel = ModalType;
 
 type AppState = {
@@ -15,6 +15,7 @@ type AppState = {
   selectedMSTId?: string;
   selectedFiberId?: string;
   selectedClosureId?: string;
+  selectedCustomerNodeId?: string;
   modalType: ModalType;
   activePanel: ActivePanel;
   activeModal: ActiveModal;
@@ -28,6 +29,7 @@ type AppState = {
   setSelectedMST: (mstId?: string) => void;
   setSelectedFiber: (fiberId?: string) => void;
   setSelectedClosure: (closureId?: string) => void;
+  setSelectedCustomerNode: (nodeId?: string) => void;
   setModalType: (modal: ModalType) => void;
   setActivePanel: (panel: ActivePanel) => void;
   setActiveModal: (modal: ActiveModal) => void;
@@ -51,6 +53,7 @@ export const useAppStore = create<AppState>()(
       selectedMSTId: undefined,
       selectedFiberId: undefined,
       selectedClosureId: undefined,
+      selectedCustomerNodeId: undefined,
       modalType: null,
       activePanel: null,
       activeModal: null,
@@ -62,6 +65,7 @@ export const useAppStore = create<AppState>()(
       setSelectedMST: (mstId) => set({ selectedMSTId: mstId }),
       setSelectedFiber: (fiberId) => set({ selectedFiberId: fiberId }),
       setSelectedClosure: (closureId) => set({ selectedClosureId: closureId }),
+      setSelectedCustomerNode: (nodeId) => set({ selectedCustomerNodeId: nodeId }),
       setModalType: (modal) => set({ modalType: modal, activePanel: modal }),
       setActivePanel: (panel) => set({ activePanel: panel, modalType: panel }),
       setActiveModal: (modal) =>

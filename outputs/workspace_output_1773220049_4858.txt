@@ -1,0 +1,119 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'react-hot-toast';
+import { useEffect } from 'react';
+
+import { useAuthStore } from './store';
+import wsService from './services/websocket';
+
+// Pages
+import LoginPage from './pages/LoginPage';
+import DashboardPage from './pages/DashboardPage';
+import ClientsPage from './pages/ClientsPage';
+import MSTPage from './pages/MSTPage';
+import FibrePage from './pages/FibrePage';
+import MapPage from './pages/MapPage';
+import ActivityPage from './pages/ActivityPage';
+
+// Layout
+import Layout from './components/layout/Layout';
+
+// Create query client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      retry: 1,
+    },
+  },
+});
+
+// Protected Route wrapper
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuthStore();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function App() {
+  const { isAuthenticated, token } = useAuthStore();
+
+  // Connect to WebSocket when authenticated
+  useEffect(() => {
+    if (isAuthenticated && token) {
+      wsService.connect();
+    } else {
+      wsService.disconnect();
+    }
+  }, [isAuthenticated, token]);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Routes>
+          {/* Public routes */}
+          <Route
+            path="/login"
+            element={
+              isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />
+            }
+          />
+
+          {/* Protected routes */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<DashboardPage />} />
+            <Route path="map" element={<MapPage />} />
+            <Route path="clients" element={<ClientsPage />} />
+            <Route path="clients/:id" element={<ClientsPage />} />
+            <Route path="mst" element={<MSTPage />} />
+            <Route path="mst/:id" element={<MSTPage />} />
+            <Route path="fibre" element={<FibrePage />} />
+            <Route path="activity" element={<ActivityPage />} />
+            <Route path="settings" element={<div className="text-dark-400">Settings page coming soon...</div>} />
+          </Route>
+
+          {/* Catch all */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+
+      {/* Toast notifications */}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#1e293b',
+            color: '#fff',
+            border: '1px solid #334155',
+          },
+          success: {
+            iconTheme: {
+              primary: '#22c55e',
+              secondary: '#fff',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+          },
+        }}
+      />
+    </QueryClientProvider>
+  );
+}
+
+export default App;

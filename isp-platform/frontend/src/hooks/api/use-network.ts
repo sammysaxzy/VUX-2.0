@@ -119,6 +119,39 @@ export function useDeleteFibreCable() {
   });
 }
 
+export function useDeleteNetworkNode() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { nodeId: string }) => apiClient.deleteNetworkNode(payload, tenantId, token),
+    onSuccess: () => {
+      toast.success("Infrastructure node deleted.");
+      queryClient.invalidateQueries({ queryKey: ["network-nodes", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["fibre-cables", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["closures", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["customers", tenantId] });
+    },
+    onError: (error: Error) => toast.error(error.message || "Failed to delete node."),
+  });
+}
+
+export function useDeleteClosure() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { closureId: string }) => apiClient.deleteClosure(payload, tenantId, token),
+    onSuccess: () => {
+      toast.success("Closure deleted.");
+      queryClient.invalidateQueries({ queryKey: ["closures", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["network-nodes", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["fibre-cables", tenantId] });
+    },
+    onError: (error: Error) => toast.error(error.message || "Failed to delete closure."),
+  });
+}
+
 export function useUpsertClosureSplice() {
   const tenantId = useTenantId();
   const token = useAppStore((state) => state.token);

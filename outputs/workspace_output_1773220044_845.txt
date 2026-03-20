@@ -1,0 +1,13 @@
+total 48
+drwxr-xr-x 10 root root 4096 Mar 11 08:53 .
+drwxr-xr-x  4 root root 4096 Mar 11 09:07 ..
+-rw-r--r--  1 root root 3277 Mar 11 08:32 App.tsx
+drwxr-xr-x  7 root root 4096 Mar 11 08:02 components
+drwxr-xr-x  2 root root 4096 Mar 11 08:02 hooks
+-rw-r--r--  1 root root  244 Mar 11 08:32 main.tsx
+drwxr-xr-x  2 root root 4096 Mar 11 09:03 pages
+drwxr-xr-x  2 root root 4096 Mar 11 08:54 services
+drwxr-xr-x  2 root root 4096 Mar 11 08:16 store
+drwxr-xr-x  2 root root 4096 Mar 11 08:14 styles
+drwxr-xr-x  2 root root 4096 Mar 11 08:53 types
+drwxr-xr-x  2 root root 4096 Mar 11 08:02 utils
