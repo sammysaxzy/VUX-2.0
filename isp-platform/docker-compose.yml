@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgis/postgis:14-3.2-alpine
+    container_name: isp_db
+    environment:
+      POSTGRES_USER: isp_user
+      POSTGRES_PASSWORD: isp_password
+      POSTGRES_DB: isp_platform
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U isp_user -d isp_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - isp_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: isp_backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://isp_user:isp_password@db:5432/isp_platform
+      SECRET_KEY: your-secret-key-change-in-production
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      CORS_ORIGINS: '["http://localhost:3000","http://localhost:5173"]'
+      DEBUG: "true"
+    ports:
+      - "8001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/app:/app/app
+    networks:
+      - isp_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: isp_frontend
+    environment:
+      VITE_API_URL: /api
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - isp_network
+
+volumes:
+  postgres_data:
+
+networks:
+  isp_network:
+    driver: bridge

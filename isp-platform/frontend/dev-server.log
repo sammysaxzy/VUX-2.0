@@ -1,0 +1,454 @@
+
+> isp-oss-bss-frontend@2.0.0 dev
+> vite
+
+
+  [32m[1mVITE[22m v7.3.1[39m  [2mready in [0m[1m3106[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
+[2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
+[2m11:25:12 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css[22m
+[2m11:25:29 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/components/providers/theme-sync.tsx, /src/components/providers/realtime-provider.tsx, /src/pages/settings-page.tsx, /src/pages/login-page.tsx, /src/pages/dashboard-page.tsx, /src/pages/customers-page.tsx, /src/components/layout/sidebar.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx, /src/pages/field-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/customer-profile-page.tsx, /src/components/layout/topbar.tsx, /src/pages/radius-page.tsx, /src/pages/register-page.tsx, /src/styles/globals.css[22m
+[2m11:27:40 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/pages/dashboard-page.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx, /src/pages/field-page.tsx, /src/pages/customers-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/customer-profile-page.tsx, /src/pages/radius-page.tsx, /src/pages/login-page.tsx, /src/pages/register-page.tsx[22m
+[2m11:28:02 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/pages/dashboard-page.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx, /src/pages/field-page.tsx, /src/pages/customers-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/customer-profile-page.tsx, /src/pages/radius-page.tsx, /src/pages/login-page.tsx, /src/pages/register-page.tsx[22m
+[2m11:28:24 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/pages/dashboard-page.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx, /src/pages/field-page.tsx, /src/pages/customers-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/customer-profile-page.tsx, /src/pages/radius-page.tsx, /src/pages/login-page.tsx, /src/pages/register-page.tsx[22m
+[2m11:28:41 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/pages/field-page.tsx, /src/pages/customers-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx[22m
+[2m11:28:52 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/providers/realtime-provider.tsx, /src/styles/globals.css[22m
+[2m11:29:55 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/components/map/map-component.tsx[22m
+[2m11:31:41 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/components/map/map-component.tsx[22m
+[2m11:32:20 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/map-page.tsx, /src/styles/globals.css[22m
+[2m11:33:01 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/pages/dashboard-page.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx, /src/pages/field-page.tsx, /src/pages/customers-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/customer-profile-page.tsx, /src/pages/radius-page.tsx, /src/pages/login-page.tsx, /src/pages/register-page.tsx[22m
+[2m11:33:22 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/components/map/map-component.tsx[22m
+[2m11:33:39 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/components/map/map-component.tsx[22m
+[2m11:40:10 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/components/map/splitter-grid.tsx[22m
+[2m11:40:10 PM[22m [31m[1m[vite][22m[39m [31mInternal server error: C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\src\components\map\splitter-grid.tsx: Unexpected token, expected "}" (77:16)
+
+[0m [90m 75 |[31m               ) [33m:[31m (
+ [90m 76 |[31m                 [33m<[31m[33mp[31m className[33m=[31m[32m"text-[11px] text-muted-foreground"[31m[33m>[31m[33mReady[31m [36mfor[31m assignment[33m<[31m[33m/[31m[33mp[31m[33m>[31m
+[31m[1m>[22m[31m[90m 77 |[31m               ) [33m:[31m [36mnull[31m}
+ [90m    |[31m                 [31m[1m^[22m[31m
+ [90m 78 |[31m             [33m<[31m[33m/[31m[33mdiv[31m[33m>[31m
+ [90m 79 |[31m           )[33m;[31m
+ [90m 80 |[31m         })}[0m[39m
+  Plugin: [35mvite:react-babel[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/splitter-grid.tsx[39m:77:16
+[33m  75 |                ) : (
+  76 |                  <p className="text-[11px] text-muted-foreground">Ready for assignment</p>
+  77 |                ) : null}
+     |                  ^
+  78 |              </div>
+  79 |            );[39m
+      at constructor (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:365:19)
+      at TypeScriptParserMixin.raise (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+      at TypeScriptParserMixin.unexpected (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:6619:16)
+      at TypeScriptParserMixin.expect (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:6899:12)
+      at TypeScriptParserMixin.jsxParseExpressionContainer (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:4637:10)
+      at TypeScriptParserMixin.jsxParseElementAt (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:4711:36)
+      at TypeScriptParserMixin.jsxParseElement (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:4749:17)
+      at TypeScriptParserMixin.parseExprAtom (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:4759:19)
+      at TypeScriptParserMixin.parseExprSubscripts (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+      at TypeScriptParserMixin.parseUpdate (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:9837:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at TypeScriptParserMixin.parseExprOps (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+      at TypeScriptParserMixin.parseMaybeConditional (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:9775:39
+      at TypeScriptParserMixin.tryParse (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:6907:20)
+      at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:9775:18)
+      at C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:10800:39
+      at TypeScriptParserMixin.allowInAnd (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+      at TypeScriptParserMixin.parseMaybeAssignAllowIn (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+      at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:12493:17)
+      at TypeScriptParserMixin.parseParenAndDistinguishExpression (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:11675:28)
+      at TypeScriptParserMixin.parseExprAtom (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:11331:23)
+      at TypeScriptParserMixin.parseExprAtom (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:4764:20)
+      at TypeScriptParserMixin.parseExprSubscripts (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+      at TypeScriptParserMixin.parseUpdate (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+      at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+      at TypeScriptParserMixin.parseMaybeUnary (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:9837:18)
+      at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+      at TypeScriptParserMixin.parseExprOps (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+      at TypeScriptParserMixin.parseMaybeConditional (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+      at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+      at TypeScriptParserMixin.parseMaybeAssign (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:9786:20)
+      at TypeScriptParserMixin.parseExpressionBase (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:10784:23)
+      at C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:10780:39
+      at TypeScriptParserMixin.allowInAnd (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:12421:16)
+      at TypeScriptParserMixin.parseExpression (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:10780:17)
+      at TypeScriptParserMixin.parseReturnStatement (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:13142:28)
+      at TypeScriptParserMixin.parseStatementContent (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:12798:21)
+      at TypeScriptParserMixin.parseStatementContent (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:9508:18)
+      at TypeScriptParserMixin.parseStatementLike (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+      at TypeScriptParserMixin.parseStatementListItem (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:12747:17)
+      at TypeScriptParserMixin.parseBlockOrModuleBlockBody (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:13316:61)
+      at TypeScriptParserMixin.parseBlockBody (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+      at TypeScriptParserMixin.parseBlock (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:13297:10)
+      at TypeScriptParserMixin.parseFunctionBody (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:12100:24)
+      at TypeScriptParserMixin.parseArrowExpression (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:12075:10)
+      at TypeScriptParserMixin.parseParenAndDistinguishExpression (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\@babel\parser\lib\index.js:11687:12)
+[2m11:40:35 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/components/map/mst-details-popup.tsx[22m
+[2m11:40:36 PM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\src\components\map\splitter-grid.tsx: Unexpected token, expected "}" (77:16)
+
+[0m [90m 75 |[39m               ) [33m:[39m (
+ [90m 76 |[39m                 [33m<[39m[33mp[39m className[33m=[39m[32m"text-[11px] text-muted-foreground"[39m[33m>[39m[33mReady[39m [36mfor[39m assignment[33m<[39m[33m/[39m[33mp[39m[33m>[39m
+[31m[1m>[22m[39m[90m 77 |[39m               ) [33m:[39m [36mnull[39m}
+ [90m    |[39m                 [31m[1m^[22m[39m
+ [90m 78 |[39m             [33m<[39m[33m/[39m[33mdiv[39m[33m>[39m
+ [90m 79 |[39m           )[33m;[39m
+ [90m 80 |[39m         })}[0m
+  Plugin: [35mvite:react-babel[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/splitter-grid.tsx[39m:77:16
+[33m  75 |                ) : (
+  76 |                  <p className="text-[11px] text-muted-foreground">Ready for assignment</p>
+  77 |                ) : null}
+     |                  ^
+  78 |              </div>
+  79 |            );[39m
+[2m11:42:04 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/components/map/splitter-grid.tsx[22m
+[2m7:41:06 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css[22m
+[2m7:41:21 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/components/providers/theme-sync.tsx, /src/components/providers/realtime-provider.tsx, /src/pages/settings-page.tsx, /src/pages/login-page.tsx, /src/pages/dashboard-page.tsx, /src/pages/customers-page.tsx, /src/components/layout/sidebar.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx, /src/pages/field-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/customer-profile-page.tsx, /src/components/layout/topbar.tsx, /src/pages/radius-page.tsx, /src/pages/register-page.tsx, /src/components/map/map-component.tsx, /src/styles/globals.css[22m
+[2m7:41:47 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/pages/dashboard-page.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx, /src/pages/field-page.tsx, /src/pages/customers-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/customer-profile-page.tsx, /src/pages/radius-page.tsx, /src/pages/login-page.tsx, /src/pages/register-page.tsx[22m
+[2m7:42:06 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/pages/dashboard-page.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx, /src/pages/field-page.tsx, /src/pages/customers-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/customer-profile-page.tsx, /src/pages/radius-page.tsx, /src/pages/login-page.tsx, /src/pages/register-page.tsx[22m
+[2m7:42:29 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/pages/dashboard-page.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx, /src/pages/field-page.tsx, /src/pages/customers-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/customer-profile-page.tsx, /src/pages/radius-page.tsx, /src/pages/login-page.tsx, /src/pages/register-page.tsx[22m
+[2m7:42:47 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/pages/field-page.tsx, /src/pages/customers-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx[22m
+[2m8:03:24 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/components/map/map-component.tsx[22m
+[2m8:03:24 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/components/map/map-component.tsx[22m
+[2m8:03:24 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/components/map/map-component.tsx[22m
+[2m8:04:12 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/components/map/map-component.tsx[22m
+[2m8:08:28 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/map/mst-details-panel.tsx, /src/styles/globals.css[22m
+[2m8:10:50 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/map/closure-splice-form.tsx, /src/styles/globals.css[22m
+[2m8:12:00 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/components/map/closure-splice-form.tsx[22m
+[2m8:12:01 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Transform failed with 1 error:
+C:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx:180:65: ERROR: The character ">" is not valid inside a JSX element
+  Plugin: [35mvite:esbuild[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx[39m:180:62
+[33m  
+  [33mThe character ">" is not valid inside a JSX element[33m
+  178 |            <div key={splice.id} className="rounded-lg border border-border/60 px-2 py-1 text-xs">
+  179 |                  <p>
+  180 |                    {splice.fromCableId} ({splice.fromCoreColor}) -> {splice.toCableId} ({splice.toCoreColor})
+      |                                                                   ^
+  181 |                  </p>
+  182 |                  <div className="mt-2 flex items-center gap-2">
+  [39m
+[2m8:12:03 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Transform failed with 1 error:
+C:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx:180:65: ERROR: The character ">" is not valid inside a JSX element[39m
+  Plugin: [35mvite:esbuild[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx[39m:180:62
+[33m  
+  [33mThe character ">" is not valid inside a JSX element[33m
+  178 |            <div key={splice.id} className="rounded-lg border border-border/60 px-2 py-1 text-xs">
+  179 |                  <p>
+  180 |                    {splice.fromCableId} ({splice.fromCoreColor}) -> {splice.toCableId} ({splice.toCoreColor})
+      |                                                                   ^
+  181 |                  </p>
+  182 |                  <div className="mt-2 flex items-center gap-2">
+  [39m
+      at failureErrorWithLog (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1748:15)
+      at C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1017:50
+      at responseCallbacks.<computed> (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:884:9)
+      at handleIncomingPacket (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:939:12)
+      at Socket.readFromStdout (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:862:7)
+      at Socket.emit (node:events:508:28)
+      at addChunk (node:internal/streams/readable:559:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+      at Readable.push (node:internal/streams/readable:390:5)
+      at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
+[2m8:12:22 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Transform failed with 1 error:
+C:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx:180:65: ERROR: The character ">" is not valid inside a JSX element[39m
+  Plugin: [35mvite:esbuild[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx[39m:180:62
+[33m  
+  [33mThe character ">" is not valid inside a JSX element[33m
+  178 |            <div key={splice.id} className="rounded-lg border border-border/60 px-2 py-1 text-xs">
+  179 |                  <p>
+  180 |                    {splice.fromCableId} ({splice.fromCoreColor}) -> {splice.toCableId} ({splice.toCoreColor})
+      |                                                                   ^
+  181 |                  </p>
+  182 |                  <div className="mt-2 flex items-center gap-2">
+  [39m
+      at failureErrorWithLog (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1748:15)
+      at C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1017:50
+      at responseCallbacks.<computed> (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:884:9)
+      at handleIncomingPacket (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:939:12)
+      at Socket.readFromStdout (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:862:7)
+      at Socket.emit (node:events:508:28)
+      at addChunk (node:internal/streams/readable:559:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+      at Readable.push (node:internal/streams/readable:390:5)
+      at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
+[2m8:12:59 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/map-page.tsx, /src/styles/globals.css[22m
+[2m8:13:01 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Transform failed with 1 error:
+C:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx:180:65: ERROR: The character ">" is not valid inside a JSX element[39m
+  Plugin: [35mvite:esbuild[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx[39m:180:62
+[33m  
+  [33mThe character ">" is not valid inside a JSX element[33m
+  178 |            <div key={splice.id} className="rounded-lg border border-border/60 px-2 py-1 text-xs">
+  179 |                  <p>
+  180 |                    {splice.fromCableId} ({splice.fromCoreColor}) -> {splice.toCableId} ({splice.toCoreColor})
+      |                                                                   ^
+  181 |                  </p>
+  182 |                  <div className="mt-2 flex items-center gap-2">
+  [39m
+      at failureErrorWithLog (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1748:15)
+      at C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1017:50
+      at responseCallbacks.<computed> (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:884:9)
+      at handleIncomingPacket (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:939:12)
+      at Socket.readFromStdout (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:862:7)
+      at Socket.emit (node:events:508:28)
+      at addChunk (node:internal/streams/readable:559:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+      at Readable.push (node:internal/streams/readable:390:5)
+      at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
+[2m8:13:17 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/pages/field-page.tsx, /src/pages/customers-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx[22m
+[2m8:13:19 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Transform failed with 1 error:
+C:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx:180:65: ERROR: The character ">" is not valid inside a JSX element[39m
+  Plugin: [35mvite:esbuild[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx[39m:180:62
+[33m  
+  [33mThe character ">" is not valid inside a JSX element[33m
+  178 |            <div key={splice.id} className="rounded-lg border border-border/60 px-2 py-1 text-xs">
+  179 |                  <p>
+  180 |                    {splice.fromCableId} ({splice.fromCoreColor}) -> {splice.toCableId} ({splice.toCoreColor})
+      |                                                                   ^
+  181 |                  </p>
+  182 |                  <div className="mt-2 flex items-center gap-2">
+  [39m
+      at failureErrorWithLog (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1748:15)
+      at C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1017:50
+      at responseCallbacks.<computed> (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:884:9)
+      at handleIncomingPacket (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:939:12)
+      at Socket.readFromStdout (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:862:7)
+      at Socket.emit (node:events:508:28)
+      at addChunk (node:internal/streams/readable:559:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+      at Readable.push (node:internal/streams/readable:390:5)
+      at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
+[2m8:13:37 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/pages/dashboard-page.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx, /src/pages/field-page.tsx, /src/pages/customers-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/customer-profile-page.tsx, /src/pages/radius-page.tsx, /src/pages/login-page.tsx, /src/pages/register-page.tsx[22m
+[2m8:13:38 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Transform failed with 1 error:
+C:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx:180:65: ERROR: The character ">" is not valid inside a JSX element[39m
+  Plugin: [35mvite:esbuild[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx[39m:180:62
+[33m  
+  [33mThe character ">" is not valid inside a JSX element[33m
+  178 |            <div key={splice.id} className="rounded-lg border border-border/60 px-2 py-1 text-xs">
+  179 |                  <p>
+  180 |                    {splice.fromCableId} ({splice.fromCoreColor}) -> {splice.toCableId} ({splice.toCoreColor})
+      |                                                                   ^
+  181 |                  </p>
+  182 |                  <div className="mt-2 flex items-center gap-2">
+  [39m
+      at failureErrorWithLog (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1748:15)
+      at C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1017:50
+      at responseCallbacks.<computed> (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:884:9)
+      at handleIncomingPacket (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:939:12)
+      at Socket.readFromStdout (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:862:7)
+      at Socket.emit (node:events:508:28)
+      at addChunk (node:internal/streams/readable:559:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+      at Readable.push (node:internal/streams/readable:390:5)
+      at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
+[2m8:13:51 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/pages/dashboard-page.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx, /src/pages/field-page.tsx, /src/pages/customers-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/customer-profile-page.tsx, /src/pages/radius-page.tsx, /src/pages/login-page.tsx, /src/pages/register-page.tsx[22m
+[2m8:13:53 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Transform failed with 1 error:
+C:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx:180:65: ERROR: The character ">" is not valid inside a JSX element[39m
+  Plugin: [35mvite:esbuild[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx[39m:180:62
+[33m  
+  [33mThe character ">" is not valid inside a JSX element[33m
+  178 |            <div key={splice.id} className="rounded-lg border border-border/60 px-2 py-1 text-xs">
+  179 |                  <p>
+  180 |                    {splice.fromCableId} ({splice.fromCoreColor}) -> {splice.toCableId} ({splice.toCoreColor})
+      |                                                                   ^
+  181 |                  </p>
+  182 |                  <div className="mt-2 flex items-center gap-2">
+  [39m
+      at failureErrorWithLog (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1748:15)
+      at C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1017:50
+      at responseCallbacks.<computed> (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:884:9)
+      at handleIncomingPacket (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:939:12)
+      at Socket.readFromStdout (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:862:7)
+      at Socket.emit (node:events:508:28)
+      at addChunk (node:internal/streams/readable:559:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+      at Readable.push (node:internal/streams/readable:390:5)
+      at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
+[2m8:14:06 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/providers/realtime-provider.tsx, /src/styles/globals.css[22m
+[2m8:14:07 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Transform failed with 1 error:
+C:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx:180:65: ERROR: The character ">" is not valid inside a JSX element[39m
+  Plugin: [35mvite:esbuild[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx[39m:180:62
+[33m  
+  [33mThe character ">" is not valid inside a JSX element[33m
+  178 |            <div key={splice.id} className="rounded-lg border border-border/60 px-2 py-1 text-xs">
+  179 |                  <p>
+  180 |                    {splice.fromCableId} ({splice.fromCoreColor}) -> {splice.toCableId} ({splice.toCoreColor})
+      |                                                                   ^
+  181 |                  </p>
+  182 |                  <div className="mt-2 flex items-center gap-2">
+  [39m
+      at failureErrorWithLog (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1748:15)
+      at C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1017:50
+      at responseCallbacks.<computed> (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:884:9)
+      at handleIncomingPacket (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:939:12)
+      at Socket.readFromStdout (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:862:7)
+      at Socket.emit (node:events:508:28)
+      at addChunk (node:internal/streams/readable:559:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+      at Readable.push (node:internal/streams/readable:390:5)
+      at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
+[2m8:14:24 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/map/mst-details-panel.tsx, /src/styles/globals.css[22m
+[2m8:14:24 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Transform failed with 1 error:
+C:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx:180:65: ERROR: The character ">" is not valid inside a JSX element
+  Plugin: [35mvite:esbuild[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx[39m:180:62
+[33m  
+  [33mThe character ">" is not valid inside a JSX element[33m
+  178 |            <div key={splice.id} className="rounded-lg border border-border/60 px-2 py-1 text-xs">
+  179 |                  <p>
+  180 |                    {splice.fromCableId} ({splice.fromCoreColor}) -> {splice.toCableId} ({splice.toCoreColor})
+      |                                                                   ^
+  181 |                  </p>
+  182 |                  <div className="mt-2 flex items-center gap-2">
+  [39m
+[2m8:14:26 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Transform failed with 1 error:
+C:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx:180:65: ERROR: The character ">" is not valid inside a JSX element[39m
+  Plugin: [35mvite:esbuild[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx[39m:180:62
+[33m  
+  [33mThe character ">" is not valid inside a JSX element[33m
+  178 |            <div key={splice.id} className="rounded-lg border border-border/60 px-2 py-1 text-xs">
+  179 |                  <p>
+  180 |                    {splice.fromCableId} ({splice.fromCoreColor}) -> {splice.toCableId} ({splice.toCoreColor})
+      |                                                                   ^
+  181 |                  </p>
+  182 |                  <div className="mt-2 flex items-center gap-2">
+  [39m
+      at failureErrorWithLog (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1748:15)
+      at C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1017:50
+      at responseCallbacks.<computed> (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:884:9)
+      at handleIncomingPacket (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:939:12)
+      at Socket.readFromStdout (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:862:7)
+      at Socket.emit (node:events:508:28)
+      at addChunk (node:internal/streams/readable:559:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+      at Readable.push (node:internal/streams/readable:390:5)
+      at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
+[2m8:15:12 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/map/mst-details-panel.tsx, /src/styles/globals.css[22m
+[2m8:15:12 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Transform failed with 1 error:
+C:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx:180:65: ERROR: The character ">" is not valid inside a JSX element
+  Plugin: [35mvite:esbuild[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx[39m:180:62
+[33m  
+  [33mThe character ">" is not valid inside a JSX element[33m
+  178 |            <div key={splice.id} className="rounded-lg border border-border/60 px-2 py-1 text-xs">
+  179 |                  <p>
+  180 |                    {splice.fromCableId} ({splice.fromCoreColor}) -> {splice.toCableId} ({splice.toCoreColor})
+      |                                                                   ^
+  181 |                  </p>
+  182 |                  <div className="mt-2 flex items-center gap-2">
+  [39m
+[2m8:15:14 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Transform failed with 1 error:
+C:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx:180:65: ERROR: The character ">" is not valid inside a JSX element[39m
+  Plugin: [35mvite:esbuild[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx[39m:180:62
+[33m  
+  [33mThe character ">" is not valid inside a JSX element[33m
+  178 |            <div key={splice.id} className="rounded-lg border border-border/60 px-2 py-1 text-xs">
+  179 |                  <p>
+  180 |                    {splice.fromCableId} ({splice.fromCoreColor}) -> {splice.toCableId} ({splice.toCoreColor})
+      |                                                                   ^
+  181 |                  </p>
+  182 |                  <div className="mt-2 flex items-center gap-2">
+  [39m
+      at failureErrorWithLog (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1748:15)
+      at C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1017:50
+      at responseCallbacks.<computed> (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:884:9)
+      at handleIncomingPacket (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:939:12)
+      at Socket.readFromStdout (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:862:7)
+      at Socket.emit (node:events:508:28)
+      at addChunk (node:internal/streams/readable:559:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+      at Readable.push (node:internal/streams/readable:390:5)
+      at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
+[2m8:16:17 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Transform failed with 1 error:
+C:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx:180:65: ERROR: The character ">" is not valid inside a JSX element[39m
+  Plugin: [35mvite:esbuild[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx[39m:180:62
+[33m  
+  [33mThe character ">" is not valid inside a JSX element[33m
+  178 |            <div key={splice.id} className="rounded-lg border border-border/60 px-2 py-1 text-xs">
+  179 |                  <p>
+  180 |                    {splice.fromCableId} ({splice.fromCoreColor}) -> {splice.toCableId} ({splice.toCoreColor})
+      |                                                                   ^
+  181 |                  </p>
+  182 |                  <div className="mt-2 flex items-center gap-2">
+  [39m
+      at failureErrorWithLog (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1748:15)
+      at C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1017:50
+      at responseCallbacks.<computed> (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:884:9)
+      at handleIncomingPacket (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:939:12)
+      at Socket.readFromStdout (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:862:7)
+      at Socket.emit (node:events:508:28)
+      at addChunk (node:internal/streams/readable:559:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+      at Readable.push (node:internal/streams/readable:390:5)
+      at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
+[2m8:16:22 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Transform failed with 1 error:
+C:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx:180:65: ERROR: The character ">" is not valid inside a JSX element[39m
+  Plugin: [35mvite:esbuild[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx[39m:180:62
+[33m  
+  [33mThe character ">" is not valid inside a JSX element[33m
+  178 |            <div key={splice.id} className="rounded-lg border border-border/60 px-2 py-1 text-xs">
+  179 |                  <p>
+  180 |                    {splice.fromCableId} ({splice.fromCoreColor}) -> {splice.toCableId} ({splice.toCoreColor})
+      |                                                                   ^
+  181 |                  </p>
+  182 |                  <div className="mt-2 flex items-center gap-2">
+  [39m
+      at failureErrorWithLog (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1748:15)
+      at C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1017:50
+      at responseCallbacks.<computed> (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:884:9)
+      at handleIncomingPacket (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:939:12)
+      at Socket.readFromStdout (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:862:7)
+      at Socket.emit (node:events:508:28)
+      at addChunk (node:internal/streams/readable:559:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+      at Readable.push (node:internal/streams/readable:390:5)
+      at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
+[2m8:20:13 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Transform failed with 1 error:
+C:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx:180:65: ERROR: The character ">" is not valid inside a JSX element[39m
+  Plugin: [35mvite:esbuild[39m
+  File: [36mC:/Users/Makinde Samuel/Downloads/VUXS/isp-platform/frontend/src/components/map/closure-splice-form.tsx[39m:180:62
+[33m  
+  [33mThe character ">" is not valid inside a JSX element[33m
+  178 |            <div key={splice.id} className="rounded-lg border border-border/60 px-2 py-1 text-xs">
+  179 |                  <p>
+  180 |                    {splice.fromCableId} ({splice.fromCoreColor}) -> {splice.toCableId} ({splice.toCoreColor})
+      |                                                                   ^
+  181 |                  </p>
+  182 |                  <div className="mt-2 flex items-center gap-2">
+  [39m
+      at failureErrorWithLog (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1748:15)
+      at C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:1017:50
+      at responseCallbacks.<computed> (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:884:9)
+      at handleIncomingPacket (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:939:12)
+      at Socket.readFromStdout (C:\Users\Makinde Samuel\Downloads\VUXS\isp-platform\frontend\node_modules\esbuild\lib\main.js:862:7)
+      at Socket.emit (node:events:508:28)
+      at addChunk (node:internal/streams/readable:559:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+      at Readable.push (node:internal/streams/readable:390:5)
+      at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
+[2m8:21:31 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/map/closure-splice-form.tsx, /src/styles/globals.css[22m
+[2m8:34:15 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/map-page.tsx, /src/styles/globals.css[22m
+[2m8:34:15 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/map-page.tsx, /src/styles/globals.css[22m
+[2m12:51:55 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css[22m
+[2m12:52:11 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/components/providers/theme-sync.tsx, /src/components/providers/realtime-provider.tsx, /src/pages/settings-page.tsx, /src/pages/login-page.tsx, /src/pages/dashboard-page.tsx, /src/pages/customers-page.tsx, /src/components/layout/sidebar.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx, /src/pages/field-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/customer-profile-page.tsx, /src/components/layout/topbar.tsx, /src/pages/radius-page.tsx, /src/pages/register-page.tsx, /src/components/map/map-component.tsx, /src/styles/globals.css[22m
+[2m12:52:45 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/pages/dashboard-page.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx, /src/pages/field-page.tsx, /src/pages/customers-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/customer-profile-page.tsx, /src/pages/radius-page.tsx, /src/pages/login-page.tsx, /src/pages/register-page.tsx[22m
+[2m12:54:34 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/pages/dashboard-page.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx, /src/pages/field-page.tsx, /src/pages/customers-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/customer-profile-page.tsx, /src/pages/radius-page.tsx, /src/pages/login-page.tsx, /src/pages/register-page.tsx[22m
+[2m12:55:01 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/pages/dashboard-page.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx, /src/pages/field-page.tsx, /src/pages/customers-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/customer-profile-page.tsx, /src/pages/radius-page.tsx, /src/pages/login-page.tsx, /src/pages/register-page.tsx[22m
+[2m12:55:28 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/globals.css, /src/pages/field-page.tsx, /src/pages/customers-page.tsx, /src/pages/infrastructure-page.tsx, /src/pages/faults-page.tsx, /src/pages/map-page.tsx[22m

@@ -1,0 +1,264 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e293b;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Base styles */
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+  
+  body {
+    @apply bg-dark-950 text-dark-100 font-sans;
+  }
+  
+  /* Focus styles */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-primary-500 ring-offset-2 ring-offset-dark-900;
+  }
+}
+
+/* Component styles */
+@layer components {
+  /* Card component */
+  .card {
+    @apply bg-dark-900 border border-dark-700 rounded-lg p-4;
+  }
+  
+  .card-hover {
+    @apply card transition-all duration-200 hover:bg-dark-800 hover:border-dark-600 cursor-pointer;
+  }
+  
+  /* Button variants */
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-primary {
+    @apply btn bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800;
+  }
+  
+  .btn-secondary {
+    @apply btn bg-dark-700 text-dark-100 hover:bg-dark-600 active:bg-dark-500;
+  }
+  
+  .btn-danger {
+    @apply btn bg-danger-500 text-white hover:bg-danger-600 active:bg-danger-600;
+  }
+  
+  .btn-ghost {
+    @apply btn bg-transparent text-dark-300 hover:bg-dark-800 hover:text-white;
+  }
+  
+  .btn-sm {
+    @apply px-3 py-1.5 text-sm;
+  }
+  
+  .btn-lg {
+    @apply px-6 py-3 text-lg;
+  }
+  
+  /* Input styles */
+  .input {
+    @apply w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white placeholder-dark-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors;
+  }
+  
+  .input-error {
+    @apply input border-danger-500 focus:border-danger-500 focus:ring-danger-500;
+  }
+  
+  .label {
+    @apply block text-sm font-medium text-dark-300 mb-1;
+  }
+  
+  /* Badge styles */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
+  }
+  
+  .badge-success {
+    @apply badge bg-success-500/20 text-success-500;
+  }
+  
+  .badge-warning {
+    @apply badge bg-warning-500/20 text-warning-500;
+  }
+  
+  .badge-danger {
+    @apply badge bg-danger-500/20 text-danger-500;
+  }
+  
+  .badge-info {
+    @apply badge bg-info-500/20 text-info-500;
+  }
+  
+  /* Status indicators */
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+  
+  .status-online {
+    @apply status-dot bg-success-500 animate-pulse;
+  }
+  
+  .status-offline {
+    @apply status-dot bg-dark-500;
+  }
+  
+  .status-warning {
+    @apply status-dot bg-warning-500;
+  }
+  
+  .status-danger {
+    @apply status-dot bg-danger-500;
+  }
+  
+  /* Sidebar styles */
+  .sidebar {
+    @apply bg-dark-900 border-r border-dark-700;
+  }
+  
+  .sidebar-item {
+    @apply flex items-center gap-3 px-4 py-3 text-dark-300 hover:bg-dark-800 hover:text-white transition-colors cursor-pointer;
+  }
+  
+  .sidebar-item-active {
+    @apply sidebar-item bg-primary-600/10 text-primary-400 border-r-2 border-primary-500;
+  }
+  
+  /* Table styles */
+  .table-container {
+    @apply overflow-x-auto rounded-lg border border-dark-700;
+  }
+  
+  .table {
+    @apply w-full text-sm text-left;
+  }
+  
+  .table th {
+    @apply px-4 py-3 bg-dark-800 font-medium text-dark-300 uppercase tracking-wider;
+  }
+  
+  .table td {
+    @apply px-4 py-3 bg-dark-900 border-t border-dark-700;
+  }
+  
+  .table tr:hover td {
+    @apply bg-dark-800;
+  }
+  
+  /* Map container */
+  .map-container {
+    @apply w-full h-full rounded-lg overflow-hidden border border-dark-700;
+  }
+  
+  /* Map info window */
+  .map-info-window {
+    @apply bg-dark-900 text-white p-3 rounded-lg shadow-lg border border-dark-600 min-w-[200px];
+  }
+  
+  /* Stat card */
+  .stat-card {
+    @apply card flex flex-col;
+  }
+  
+  .stat-value {
+    @apply text-3xl font-bold text-white;
+  }
+  
+  .stat-label {
+    @apply text-sm text-dark-400;
+  }
+  
+  .stat-trend-up {
+    @apply text-success-500 text-sm;
+  }
+  
+  .stat-trend-down {
+    @apply text-danger-500 text-sm;
+  }
+}
+
+/* Utility classes */
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-400 to-primary-600;
+  }
+  
+  .glass {
+    @apply bg-dark-900/80 backdrop-blur-sm;
+  }
+  
+  .animate-in {
+    animation: animateIn 0.2s ease-out;
+  }
+  
+  @keyframes animateIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+/* Google Maps dark theme */
+.gm-style .gm-style-iw-c {
+  background: #1e293b !important;
+  color: white !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
+}
+
+.gm-style .gm-style-iw-d {
+  overflow: auto !important;
+}
+
+.gm-style .gm-style-iw-tc::after {
+  background: #1e293b !important;
+}
+
+.gm-ui-hover-effect {
+  display: none !important;
+}
+
+/* Fibre route colors on map */
+.fibre-route-stroke {
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.fibre-core-blue { stroke: #3b82f6; }
+.fibre-core-orange { stroke: #f97316; }
+.fibre-core-green { stroke: #22c55e; }
+.fibre-core-brown { stroke: #a16207; }
+.fibre-core-slate { stroke: #64748b; }
+.fibre-core-white { stroke: #f8fafc; }
+.fibre-core-red { stroke: #ef4444; }
+.fibre-core-black { stroke: #171717; stroke-width: 4; }
+.fibre-core-yellow { stroke: #eab308; }
+.fibre-core-violet { stroke: #8b5cf6; }
+.fibre-core-rose { stroke: #f43f5e; }
+.fibre-core-aqua { stroke: #06b6d4; }

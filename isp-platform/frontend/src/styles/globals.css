@@ -1,0 +1,55 @@
+@import "mapbox-gl/dist/mapbox-gl.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 199 44% 98%;
+  --foreground: 209 30% 13%;
+  --card: 0 0% 100%;
+  --card-foreground: 209 30% 15%;
+  --muted: 198 35% 94%;
+  --muted-foreground: 215 13% 44%;
+  --border: 204 26% 85%;
+  --primary: 188 88% 34%;
+  --primary-foreground: 0 0% 100%;
+  --success: 151 71% 40%;
+  --warning: 38 92% 50%;
+  --danger: 0 81% 58%;
+  --info: 199 90% 48%;
+}
+
+.dark {
+  --background: 213 34% 8%;
+  --foreground: 198 38% 95%;
+  --card: 214 28% 12%;
+  --card-foreground: 198 38% 95%;
+  --muted: 215 23% 19%;
+  --muted-foreground: 212 15% 68%;
+  --border: 214 22% 24%;
+  --primary: 182 77% 45%;
+  --primary-foreground: 210 33% 10%;
+  --success: 145 71% 49%;
+  --warning: 38 95% 56%;
+  --danger: 0 84% 63%;
+  --info: 200 98% 65%;
+}
+
+* {
+  @apply border-border;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+  background-image:
+    radial-gradient(circle at 8% 12%, rgb(14 165 233 / 0.18), transparent 34%),
+    radial-gradient(circle at 92% 6%, rgb(249 115 22 / 0.16), transparent 30%),
+    radial-gradient(circle at 55% 94%, rgb(20 184 166 / 0.12), transparent 34%);
+}
+
+.dark body {
+  background-image:
+    radial-gradient(circle at 8% 12%, rgb(56 189 248 / 0.2), transparent 34%),
+    radial-gradient(circle at 92% 6%, rgb(249 115 22 / 0.14), transparent 30%),
+    radial-gradient(circle at 55% 94%, rgb(20 184 166 / 0.15), transparent 34%);
+}
