@@ -28,8 +28,8 @@ export function Sidebar() {
   const branding = useAppStore((state) => state.branding);
 
   return (
-    <aside className="hidden w-72 flex-col border-r border-border/80 bg-card/90 px-4 py-5 lg:flex">
-      <div className="mb-7 flex items-center gap-3 rounded-2xl border border-border/80 bg-background/70 p-3">
+    <aside className="hidden w-72 flex-col border-r border-gray-200 bg-white px-4 py-5 dark:border-border/80 dark:bg-card/90 lg:flex">
+      <div className="mb-7 flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-border/80 dark:bg-background/70">
         {branding?.logoUrl ? (
           <img src={branding.logoUrl} alt="Tenant logo" className="h-10 w-10 rounded-xl object-cover" />
         ) : (

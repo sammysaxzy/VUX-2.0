@@ -1,19 +1,18 @@
 "use client";
 
-import { Bell, LogOut, MoonStar, SunMedium } from "lucide-react";
+import { Bell, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAppStore } from "@/store/app-store";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 export function Topbar() {
-  const theme = useAppStore((state) => state.theme);
-  const setTheme = useAppStore((state) => state.setTheme);
   const logout = useAppStore((state) => state.logout);
   const user = useAppStore((state) => state.user);
   const liveAlerts = useAppStore((state) => state.realtimeAlerts);
 
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border/70 bg-background/80 px-4 py-3 backdrop-blur-md lg:px-8">
+    <header className="sticky top-0 z-20 flex items-center justify-between border-b border-gray-200 bg-white/95 px-4 py-3 backdrop-blur-md dark:border-border/70 dark:bg-background/80 lg:px-8">
       <div>
         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">NOC Command</p>
         <p className="text-sm font-medium">{user?.fullName ?? "Operator"}</p>
@@ -26,9 +25,7 @@ export function Topbar() {
           ) : null}
         </Button>
         <Badge variant="outline">{user?.role?.replace("_", " ") ?? "guest"}</Badge>
-        <Button variant="secondary" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-          {theme === "dark" ? <SunMedium className="h-4 w-4" /> : <MoonStar className="h-4 w-4" />}
-        </Button>
+        <ThemeToggle />
         <Button variant="ghost" size="icon" onClick={logout}>
           <LogOut className="h-4 w-4" />
         </Button>

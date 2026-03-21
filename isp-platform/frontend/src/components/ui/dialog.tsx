@@ -16,8 +16,8 @@ export function Dialog({ open, title, description, onOpenChange, children, class
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className={cn("w-full max-w-2xl rounded-2xl border border-border bg-card p-5 shadow-soft", className)}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm dark:bg-black/60">
+      <div className={cn("w-full max-w-2xl rounded-2xl border border-gray-200 bg-white p-5 shadow-soft dark:border-border dark:bg-card", className)}>
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold">{title}</h2>

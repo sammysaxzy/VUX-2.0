@@ -9,7 +9,10 @@ import type {
   FibreCore,
   KpiSnapshot,
   NetworkNode,
+  RadiusPlan,
+  RadiusSettings,
   RadiusSession,
+  RadiusUser,
   SplitterType,
   SplitterPort,
   TenantBranding,
@@ -350,6 +353,12 @@ export const mockSessions: RadiusSession[] = [
     ipAddress: "10.20.1.17",
     startedAt: new Date(now - 1000 * 60 * 160).toISOString(),
     status: "online",
+    dataUsage: "3.8 GiB",
+    duration: "02:40:19",
+    accountStatus: "active",
+    plan: "Core 10/10",
+    lastUpdated: new Date(now - 1000 * 60 * 5).toISOString(),
+    accountExists: true,
   },
   {
     id: "sess-2",
@@ -358,8 +367,107 @@ export const mockSessions: RadiusSession[] = [
     ipAddress: "10.20.1.29",
     startedAt: new Date(now - 1000 * 60 * 48).toISOString(),
     status: "offline",
+    dataUsage: "1.2 GiB",
+    duration: "01:04:02",
+    accountStatus: "inactive",
+    plan: "Core 20/20",
+    lastUpdated: new Date(now - 1000 * 60 * 12).toISOString(),
+    accountExists: true,
   },
 ];
+
+export const mockRadiusPlans: RadiusPlan[] = [
+  { name: "Core 10/10", speed: "10M/10M", price: "₦8,500", rateLimit: "10M/10M", description: "Residential onboarding plan" },
+  { name: "Core 20/20", speed: "20M/20M", price: "₦12,500", rateLimit: "20M/20M", description: "Business starter tier" },
+  { name: "Core 50/50", speed: "50M/50M", price: "₦18,900", rateLimit: "50M/50M", description: "Enterprise burst-ready" },
+];
+
+export const mockRadiusUsers: RadiusUser[] = [
+  {
+    username: "adebayo_hub",
+    status: "active",
+    plan: "Core 10/10",
+    onuSerial: "ZTEG12398A",
+    olt: "OLT HQ Core",
+    ponPort: "1/3/7",
+    exists: true,
+    lastSeen: new Date(now - 1000 * 60 * 5).toISOString(),
+  },
+  {
+    username: "marina_it",
+    status: "inactive",
+    plan: "Core 20/20",
+    onuSerial: "HWT89912XYZ",
+    olt: "OLT HQ Core",
+    ponPort: "1/5/3",
+    exists: true,
+    lastSeen: new Date(now - 1000 * 60 * 12).toISOString(),
+  },
+  {
+    username: "korede_res",
+    status: "inactive",
+    plan: "Core 10/10",
+    onuSerial: "NOK001ABB12",
+    olt: "OLT HQ Core",
+    ponPort: "1/3/8",
+    exists: false,
+    lastSeen: new Date(now - 1000 * 60 * 90).toISOString(),
+  },
+];
+
+export let mockRadiusSettings: RadiusSettings = {
+  radiusServerIp: "10.250.1.12",
+  sharedSecret: "Ultrasecret123!",
+  nasIp: "10.250.1.2",
+  coaEnabled: true,
+  defaultDns: "1.1.1.1,8.8.8.8",
+  ipPool: "10.20.1.0/24",
+};
+
+export function addMockRadiusUser(payload: {
+  username: string;
+  password: string;
+  plan: string;
+  onuSerial: string;
+  olt: string;
+  ponPort: string;
+}) {
+  const exists = mockRadiusUsers.some((entry) => entry.username === payload.username);
+  if (exists) {
+    throw new Error("User already exists");
+  }
+  const newUser: RadiusUser = {
+    username: payload.username,
+    status: "inactive",
+    plan: payload.plan,
+    onuSerial: payload.onuSerial,
+    olt: payload.olt,
+    ponPort: payload.ponPort,
+    exists: true,
+    lastSeen: new Date().toISOString(),
+  };
+  mockRadiusUsers.unshift(newUser);
+  return newUser;
+}
+
+export function activateMockRadiusUser(username: string) {
+  const user = mockRadiusUsers.find((entry) => entry.username === username);
+  if (!user) throw new Error("User not found");
+  user.status = "active";
+  user.lastSeen = new Date().toISOString();
+  const session = mockSessions.find((entry) => entry.username === username);
+  if (session) {
+    session.accountStatus = "active";
+    session.status = "online";
+    session.lastUpdated = new Date().toISOString();
+  }
+  return user;
+}
+
+export function updateMockRadiusSettings(payload: Partial<RadiusSettings>) {
+  mockRadiusSettings = { ...mockRadiusSettings, ...payload };
+  return mockRadiusSettings;
+}
 
 export function buildKpis(): KpiSnapshot {
   const activeCustomers = mockCustomers.filter((c) => c.accountStatus === "active").length;

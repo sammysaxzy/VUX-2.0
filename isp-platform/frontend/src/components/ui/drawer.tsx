@@ -22,11 +22,11 @@ export function Drawer({
 }: DrawerProps) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm dark:bg-black/50">
       <button className="absolute inset-0 h-full w-full cursor-default" onClick={() => onOpenChange(false)} />
       <div
         className={cn(
-          "absolute top-0 h-full w-full max-w-md border-border bg-card p-5 shadow-soft",
+          "absolute top-0 h-full w-full max-w-md border-gray-200 bg-white p-5 shadow-soft dark:border-border dark:bg-card",
           side === "right" ? "right-0 border-l" : "left-0 border-r",
         )}
       >

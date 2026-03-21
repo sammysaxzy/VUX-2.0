@@ -1,18 +1,18 @@
 import { useState } from "react";
 import { Palette, Shield } from "lucide-react";
 import { useAppStore } from "@/store/app-store";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { useThemeStore } from "@/store/theme-store";
 
 export function SettingsPage() {
   const branding = useAppStore((state) => state.branding);
   const setBranding = useAppStore((state) => state.setBranding);
-  const theme = useAppStore((state) => state.theme);
-  const setTheme = useAppStore((state) => state.setTheme);
+  const theme = useThemeStore((state) => state.theme);
   const [ispName, setIspName] = useState(branding?.ispName ?? "");
   const [logoUrl, setLogoUrl] = useState(branding?.logoUrl ?? "");
 
@@ -63,12 +63,15 @@ export function SettingsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-center justify-between rounded-xl border border-border/70 p-3">
+            <div className="space-y-2">
               <div>
-                <p className="font-medium">Dark Mode</p>
-                <p className="text-sm text-muted-foreground">Switch between day and night NOC themes.</p>
+                <p className="font-medium">Workspace theme</p>
+                <p className="text-sm text-muted-foreground">
+                  Choose light, dark, or follow the system preference.
+                </p>
               </div>
-              <Switch checked={theme === "dark"} onCheckedChange={(value) => setTheme(value ? "dark" : "light")} />
+              <ThemeToggle />
+              <p className="text-xs text-muted-foreground">Current preference: {theme}</p>
             </div>
             <div className="rounded-xl border border-border/70 p-3">
               <p className="text-sm text-muted-foreground">Tenant ID</p>

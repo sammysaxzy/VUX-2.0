@@ -8,6 +8,7 @@ import { Link2, MapPinPlusInside, Router, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import type { ClosureBox, Customer, FibreCable, GeoPoint, MstConnectionDraft, NetworkNode } from "@/types";
 import { useAppStore } from "@/store/app-store";
+import { useThemeStore } from "@/store/theme-store";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -62,6 +63,12 @@ const defaultView: Partial<ViewState> = {
   zoom: 11.8,
 };
 
+function resolveTheme(mode: "light" | "dark" | "system"): "light" | "dark" {
+  if (mode !== "system") return mode;
+  if (typeof window === "undefined") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
 const fibreCountOptions: CoreCount[] = [2, 4, 8, 12, 24];
 
 function parseCoordinatePair(lat: string, lng: string): GeoPoint | null {
@@ -87,6 +94,7 @@ export function MapComponent({
   onSaveSplice,
   onDeleteSplice,
 }: Props) {
+  const theme = useThemeStore((state) => state.theme);
   const [addMode, setAddMode] = useState<AddMode>("none");
   const [connectMode, setConnectMode] = useState(false);
   const [connectStartId, setConnectStartId] = useState<string>("");
@@ -134,6 +142,8 @@ export function MapComponent({
 
   const resolvedStartPoint = manualStart ?? startNode?.location ?? null;
   const resolvedEndPoint = manualEnd ?? endNode?.location ?? null;
+  const resolvedTheme = resolveTheme(theme);
+  const mapStyle = resolvedTheme === "dark" ? "mapbox://styles/mapbox/dark-v11" : "mapbox://styles/mapbox/light-v11";
 
   const previewDistanceMeters = useMemo(() => {
     if (!resolvedStartPoint || !resolvedEndPoint) return 0;
@@ -280,7 +290,7 @@ export function MapComponent({
       <Map
         initialViewState={defaultView}
         mapboxAccessToken={mapToken}
-        mapStyle="mapbox://styles/mapbox/dark-v11"
+        mapStyle={mapStyle}
         interactiveLayerIds={["fibre-lines", "fibre-labels", "fault-glow"]}
         onClick={handleMapClick}
         onMouseMove={(event) => {
@@ -331,8 +341,8 @@ export function MapComponent({
               "text-size": 11,
             }}
             paint={{
-              "text-color": "#E2E8F0",
-              "text-halo-color": "#0F172A",
+              "text-color": resolvedTheme === "dark" ? "#E2E8F0" : "#111827",
+              "text-halo-color": resolvedTheme === "dark" ? "#0F172A" : "#FFFFFF",
               "text-halo-width": 1,
             }}
           />
@@ -438,7 +448,7 @@ export function MapComponent({
       </Map>
 
       <div className="pointer-events-none absolute left-3 top-3 z-10 flex max-w-[min(95vw,880px)] flex-wrap gap-2">
-        <div className="pointer-events-auto rounded-xl border border-border/70 bg-card/90 p-2 shadow-soft backdrop-blur">
+        <div className="pointer-events-auto rounded-xl border border-gray-200 bg-white/95 p-2 shadow-soft backdrop-blur dark:border-border/70 dark:bg-card/90">
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             <MapPinPlusInside className="h-3.5 w-3.5" />
             Add Infrastructure
@@ -457,7 +467,7 @@ export function MapComponent({
           </div>
         </div>
 
-        <div className="pointer-events-auto rounded-xl border border-border/70 bg-card/90 p-2 text-xs shadow-soft backdrop-blur">
+        <div className="pointer-events-auto rounded-xl border border-gray-200 bg-white/95 p-2 text-xs shadow-soft backdrop-blur dark:border-border/70 dark:bg-card/90">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="flex items-center gap-1 uppercase tracking-[0.18em] text-muted-foreground">
               <Link2 className="h-3.5 w-3.5" />
@@ -504,7 +514,7 @@ export function MapComponent({
         </div>
       </div>
 
-      <div className="pointer-events-none absolute bottom-3 right-3 z-10 rounded-xl border border-border/70 bg-card/90 p-2 text-xs shadow-soft backdrop-blur">
+      <div className="pointer-events-none absolute bottom-3 right-3 z-10 rounded-xl border border-gray-200 bg-white/95 p-2 text-xs shadow-soft backdrop-blur dark:border-border/70 dark:bg-card/90">
         <div className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
           <span>Fault segment</span>

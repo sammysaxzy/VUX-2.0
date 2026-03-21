@@ -9,14 +9,19 @@ import type {
   FibreCable,
   KpiSnapshot,
   NetworkNode,
+  RadiusPlan,
+  RadiusSettings,
   RadiusSession,
+  RadiusUser,
   TenantBranding,
   User,
 } from "@/types";
 import {
+  addMockFault,
+  addMockRadiusUser,
+  activateMockRadiusUser,
   assignMockCoreToCable,
   assignMockClientToMstPort,
-  addMockFault,
   buildKpis,
   createMockMstConnection,
   deleteMockCable,
@@ -28,12 +33,16 @@ import {
   mockCustomers,
   mockFaults,
   mockNodes,
+  mockRadiusPlans,
+  mockRadiusSettings,
+  mockRadiusUsers,
   mockSessions,
   mockUser,
   removeMockClientFromMstPort,
   removeMockClosureSplice,
   setMockCableCoreState,
   updateMockMstSplitterType,
+  updateMockRadiusSettings,
   upsertMockClosureSplice,
   upsertCustomer,
 } from "@/lib/api/mock-data";
@@ -43,6 +52,12 @@ const resolvedBaseUrl = (
   import.meta.env.VITE_API_BASE_URL ||
   import.meta.env.VITE_API_URL ||
   "http://localhost:8001"
+).replace(/\/+$/, "");
+
+const wsScheme = resolvedBaseUrl.startsWith("https") ? "wss" : "ws";
+export const radiusWsUrl = (
+  import.meta.env.VITE_RADIUS_WS_URL ??
+  `${wsScheme}://${resolvedBaseUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "")}/ws/radius`
 ).replace(/\/+$/, "");
 
 const api = axios.create({
@@ -443,16 +458,97 @@ export const apiClient = {
     return data;
   },
 
-  async disconnectRadiusSession(sessionId: string, tenantId: string, token?: string) {
+  async getRadiusUsers(tenantId: string, token?: string): Promise<RadiusUser[]> {
+    if (USE_MOCKS) {
+      await sleep(200);
+      return mockRadiusUsers;
+    }
+    const { data } = await api.get<RadiusUser[]>("/radius/users", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async createRadiusUser(
+    payload: {
+      username: string;
+      password: string;
+      plan: string;
+      onuSerial: string;
+      olt: string;
+      ponPort: string;
+    },
+    tenantId: string,
+    token?: string,
+  ): Promise<RadiusUser> {
+    if (USE_MOCKS) {
+      await sleep(200);
+      return addMockRadiusUser(payload);
+    }
+    const { data } = await api.post<RadiusUser>("/radius/users", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async activateRadiusUser(username: string, tenantId: string, token?: string): Promise<RadiusUser> {
+    if (USE_MOCKS) {
+      await sleep(150);
+      return activateMockRadiusUser(username);
+    }
+    const { data } = await api.patch<RadiusUser>(`/radius/users/${encodeURIComponent(username)}/activate`, undefined, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getRadiusPlans(tenantId: string, token?: string): Promise<RadiusPlan[]> {
+    if (USE_MOCKS) {
+      await sleep(200);
+      return mockRadiusPlans;
+    }
+    const { data } = await api.get<RadiusPlan[]>("/radius/plans", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getRadiusSettings(tenantId: string, token?: string): Promise<RadiusSettings> {
+    if (USE_MOCKS) {
+      await sleep(150);
+      return mockRadiusSettings;
+    }
+    const { data } = await api.get<RadiusSettings>("/radius/settings", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async saveRadiusSettings(payload: RadiusSettings, tenantId: string, token?: string): Promise<RadiusSettings> {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return updateMockRadiusSettings(payload);
+    }
+    const { data } = await api.post<RadiusSettings>("/radius/settings", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async disconnectRadiusSession(username: string, tenantId: string, token?: string) {
     if (USE_MOCKS) {
       await sleep(140);
-      const found = mockSessions.find((entry) => entry.id === sessionId);
+      const found = mockSessions.find((entry) => entry.username === username);
       if (found) found.status = "offline";
       return found;
     }
-    return api.post(`/radius/sessions/${sessionId}/disconnect`, undefined, {
-      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
-    });
+    return api.post(
+      "/radius/disconnect",
+      { username },
+      {
+        headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+      },
+    );
   },
 
   async suspendCustomer(customerId: string, tenantId: string, token?: string) {

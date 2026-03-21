@@ -1,0 +1,11 @@
+{
+  "name": "vux-2-0",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix isp-platform/frontend run dev",
+    "install": "npm --prefix isp-platform/frontend install",
+    "build": "npm --prefix isp-platform/frontend run build",
+    "lint": "npm --prefix isp-platform/frontend run lint",
+    "typecheck": "npm --prefix isp-platform/frontend run typecheck"
+  }
+}

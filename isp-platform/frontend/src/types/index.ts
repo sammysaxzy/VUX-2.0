@@ -133,7 +133,50 @@ export interface RadiusSession {
   ipAddress: string;
   startedAt: string;
   status: SessionStatus;
+  dataUsage?: string;
+  duration?: string;
+  accountStatus?: RadiusUserStatus;
+  plan?: string;
+  lastUpdated?: string;
+  accountExists?: boolean;
 }
+
+export type RadiusUserStatus = "active" | "inactive";
+
+export interface RadiusUser {
+  username: string;
+  status: RadiusUserStatus;
+  plan: string;
+  onuSerial: string;
+  olt: string;
+  ponPort: string;
+  exists: boolean;
+  lastSeen: string;
+}
+
+export interface RadiusPlan {
+  name: string;
+  speed: string;
+  price: string;
+  rateLimit: string;
+  description?: string;
+}
+
+export interface RadiusSettings {
+  radiusServerIp: string;
+  sharedSecret: string;
+  nasIp: string;
+  coaEnabled: boolean;
+  defaultDns: string;
+  ipPool: string;
+}
+
+export type RadiusRealtimeEvent =
+  | { type: "session:connected"; payload: RadiusSession }
+  | { type: "session:updated"; payload: RadiusSession }
+  | { type: "session:disconnected"; payload: RadiusSession };
+
+export type RadiusTab = "sessions" | "users" | "plans" | "settings";
 
 export interface Customer {
   id: string;
