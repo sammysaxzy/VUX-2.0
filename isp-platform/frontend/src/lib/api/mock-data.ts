@@ -8,15 +8,18 @@ import type {
   FibreCable,
   FibreCore,
   KpiSnapshot,
+  NasEntry,
   NetworkNode,
-  RadiusPlan,
-  RadiusSettings,
+  PermissionRole,
   RadiusSession,
   RadiusUser,
+  ServicePlan,
+  SettingsLog,
   SplitterType,
   SplitterPort,
   TenantBranding,
   User,
+  Zone,
 } from "@/types";
 import { randomId } from "@/lib/utils";
 
@@ -357,6 +360,7 @@ export const mockSessions: RadiusSession[] = [
     duration: "02:40:19",
     accountStatus: "active",
     plan: "Core 10/10",
+    expirationDate: new Date(now + 1000 * 60 * 60 * 24 * 12).toISOString(),
     lastUpdated: new Date(now - 1000 * 60 * 5).toISOString(),
     accountExists: true,
   },
@@ -371,12 +375,13 @@ export const mockSessions: RadiusSession[] = [
     duration: "01:04:02",
     accountStatus: "inactive",
     plan: "Core 20/20",
+    expirationDate: new Date(now - 1000 * 60 * 60 * 24).toISOString(),
     lastUpdated: new Date(now - 1000 * 60 * 12).toISOString(),
     accountExists: true,
   },
 ];
 
-export const mockRadiusPlans: RadiusPlan[] = [
+export const mockServicePlans: ServicePlan[] = [
   { name: "Core 10/10", speed: "10M/10M", price: "₦8,500", rateLimit: "10M/10M", description: "Residential onboarding plan" },
   { name: "Core 20/20", speed: "20M/20M", price: "₦12,500", rateLimit: "20M/20M", description: "Business starter tier" },
   { name: "Core 50/50", speed: "50M/50M", price: "₦18,900", rateLimit: "50M/50M", description: "Enterprise burst-ready" },
@@ -387,19 +392,28 @@ export const mockRadiusUsers: RadiusUser[] = [
     username: "adebayo_hub",
     status: "active",
     plan: "Core 10/10",
-    onuSerial: "ZTEG12398A",
-    olt: "OLT HQ Core",
-    ponPort: "1/3/7",
+    customerType: "individual",
+    zoneId: "zone-1",
+    zone: "Lekki Core",
+    nasId: "nas-1",
+    nas: "MikroTik BRAS 01",
+    expirationDate: new Date(now + 1000 * 60 * 60 * 24 * 12).toISOString(),
     exists: true,
+    staticIp: "10.20.1.17",
     lastSeen: new Date(now - 1000 * 60 * 5).toISOString(),
   },
   {
     username: "marina_it",
     status: "inactive",
     plan: "Core 20/20",
-    onuSerial: "HWT89912XYZ",
-    olt: "OLT HQ Core",
-    ponPort: "1/5/3",
+    customerType: "corporate",
+    zoneId: "zone-2",
+    zone: "Ajah Access",
+    nasId: "nas-2",
+    nas: "MikroTik BRAS 02",
+    expirationDate: new Date(now - 1000 * 60 * 60 * 24).toISOString(),
+    priority: "medium",
+    slaProfile: "Business Bronze",
     exists: true,
     lastSeen: new Date(now - 1000 * 60 * 12).toISOString(),
   },
@@ -407,46 +421,90 @@ export const mockRadiusUsers: RadiusUser[] = [
     username: "korede_res",
     status: "inactive",
     plan: "Core 10/10",
-    onuSerial: "NOK001ABB12",
-    olt: "OLT HQ Core",
-    ponPort: "1/3/8",
+    customerType: "individual",
+    zoneId: "zone-1",
+    zone: "Lekki Core",
+    nasId: "nas-1",
+    nas: "MikroTik BRAS 01",
+    expirationDate: new Date(now + 1000 * 60 * 60 * 24 * 2).toISOString(),
     exists: false,
     lastSeen: new Date(now - 1000 * 60 * 90).toISOString(),
   },
 ];
 
-export let mockRadiusSettings: RadiusSettings = {
-  radiusServerIp: "10.250.1.12",
-  sharedSecret: "Ultrasecret123!",
-  nasIp: "10.250.1.2",
-  coaEnabled: true,
-  defaultDns: "1.1.1.1,8.8.8.8",
-  ipPool: "10.20.1.0/24",
-};
+export let mockNasEntries: NasEntry[] = [
+  { id: "nas-1", name: "MikroTik BRAS 01", ipAddress: "10.250.1.2", sharedSecret: "Ultrasecret123!" },
+  { id: "nas-2", name: "MikroTik BRAS 02", ipAddress: "10.250.1.3", sharedSecret: "WestlinkCore!" },
+];
+
+export let mockZones: Zone[] = [
+  { id: "zone-1", name: "Lekki Core", nasId: "nas-1", nasName: "MikroTik BRAS 01", description: "Lekki aggregation and business users", usersCount: 84 },
+  { id: "zone-2", name: "Ajah Access", nasId: "nas-2", nasName: "MikroTik BRAS 02", description: "Residential PPPoE subscribers on Ajah ring", usersCount: 56 },
+];
+
+export const mockPermissionRoles: PermissionRole[] = [
+  { id: "role-1", name: "Super Admin", scope: "global", description: "Full OSS/BSS control across tenants and infrastructure", memberCount: 2 },
+  { id: "role-2", name: "NOC Engineer", scope: "radius", description: "Manages PPPoE sessions, users, and operational troubleshooting", memberCount: 6 },
+  { id: "role-3", name: "Field Engineer", scope: "network", description: "Access to sync workflows and physical access diagnostics only", memberCount: 11 },
+];
+
+export const mockSettingsLogs: SettingsLog[] = [
+  { id: "log-1", type: "authentication", actor: "radius-engine", description: "PPPoE authentication accepted for adebayo_hub", createdAt: new Date(now - 1000 * 60 * 8).toISOString() },
+  { id: "log-2", type: "disconnect", actor: "noc@westlink.io", description: "Manual disconnect sent to marina_it from NOC console", createdAt: new Date(now - 1000 * 60 * 22).toISOString() },
+  { id: "log-3", type: "sync", actor: "field@westlink.io", description: "PPPoE account sync completed for korede_res on MikroTik BRAS 01", createdAt: new Date(now - 1000 * 60 * 41).toISOString() },
+];
 
 export function addMockRadiusUser(payload: {
   username: string;
   password: string;
   plan: string;
-  onuSerial: string;
-  olt: string;
-  ponPort: string;
+  zoneId: string;
+  customerType: "individual" | "corporate";
+  expirationDate: string;
+  staticIp?: string;
+  priority?: "high" | "medium" | "low";
+  slaProfile?: string;
 }) {
   const exists = mockRadiusUsers.some((entry) => entry.username === payload.username);
   if (exists) {
     throw new Error("User already exists");
   }
+  const zone = mockZones.find((entry) => entry.id === payload.zoneId);
+  if (!zone) {
+    throw new Error("Zone not found");
+  }
   const newUser: RadiusUser = {
     username: payload.username,
     status: "inactive",
     plan: payload.plan,
-    onuSerial: payload.onuSerial,
-    olt: payload.olt,
-    ponPort: payload.ponPort,
+    customerType: payload.customerType,
+    zoneId: zone.id,
+    zone: zone.name,
+    nasId: zone.nasId,
+    nas: zone.nasName,
+    expirationDate: payload.expirationDate,
+    staticIp: payload.staticIp,
+    priority: payload.priority,
+    slaProfile: payload.slaProfile,
     exists: true,
     lastSeen: new Date().toISOString(),
   };
   mockRadiusUsers.unshift(newUser);
+  mockSessions.unshift({
+    id: randomId("sess"),
+    customerId: randomId("cust"),
+    username: payload.username,
+    ipAddress: payload.staticIp ?? "Pending",
+    startedAt: new Date().toISOString(),
+    status: "offline",
+    dataUsage: "0 GiB",
+    duration: "00:00:00",
+    accountStatus: "inactive",
+    plan: payload.plan,
+    expirationDate: payload.expirationDate,
+    lastUpdated: new Date().toISOString(),
+    accountExists: true,
+  });
   return newUser;
 }
 
@@ -458,15 +516,109 @@ export function activateMockRadiusUser(username: string) {
   const session = mockSessions.find((entry) => entry.username === username);
   if (session) {
     session.accountStatus = "active";
-    session.status = "online";
+    session.status = new Date(user.expirationDate).getTime() < Date.now() ? "offline" : "online";
+    session.expirationDate = user.expirationDate;
     session.lastUpdated = new Date().toISOString();
   }
   return user;
 }
 
-export function updateMockRadiusSettings(payload: Partial<RadiusSettings>) {
-  mockRadiusSettings = { ...mockRadiusSettings, ...payload };
-  return mockRadiusSettings;
+export function syncMockRadiusUser(username: string) {
+  const user = mockRadiusUsers.find((entry) => entry.username === username);
+  if (!user) throw new Error("User not found");
+  user.lastSeen = new Date().toISOString();
+  mockSettingsLogs.unshift({
+    id: randomId("log"),
+    type: "sync",
+    actor: "noc@westlink.io",
+    description: `PPPoE account sync completed for ${username}`,
+    createdAt: new Date().toISOString(),
+  });
+  return user;
+}
+
+export function reconnectMockRadiusSession(username: string) {
+  const session = mockSessions.find((entry) => entry.username === username);
+  if (!session) throw new Error("Session not found");
+  session.status = "online";
+  session.lastUpdated = new Date().toISOString();
+  session.startedAt = new Date().toISOString();
+  session.duration = "00:00:09";
+  mockSettingsLogs.unshift({
+    id: randomId("log"),
+    type: "disconnect",
+    actor: "noc@westlink.io",
+    description: `Reconnect workflow triggered for ${username}`,
+    createdAt: new Date().toISOString(),
+  });
+  return session;
+}
+
+export function disconnectMockRadiusSession(username: string) {
+  const session = mockSessions.find((entry) => entry.username === username);
+  if (!session) throw new Error("Session not found");
+  session.status = "offline";
+  session.lastUpdated = new Date().toISOString();
+  mockSettingsLogs.unshift({
+    id: randomId("log"),
+    type: "disconnect",
+    actor: "noc@westlink.io",
+    description: `Disconnect sent for ${username}`,
+    createdAt: new Date().toISOString(),
+  });
+  return session;
+}
+
+export function extendMockRadiusUser(username: string, expirationDate: string) {
+  const user = mockRadiusUsers.find((entry) => entry.username === username);
+  if (!user) throw new Error("User not found");
+  user.expirationDate = expirationDate;
+  const session = mockSessions.find((entry) => entry.username === username);
+  if (session) {
+    session.expirationDate = expirationDate;
+    session.lastUpdated = new Date().toISOString();
+  }
+  mockSettingsLogs.unshift({
+    id: randomId("log"),
+    type: "sync",
+    actor: "noc@westlink.io",
+    description: `Subscription extended for ${username} until ${new Date(expirationDate).toLocaleDateString("en-US")}`,
+    createdAt: new Date().toISOString(),
+  });
+  return user;
+}
+
+export function addMockNasEntry(payload: Omit<NasEntry, "id">) {
+  const entry: NasEntry = { id: randomId("nas"), ...payload };
+  mockNasEntries = [entry, ...mockNasEntries.filter((item) => item.ipAddress !== payload.ipAddress)];
+  return entry;
+}
+
+export function updateMockNasEntry(id: string, payload: Omit<NasEntry, "id">) {
+  mockNasEntries = mockNasEntries.map((item) => (item.id === id ? { id, ...payload } : item));
+  return mockNasEntries.find((item) => item.id === id);
+}
+
+export function addMockZone(payload: Omit<Zone, "id" | "usersCount" | "nasName"> & { usersCount?: number }) {
+  const nas = mockNasEntries.find((entry) => entry.id === payload.nasId);
+  if (!nas) {
+    throw new Error("NAS not found");
+  }
+  const zone: Zone = {
+    id: randomId("zone"),
+    usersCount: payload.usersCount ?? 0,
+    ...payload,
+    nasName: nas.name,
+  };
+  mockZones = [zone, ...mockZones];
+  return zone;
+}
+
+export function addMockServicePlan(payload: ServicePlan) {
+  const existing = mockServicePlans.find((plan) => plan.name === payload.name);
+  if (existing) throw new Error("Service plan already exists");
+  mockServicePlans.unshift(payload);
+  return payload;
 }
 
 export function buildKpis(): KpiSnapshot {

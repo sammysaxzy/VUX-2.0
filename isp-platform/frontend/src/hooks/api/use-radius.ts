@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api/client";
 import { useAppStore, useTenantId } from "@/store/app-store";
-import type { RadiusSettings } from "@/types";
 
 export function useRadiusSessions() {
   const tenantId = useTenantId();
@@ -21,12 +20,28 @@ export function useDisconnectSession() {
   const token = useAppStore((state) => state.token);
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (sessionId: string) => apiClient.disconnectRadiusSession(sessionId, tenantId, token),
+    mutationFn: (username: string) => apiClient.disconnectRadiusSession(username, tenantId, token),
     onSuccess: () => {
       toast.success("User disconnected.");
       queryClient.invalidateQueries({ queryKey: ["radius-sessions", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["settings-logs", tenantId] });
     },
     onError: () => toast.error("Unable to disconnect session."),
+  });
+}
+
+export function useReconnectSession() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (username: string) => apiClient.reconnectRadiusSession(username, tenantId, token),
+    onSuccess: () => {
+      toast.success("Reconnect initiated.");
+      queryClient.invalidateQueries({ queryKey: ["radius-sessions", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["settings-logs", tenantId] });
+    },
+    onError: () => toast.error("Unable to reconnect session."),
   });
 }
 
@@ -49,16 +64,19 @@ export function useCreateRadiusUser() {
       username: string;
       password: string;
       plan: string;
-      onuSerial: string;
-      olt: string;
-      ponPort: string;
+      zoneId: string;
+      customerType: "individual" | "corporate";
+      expirationDate: string;
+      staticIp?: string;
+      priority?: "high" | "medium" | "low";
+      slaProfile?: string;
     }) => apiClient.createRadiusUser(payload, tenantId, token),
     onSuccess: () => {
-      toast.success("Radius user created.");
+      toast.success("PPPoE user created.");
       queryClient.invalidateQueries({ queryKey: ["radius-users", tenantId] });
       queryClient.invalidateQueries({ queryKey: ["radius-sessions", tenantId] });
     },
-    onError: () => toast.error("Unable to create user."),
+    onError: () => toast.error("Unable to create PPPoE user."),
   });
 }
 
@@ -77,36 +95,34 @@ export function useActivateRadiusUser() {
   });
 }
 
-export function useRadiusPlans() {
-  const tenantId = useTenantId();
-  const token = useAppStore((state) => state.token);
-  return useQuery({
-    queryKey: ["radius-plans", tenantId],
-    queryFn: () => apiClient.getRadiusPlans(tenantId, token),
-    enabled: Boolean(tenantId),
-  });
-}
-
-export function useRadiusSettings() {
-  const tenantId = useTenantId();
-  const token = useAppStore((state) => state.token);
-  return useQuery({
-    queryKey: ["radius-settings", tenantId],
-    queryFn: () => apiClient.getRadiusSettings(tenantId, token),
-    enabled: Boolean(tenantId),
-  });
-}
-
-export function useSaveRadiusSettings() {
+export function useSyncRadiusUser() {
   const tenantId = useTenantId();
   const token = useAppStore((state) => state.token);
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: RadiusSettings) => apiClient.saveRadiusSettings(payload, tenantId, token),
+    mutationFn: (username: string) => apiClient.syncRadiusUser(username, tenantId, token),
     onSuccess: () => {
-      toast.success("Radius settings saved.");
-      queryClient.invalidateQueries({ queryKey: ["radius-settings", tenantId] });
+      toast.success("PPPoE account synced.");
+      queryClient.invalidateQueries({ queryKey: ["radius-users", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["settings-logs", tenantId] });
     },
-    onError: () => toast.error("Unable to save radius settings."),
+    onError: () => toast.error("Unable to sync user."),
+  });
+}
+
+export function useExtendRadiusUser() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ username, expirationDate }: { username: string; expirationDate: string }) =>
+      apiClient.extendRadiusUser(username, expirationDate, tenantId, token),
+    onSuccess: () => {
+      toast.success("Subscription extended.");
+      queryClient.invalidateQueries({ queryKey: ["radius-users", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["radius-sessions", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["settings-logs", tenantId] });
+    },
+    onError: () => toast.error("Unable to extend subscription."),
   });
 }

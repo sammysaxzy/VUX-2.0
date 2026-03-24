@@ -6,8 +6,6 @@ import type { RadiusTab } from "@/types";
 const tabs: { key: RadiusTab; label: string }[] = [
   { key: "sessions", label: "Sessions" },
   { key: "users", label: "Users" },
-  { key: "plans", label: "Plans" },
-  { key: "settings", label: "Settings" },
 ];
 
 type RadiusTabsProps = {

@@ -8,23 +8,31 @@ import type {
   Fault,
   FibreCable,
   KpiSnapshot,
+  NasEntry,
   NetworkNode,
-  RadiusPlan,
-  RadiusSettings,
+  PermissionRole,
   RadiusSession,
   RadiusUser,
+  ServicePlan,
+  SettingsLog,
   TenantBranding,
   User,
+  Zone,
 } from "@/types";
 import {
+  addMockNasEntry,
   addMockFault,
   addMockRadiusUser,
+  addMockServicePlan,
+  addMockZone,
   activateMockRadiusUser,
   assignMockCoreToCable,
   assignMockClientToMstPort,
   buildKpis,
   createMockMstConnection,
   deleteMockCable,
+  disconnectMockRadiusSession,
+  extendMockRadiusUser,
   mockActivities,
   mockAlerts,
   mockBranding,
@@ -32,17 +40,22 @@ import {
   mockClosures,
   mockCustomers,
   mockFaults,
+  mockNasEntries,
   mockNodes,
-  mockRadiusPlans,
-  mockRadiusSettings,
+  mockPermissionRoles,
   mockRadiusUsers,
+  mockServicePlans,
+  mockSettingsLogs,
   mockSessions,
   mockUser,
+  mockZones,
+  reconnectMockRadiusSession,
   removeMockClientFromMstPort,
   removeMockClosureSplice,
   setMockCableCoreState,
+  syncMockRadiusUser,
+  updateMockNasEntry,
   updateMockMstSplitterType,
-  updateMockRadiusSettings,
   upsertMockClosureSplice,
   upsertCustomer,
 } from "@/lib/api/mock-data";
@@ -474,9 +487,12 @@ export const apiClient = {
       username: string;
       password: string;
       plan: string;
-      onuSerial: string;
-      olt: string;
-      ponPort: string;
+      zoneId: string;
+      customerType: "individual" | "corporate";
+      expirationDate: string;
+      staticIp?: string;
+      priority?: "high" | "medium" | "low";
+      slaProfile?: string;
     },
     tenantId: string,
     token?: string,
@@ -502,34 +518,135 @@ export const apiClient = {
     return data;
   },
 
-  async getRadiusPlans(tenantId: string, token?: string): Promise<RadiusPlan[]> {
+  async syncRadiusUser(username: string, tenantId: string, token?: string): Promise<RadiusUser> {
     if (USE_MOCKS) {
-      await sleep(200);
-      return mockRadiusPlans;
+      await sleep(170);
+      return syncMockRadiusUser(username);
     }
-    const { data } = await api.get<RadiusPlan[]>("/radius/plans", {
+    const { data } = await api.post<RadiusUser>(`/radius/users/${encodeURIComponent(username)}/sync`, undefined, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;
   },
 
-  async getRadiusSettings(tenantId: string, token?: string): Promise<RadiusSettings> {
+  async extendRadiusUser(username: string, expirationDate: string, tenantId: string, token?: string): Promise<RadiusUser> {
+    if (USE_MOCKS) {
+      await sleep(170);
+      return extendMockRadiusUser(username, expirationDate);
+    }
+    const { data } = await api.patch<RadiusUser>(
+      `/radius/users/${encodeURIComponent(username)}/expiration`,
+      { expiration_date: expirationDate },
+      { headers: { ...tenantHeaders(tenantId), ...authHeaders(token) } },
+    );
+    return data;
+  },
+
+  async reconnectRadiusSession(username: string, tenantId: string, token?: string): Promise<RadiusSession> {
     if (USE_MOCKS) {
       await sleep(150);
-      return mockRadiusSettings;
+      return reconnectMockRadiusSession(username);
     }
-    const { data } = await api.get<RadiusSettings>("/radius/settings", {
+    const { data } = await api.post<RadiusSession>(`/radius/sessions/${encodeURIComponent(username)}/reconnect`, undefined, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;
   },
 
-  async saveRadiusSettings(payload: RadiusSettings, tenantId: string, token?: string): Promise<RadiusSettings> {
+  async getServicePlans(tenantId: string, token?: string): Promise<ServicePlan[]> {
+    if (USE_MOCKS) {
+      await sleep(200);
+      return mockServicePlans;
+    }
+    const { data } = await api.get<ServicePlan[]>("/settings/services", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async createServicePlan(payload: ServicePlan, tenantId: string, token?: string): Promise<ServicePlan> {
+    if (USE_MOCKS) {
+      await sleep(170);
+      return addMockServicePlan(payload);
+    }
+    const { data } = await api.post<ServicePlan>("/settings/services", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getNasEntries(tenantId: string, token?: string): Promise<NasEntry[]> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return mockNasEntries;
+    }
+    const { data } = await api.get<NasEntry[]>("/settings/nas", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async createNasEntry(payload: Omit<NasEntry, "id">, tenantId: string, token?: string): Promise<NasEntry> {
+    if (USE_MOCKS) {
+      await sleep(170);
+      return addMockNasEntry(payload);
+    }
+    const { data } = await api.post<NasEntry>("/settings/nas", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async updateNasEntry(id: string, payload: Omit<NasEntry, "id">, tenantId: string, token?: string): Promise<NasEntry> {
+    if (USE_MOCKS) {
+      await sleep(170);
+      return updateMockNasEntry(id, payload) as NasEntry;
+    }
+    const { data } = await api.put<NasEntry>(`/settings/nas/${encodeURIComponent(id)}`, payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getZones(tenantId: string, token?: string): Promise<Zone[]> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return mockZones;
+    }
+    const { data } = await api.get<Zone[]>("/settings/zones", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async createZone(payload: Omit<Zone, "id" | "usersCount" | "nasName"> & { usersCount?: number }, tenantId: string, token?: string): Promise<Zone> {
+    if (USE_MOCKS) {
+      await sleep(170);
+      return addMockZone(payload);
+    }
+    const { data } = await api.post<Zone>("/settings/zones", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getPermissionRoles(tenantId: string, token?: string): Promise<PermissionRole[]> {
     if (USE_MOCKS) {
       await sleep(160);
-      return updateMockRadiusSettings(payload);
+      return mockPermissionRoles;
     }
-    const { data } = await api.post<RadiusSettings>("/radius/settings", payload, {
+    const { data } = await api.get<PermissionRole[]>("/settings/permissions", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getSettingsLogs(tenantId: string, token?: string): Promise<SettingsLog[]> {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return mockSettingsLogs;
+    }
+    const { data } = await api.get<SettingsLog[]>("/settings/logs", {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;
@@ -538,9 +655,7 @@ export const apiClient = {
   async disconnectRadiusSession(username: string, tenantId: string, token?: string) {
     if (USE_MOCKS) {
       await sleep(140);
-      const found = mockSessions.find((entry) => entry.username === username);
-      if (found) found.status = "offline";
-      return found;
+      return disconnectMockRadiusSession(username);
     }
     return api.post(
       "/radius/disconnect",

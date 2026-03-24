@@ -137,38 +137,39 @@ export interface RadiusSession {
   duration?: string;
   accountStatus?: RadiusUserStatus;
   plan?: string;
+  expirationDate?: string;
   lastUpdated?: string;
   accountExists?: boolean;
 }
 
 export type RadiusUserStatus = "active" | "inactive";
+export type CustomerType = "individual" | "corporate";
+export type PriorityLevel = "high" | "medium" | "low";
 
 export interface RadiusUser {
   username: string;
   status: RadiusUserStatus;
   plan: string;
-  onuSerial: string;
-  olt: string;
-  ponPort: string;
+  customerType: CustomerType;
+  zoneId: string;
+  zone: string;
+  nasId: string;
+  nas: string;
+  expirationDate: string;
+  staticIp?: string;
+  priority?: PriorityLevel;
+  slaProfile?: string;
   exists: boolean;
   lastSeen: string;
 }
 
-export interface RadiusPlan {
+export interface ServicePlan {
   name: string;
   speed: string;
   price: string;
   rateLimit: string;
   description?: string;
-}
-
-export interface RadiusSettings {
-  radiusServerIp: string;
-  sharedSecret: string;
-  nasIp: string;
-  coaEnabled: boolean;
-  defaultDns: string;
-  ipPool: string;
+  customerTypes?: CustomerType[];
 }
 
 export type RadiusRealtimeEvent =
@@ -176,7 +177,41 @@ export type RadiusRealtimeEvent =
   | { type: "session:updated"; payload: RadiusSession }
   | { type: "session:disconnected"; payload: RadiusSession };
 
-export type RadiusTab = "sessions" | "users" | "plans" | "settings";
+export type RadiusTab = "sessions" | "users";
+
+export type SettingsTab = "nas" | "zones" | "permissions" | "services" | "logs";
+
+export interface NasEntry {
+  id: string;
+  name: string;
+  ipAddress: string;
+  sharedSecret: string;
+}
+
+export interface Zone {
+  id: string;
+  name: string;
+  nasId: string;
+  nasName: string;
+  description: string;
+  usersCount: number;
+}
+
+export interface PermissionRole {
+  id: string;
+  name: string;
+  scope: string;
+  description: string;
+  memberCount: number;
+}
+
+export interface SettingsLog {
+  id: string;
+  type: "authentication" | "disconnect" | "sync";
+  actor: string;
+  description: string;
+  createdAt: string;
+}
 
 export interface Customer {
   id: string;
