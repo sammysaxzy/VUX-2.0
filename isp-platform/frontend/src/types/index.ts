@@ -163,6 +163,10 @@ export interface RadiusUser {
   lastSeen: string;
 }
 
+export interface RadiusBulkImportResult {
+  imported: number;
+}
+
 export interface ServicePlan {
   name: string;
   speed: string;
@@ -179,7 +183,7 @@ export type RadiusRealtimeEvent =
 
 export type RadiusTab = "sessions" | "users";
 
-export type SettingsTab = "nas" | "zones" | "permissions" | "services" | "logs";
+export type SettingsTab = "nas" | "zones" | "permissions" | "services" | "logs" | "configuration";
 
 export interface NasEntry {
   id: string;

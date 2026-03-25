@@ -1,15 +1,18 @@
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import type { Customer } from "@/types";
-import { useCustomers, useSaveCustomer } from "@/hooks/api/use-customers";
+import { useCustomers, useExportCustomers, useSaveCustomer } from "@/hooks/api/use-customers";
 import { useFibreCables, useNetworkNodes } from "@/hooks/api/use-network";
 import { useTenantId } from "@/store/app-store";
 import { CustomerForm } from "@/components/customers/customer-form";
 import { CustomerTable } from "@/components/customers/customer-table";
+import { ExportButton } from "@/components/import-export/export-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Drawer } from "@/components/ui/drawer";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
+import { CUSTOMER_EXPORT_SCHEMA } from "@/features/import-export/schema";
+import { downloadBlob, mapCustomersToExportRows, normalizeExportBlob } from "@/features/import-export/utils";
 
 export function CustomersPage() {
   const tenantId = useTenantId();
@@ -17,6 +20,7 @@ export function CustomersPage() {
   const { data: nodes, isLoading: nodesLoading } = useNetworkNodes();
   const { data: cables, isLoading: cablesLoading } = useFibreCables();
   const saveCustomer = useSaveCustomer();
+  const exportCustomersMutation = useExportCustomers();
   const [openDrawer, setOpenDrawer] = useState(false);
   const [activeCustomer, setActiveCustomer] = useState<Customer | undefined>();
 
@@ -33,6 +37,12 @@ export function CustomersPage() {
     return <PageSkeleton />;
   }
 
+  const handleExportCustomers = async () => {
+    const blob = await exportCustomersMutation.mutateAsync();
+    const normalized = await normalizeExportBlob(blob, CUSTOMER_EXPORT_SCHEMA, mapCustomersToExportRows(customers));
+    downloadBlob("customers-export.csv", normalized);
+  };
+
   return (
     <div className="space-y-5 animate-fade-up">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -40,15 +50,22 @@ export function CustomersPage() {
           <h1 className="text-2xl font-semibold">CRM - Customer Management</h1>
           <p className="text-sm text-muted-foreground">Manage customer profiles, MST assignments, and signal health.</p>
         </div>
-        <Button
-          onClick={() => {
-            setActiveCustomer(undefined);
-            setOpenDrawer(true);
-          }}
-        >
-          <Plus className="mr-1 h-4 w-4" />
-          Add Customer
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <ExportButton
+            label="Export"
+            isLoading={exportCustomersMutation.isPending}
+            onClick={() => void handleExportCustomers()}
+          />
+          <Button
+            onClick={() => {
+              setActiveCustomer(undefined);
+              setOpenDrawer(true);
+            }}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            Add Customer
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">

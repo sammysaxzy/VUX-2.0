@@ -11,6 +11,7 @@ import type {
   NasEntry,
   NetworkNode,
   PermissionRole,
+  RadiusBulkImportResult,
   RadiusSession,
   RadiusUser,
   ServicePlan,
@@ -506,6 +507,78 @@ export function addMockRadiusUser(payload: {
     accountExists: true,
   });
   return newUser;
+}
+
+export function bulkImportMockRadiusUsers(
+  payloads: Array<{
+    username: string;
+    password: string;
+    nas_id: string;
+    enabled?: boolean;
+    name?: string;
+    customer_id?: string;
+    company?: string;
+    email?: string;
+    phone?: string;
+    mobile?: string;
+    address?: string;
+    city?: string;
+    country?: string;
+    state?: string;
+    comment?: string;
+    gps_lat?: number;
+    gps_long?: number;
+    mac?: string;
+    expiration?: string;
+    service_id?: string;
+    static_ip?: string;
+    created_by?: string;
+  }>,
+): RadiusBulkImportResult {
+  payloads.forEach((payload) => {
+    const nas = mockNasEntries.find((entry) => entry.id === payload.nas_id);
+    const zone = mockZones.find((entry) => entry.nasId === payload.nas_id) ?? mockZones[0];
+    if (!nas || !zone) {
+      throw new Error("NAS or zone not found");
+    }
+    if (mockRadiusUsers.some((entry) => entry.username === payload.username)) {
+      throw new Error("Duplicate username");
+    }
+
+    const importedUser: RadiusUser = {
+      username: payload.username,
+      status: payload.enabled ? "active" : "inactive",
+      plan: payload.service_id ?? "Imported",
+      customerType: "individual",
+      zoneId: zone.id,
+      zone: zone.name,
+      nasId: nas.id,
+      nas: nas.name,
+      expirationDate: payload.expiration ?? new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
+      staticIp: payload.static_ip,
+      exists: true,
+      lastSeen: new Date().toISOString(),
+    };
+
+    mockRadiusUsers.unshift(importedUser);
+    mockSessions.unshift({
+      id: randomId("sess"),
+      customerId: payload.customer_id ?? randomId("cust"),
+      username: payload.username,
+      ipAddress: payload.static_ip ?? "Pending",
+      startedAt: new Date().toISOString(),
+      status: payload.enabled ? "online" : "offline",
+      dataUsage: "0 GiB",
+      duration: "00:00:00",
+      accountStatus: payload.enabled ? "active" : "inactive",
+      plan: payload.service_id ?? "Imported",
+      expirationDate: importedUser.expirationDate,
+      lastUpdated: new Date().toISOString(),
+      accountExists: true,
+    });
+  });
+
+  return { imported: payloads.length };
 }
 
 export function activateMockRadiusUser(username: string) {

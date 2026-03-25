@@ -1,6 +1,8 @@
+import { Suspense, lazy } from "react";
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { useAppStore } from "@/store/app-store";
 import { WorkspaceShell } from "@/components/layout/workspace-shell";
+import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { DashboardPage } from "@/pages/dashboard-page";
 import { FieldPage } from "@/pages/field-page";
 import { RadiusPage } from "@/pages/radius-page";
@@ -12,6 +14,13 @@ import { CustomersPage } from "@/pages/customers-page";
 import { CustomerProfilePage } from "@/pages/customer-profile-page";
 import { InfrastructurePage } from "@/pages/infrastructure-page";
 import { FaultsPage } from "@/pages/faults-page";
+
+const ConfigurationMenuPage = lazy(() =>
+  import("@/pages/configuration-menu-page").then((module) => ({ default: module.ConfigurationMenuPage })),
+);
+const ConfigDetailPage = lazy(() =>
+  import("@/pages/config-detail-page").then((module) => ({ default: module.ConfigDetailPage })),
+);
 
 function ProtectedLayout() {
   const token = useAppStore((state) => state.token);
@@ -61,6 +70,22 @@ export default function App() {
         <Route path="field" element={<FieldPage />} />
         <Route path="radius" element={<RadiusPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route
+          path="settings/configuration"
+          element={
+            <Suspense fallback={<PageSkeleton />}>
+              <ConfigurationMenuPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="settings/configuration/:section"
+          element={
+            <Suspense fallback={<PageSkeleton />}>
+              <ConfigDetailPage />
+            </Suspense>
+          }
+        />
       </Route>
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

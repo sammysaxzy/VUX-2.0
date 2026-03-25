@@ -5,15 +5,20 @@ import { toast } from "sonner";
 import type { CustomerType, PriorityLevel, RadiusTab } from "@/types";
 import {
   useActivateRadiusUser,
+  useBulkImportRadiusUsers,
   useCreateRadiusUser,
   useDisconnectSession,
   useExtendRadiusUser,
+  useExportRadiusSessions,
+  useExportRadiusUsers,
   useRadiusSessions,
   useRadiusUsers,
   useReconnectSession,
   useSyncRadiusUser,
 } from "@/hooks/api/use-radius";
-import { useServicePlans, useZones } from "@/hooks/api/use-settings";
+import { useNasEntries, useServicePlans, useZones } from "@/hooks/api/use-settings";
+import { ExportButton } from "@/components/import-export/export-button";
+import { ImportModal } from "@/components/import-export/import-modal";
 import { useRadiusRealtime } from "@/hooks/use-radius-realtime";
 import { RadiusSessionTable } from "@/components/radius/radius-session-table";
 import { RadiusTabs } from "@/components/radius/radius-tabs";
@@ -25,6 +30,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Select } from "@/components/ui/select";
+import {
+  RADIUS_SESSION_EXPORT_SCHEMA,
+  RADIUS_USER_IMPORT_EXPORT_SCHEMA,
+} from "@/features/import-export/schema";
+import { downloadBlob, normalizeExportBlob, mapRadiusUsersToExportRows, mapSessionsToExportRows } from "@/features/import-export/utils";
 import { toDateTimeLocalValue } from "@/lib/utils";
 
 type RadiusUserForm = {
@@ -55,6 +65,7 @@ export function RadiusPage() {
   const [activeTab, setActiveTab] = useState<RadiusTab>("sessions");
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [extendModal, setExtendModal] = useState<{ username: string; expirationDate: string } | null>(null);
   const [newUser, setNewUser] = useState<RadiusUserForm>(baseForm);
   const [now, setNow] = useState(() => Date.now());
@@ -66,9 +77,13 @@ export function RadiusPage() {
   const usersQuery = useRadiusUsers();
   const servicesQuery = useServicePlans();
   const zonesQuery = useZones();
+  const nasQuery = useNasEntries();
   const createUserMutation = useCreateRadiusUser();
+  const bulkImportMutation = useBulkImportRadiusUsers();
   const activateUserMutation = useActivateRadiusUser();
   const syncUserMutation = useSyncRadiusUser();
+  const exportUsersMutation = useExportRadiusUsers();
+  const exportSessionsMutation = useExportRadiusSessions();
 
   useRadiusRealtime();
 
@@ -90,6 +105,8 @@ export function RadiusPage() {
     if (!query) return users;
     return users.filter((user) => user.username.toLowerCase().includes(query));
   }, [search, usersQuery.data]);
+  const validNasIds = useMemo(() => (nasQuery.data ?? []).map((entry) => entry.id), [nasQuery.data]);
+  const existingUsernames = useMemo(() => (usersQuery.data ?? []).map((user) => user.username), [usersQuery.data]);
 
   useEffect(() => {
     if (!serviceOptions.length) return;
@@ -170,6 +187,26 @@ export function RadiusPage() {
     });
   };
 
+  const handleExportUsers = async () => {
+    const blob = await exportUsersMutation.mutateAsync();
+    const normalized = await normalizeExportBlob(
+      blob,
+      RADIUS_USER_IMPORT_EXPORT_SCHEMA,
+      mapRadiusUsersToExportRows(usersQuery.data ?? []),
+    );
+    downloadBlob("radius-users-export.csv", normalized);
+  };
+
+  const handleExportSessions = async () => {
+    const blob = await exportSessionsMutation.mutateAsync();
+    const normalized = await normalizeExportBlob(
+      blob,
+      RADIUS_SESSION_EXPORT_SCHEMA,
+      mapSessionsToExportRows(sessionsQuery.data ?? []),
+    );
+    downloadBlob("radius-sessions-export.csv", normalized);
+  };
+
   return (
     <div className="space-y-4 animate-fade-up">
       <div>
@@ -186,6 +223,20 @@ export function RadiusPage() {
           {activeTab === "users" ? (
             <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search username" />
           ) : null}
+          {activeTab === "users" ? (
+            <>
+              <Button type="button" variant="outline" onClick={() => setImportOpen(true)}>
+                Import
+              </Button>
+              <ExportButton label="Export" isLoading={exportUsersMutation.isPending} onClick={() => void handleExportUsers()} />
+            </>
+          ) : (
+            <ExportButton
+              label="Export"
+              isLoading={exportSessionsMutation.isPending}
+              onClick={() => void handleExportSessions()}
+            />
+          )}
           <Button type="button" onClick={() => setCreateOpen(true)}>
             Create PPPoE
           </Button>
@@ -208,7 +259,7 @@ export function RadiusPage() {
           ))}
 
         {activeTab === "users" &&
-          (usersQuery.isLoading || servicesQuery.isLoading || zonesQuery.isLoading || !usersQuery.data ? (
+          (usersQuery.isLoading || servicesQuery.isLoading || zonesQuery.isLoading || nasQuery.isLoading || !usersQuery.data ? (
             <PageSkeleton />
           ) : (
             <div className="space-y-4">
@@ -242,6 +293,15 @@ export function RadiusPage() {
             </div>
           ))}
       </div>
+
+      <ImportModal
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        existingUsernames={existingUsernames}
+        validNasIds={validNasIds}
+        importing={bulkImportMutation.isPending}
+        onConfirmImport={(payload) => bulkImportMutation.mutateAsync(payload).then(() => undefined)}
+      />
 
       <Dialog
         open={createOpen}
@@ -393,9 +453,9 @@ export function RadiusPage() {
             <Button
               type="button"
               onClick={handleCreateUser}
-              disabled={createUserMutation.isLoading}
+              disabled={createUserMutation.isPending}
             >
-              {createUserMutation.isLoading ? "Creating..." : "Create PPPoE"}
+              {createUserMutation.isPending ? "Creating..." : "Create PPPoE"}
             </Button>
           </div>
         </div>
@@ -431,7 +491,7 @@ export function RadiusPage() {
               disabled={
                 !extendModal?.expirationDate ||
                 new Date(extendModal.expirationDate).getTime() <= now ||
-                extendUserMutation.isLoading
+                extendUserMutation.isPending
               }
               onClick={() => {
                 if (!extendModal) return;
@@ -444,7 +504,7 @@ export function RadiusPage() {
                 );
               }}
             >
-              {extendUserMutation.isLoading ? "Saving..." : "Extend"}
+              {extendUserMutation.isPending ? "Saving..." : "Extend"}
             </Button>
           </div>
         </div>

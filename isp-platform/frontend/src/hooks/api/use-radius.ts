@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api/client";
 import { useAppStore, useTenantId } from "@/store/app-store";
+import type { RadiusBulkImportPayload } from "@/features/import-export/schema";
 
 export function useRadiusSessions() {
   const tenantId = useTenantId();
@@ -80,6 +81,22 @@ export function useCreateRadiusUser() {
   });
 }
 
+export function useBulkImportRadiusUsers() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: RadiusBulkImportPayload[]) => apiClient.bulkImportRadiusUsers(payload, tenantId, token),
+    onSuccess: () => {
+      toast.success("RADIUS users imported.");
+      queryClient.invalidateQueries({ queryKey: ["radius-users", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["radius-sessions", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["settings-logs", tenantId] });
+    },
+    onError: () => toast.error("Unable to import RADIUS users."),
+  });
+}
+
 export function useActivateRadiusUser() {
   const tenantId = useTenantId();
   const token = useAppStore((state) => state.token);
@@ -124,5 +141,23 @@ export function useExtendRadiusUser() {
       queryClient.invalidateQueries({ queryKey: ["settings-logs", tenantId] });
     },
     onError: () => toast.error("Unable to extend subscription."),
+  });
+}
+
+export function useExportRadiusUsers() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useMutation({
+    mutationFn: () => apiClient.exportRadiusUsers(tenantId, token),
+    onError: () => toast.error("Unable to export RADIUS users."),
+  });
+}
+
+export function useExportRadiusSessions() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useMutation({
+    mutationFn: () => apiClient.exportRadiusSessions(tenantId, token),
+    onError: () => toast.error("Unable to export sessions."),
   });
 }

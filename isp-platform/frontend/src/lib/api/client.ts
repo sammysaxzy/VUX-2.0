@@ -11,6 +11,7 @@ import type {
   NasEntry,
   NetworkNode,
   PermissionRole,
+  RadiusBulkImportResult,
   RadiusSession,
   RadiusUser,
   ServicePlan,
@@ -28,6 +29,7 @@ import {
   activateMockRadiusUser,
   assignMockCoreToCable,
   assignMockClientToMstPort,
+  bulkImportMockRadiusUsers,
   buildKpis,
   createMockMstConnection,
   deleteMockCable,
@@ -60,6 +62,18 @@ import {
   upsertCustomer,
 } from "@/lib/api/mock-data";
 import { randomId } from "@/lib/utils";
+import {
+  CUSTOMER_EXPORT_SCHEMA,
+  RADIUS_SESSION_EXPORT_SCHEMA,
+  RADIUS_USER_IMPORT_EXPORT_SCHEMA,
+  type RadiusBulkImportPayload,
+} from "@/features/import-export/schema";
+import {
+  createCsvContent,
+  mapCustomersToExportRows,
+  mapRadiusUsersToExportRows,
+  mapSessionsToExportRows,
+} from "@/features/import-export/utils";
 
 const resolvedBaseUrl = (
   import.meta.env.VITE_API_BASE_URL ||
@@ -507,6 +521,17 @@ export const apiClient = {
     return data;
   },
 
+  async bulkImportRadiusUsers(payload: RadiusBulkImportPayload[], tenantId: string, token?: string): Promise<RadiusBulkImportResult> {
+    if (USE_MOCKS) {
+      await sleep(350);
+      return bulkImportMockRadiusUsers(payload);
+    }
+    const { data } = await api.post<RadiusBulkImportResult>("/api/radius/bulk-import", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
   async activateRadiusUser(username: string, tenantId: string, token?: string): Promise<RadiusUser> {
     if (USE_MOCKS) {
       await sleep(150);
@@ -549,6 +574,48 @@ export const apiClient = {
     }
     const { data } = await api.post<RadiusSession>(`/radius/sessions/${encodeURIComponent(username)}/reconnect`, undefined, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async exportRadiusUsers(tenantId: string, token?: string): Promise<Blob> {
+    if (USE_MOCKS) {
+      await sleep(220);
+      return new Blob([createCsvContent(RADIUS_USER_IMPORT_EXPORT_SCHEMA, mapRadiusUsersToExportRows(mockRadiusUsers))], {
+        type: "text/csv;charset=utf-8;",
+      });
+    }
+    const { data } = await api.get<Blob>("/api/radius/export-users", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+      responseType: "blob",
+    });
+    return data;
+  },
+
+  async exportRadiusSessions(tenantId: string, token?: string): Promise<Blob> {
+    if (USE_MOCKS) {
+      await sleep(220);
+      return new Blob([createCsvContent(RADIUS_SESSION_EXPORT_SCHEMA, mapSessionsToExportRows(mockSessions))], {
+        type: "text/csv;charset=utf-8;",
+      });
+    }
+    const { data } = await api.get<Blob>("/api/radius/export-sessions", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+      responseType: "blob",
+    });
+    return data;
+  },
+
+  async exportCustomers(tenantId: string, token?: string): Promise<Blob> {
+    if (USE_MOCKS) {
+      await sleep(220);
+      return new Blob([createCsvContent(CUSTOMER_EXPORT_SCHEMA, mapCustomersToExportRows(mockCustomers))], {
+        type: "text/csv;charset=utf-8;",
+      });
+    }
+    const { data } = await api.get<Blob>("/api/customers/export", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+      responseType: "blob",
     });
     return data;
   },

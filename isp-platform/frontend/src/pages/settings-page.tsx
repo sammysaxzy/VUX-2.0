@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { NasEntry, ServicePlan, SettingsTab } from "@/types";
 import {
   useCreateNasEntry,
@@ -11,8 +12,8 @@ import {
   useUpdateNasEntry,
   useZones,
 } from "@/hooks/api/use-settings";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SettingsLayout } from "@/components/settings/settings-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -22,20 +23,12 @@ import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatRelativeDate } from "@/lib/utils";
 
-const tabs: { key: SettingsTab; label: string }[] = [
-  { key: "nas", label: "NAS Management" },
-  { key: "zones", label: "Zone Management" },
-  { key: "permissions", label: "Permissions" },
-  { key: "services", label: "Services" },
-  { key: "logs", label: "Logs" },
-];
-
 const blankNasForm = { name: "", ipAddress: "", sharedSecret: "" };
 const blankZoneForm = { name: "", nasId: "", description: "" };
 const blankServiceForm: ServicePlan = { name: "", speed: "", price: "", rateLimit: "", description: "" };
 
 export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>("nas");
+  const [searchParams] = useSearchParams();
   const [nasModalOpen, setNasModalOpen] = useState(false);
   const [editingNas, setEditingNas] = useState<NasEntry | null>(null);
   const [nasForm, setNasForm] = useState(blankNasForm);
@@ -52,7 +45,15 @@ export function SettingsPage() {
   const createServiceMutation = useCreateServicePlan();
   const logsQuery = useSettingsLogs();
 
-  const nasBusy = createNasMutation.isLoading || updateNasMutation.isLoading;
+  const activeTab = useMemo<SettingsTab>(() => {
+    const requestedTab = searchParams.get("tab");
+    if (requestedTab === "zones" || requestedTab === "permissions" || requestedTab === "services" || requestedTab === "logs") {
+      return requestedTab;
+    }
+    return "nas";
+  }, [searchParams]);
+
+  const nasBusy = createNasMutation.isPending || updateNasMutation.isPending;
   const nasCount = nasQuery.data?.length ?? 0;
   const zoneCount = zonesQuery.data?.length ?? 0;
   const serviceCount = servicesQuery.data?.length ?? 0;
@@ -117,30 +118,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="space-y-5 animate-fade-up">
-      <div>
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          Shared ISP configuration for NAS, zones, access control, bandwidth services, and operational logs.
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          {tabs.map((tab) => (
-            <Button
-              key={tab.key}
-              variant={activeTab === tab.key ? "secondary" : "ghost"}
-              size="sm"
-              type="button"
-              onClick={() => setActiveTab(tab.key)}
-            >
-              {tab.label}
-            </Button>
-          ))}
-        </div>
-        <Badge variant="outline">{activeSummary}</Badge>
-      </div>
+    <SettingsLayout activeTab={activeTab} summary={activeSummary}>
 
       {activeTab === "nas" &&
         (nasQuery.isLoading || !nasQuery.data ? (
@@ -250,8 +228,8 @@ export function SettingsPage() {
                   <Label htmlFor="zone-description">Description</Label>
                   <Input id="zone-description" value={zoneForm.description} onChange={(event) => setZoneForm((prev) => ({ ...prev, description: event.target.value }))} />
                 </div>
-                <Button type="button" onClick={saveZone} disabled={createZoneMutation.isLoading}>
-                  {createZoneMutation.isLoading ? "Saving..." : "Create Zone"}
+                <Button type="button" onClick={saveZone} disabled={createZoneMutation.isPending}>
+                  {createZoneMutation.isPending ? "Saving..." : "Create Zone"}
                 </Button>
               </CardContent>
             </Card>
@@ -352,8 +330,8 @@ export function SettingsPage() {
                   <Label htmlFor="service-description">Description</Label>
                   <Input id="service-description" value={serviceForm.description ?? ""} onChange={(event) => setServiceForm((prev) => ({ ...prev, description: event.target.value }))} />
                 </div>
-                <Button type="button" onClick={saveService} disabled={createServiceMutation.isLoading}>
-                  {createServiceMutation.isLoading ? "Saving..." : "Create Plan"}
+                <Button type="button" onClick={saveService} disabled={createServiceMutation.isPending}>
+                  {createServiceMutation.isPending ? "Saving..." : "Create Plan"}
                 </Button>
               </CardContent>
             </Card>
@@ -423,6 +401,6 @@ export function SettingsPage() {
           </div>
         </div>
       </Dialog>
-    </div>
+    </SettingsLayout>
   );
 }
