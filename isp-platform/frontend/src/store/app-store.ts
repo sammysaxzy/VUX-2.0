@@ -1,8 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { AlertItem, DashboardRealtimePayload, EngineerActivity, KpiSnapshot, TenantBranding, User } from "@/types";
-
-type ThemeMode = "light" | "dark";
 type ActiveModal = "fibre-details" | "mst-details" | null;
 type ModalType = "mst-details" | "fiber-details" | "closure-details" | "customer-details" | null;
 type ActivePanel = ModalType;
@@ -11,7 +9,6 @@ type AppState = {
   token?: string;
   user?: User;
   branding?: TenantBranding;
-  theme: ThemeMode;
   selectedMSTId?: string;
   selectedFiberId?: string;
   selectedClosureId?: string;
@@ -25,7 +22,6 @@ type AppState = {
   setAuth: (payload: { token: string; user: User; branding: TenantBranding }) => void;
   setBranding: (branding: TenantBranding) => void;
   logout: () => void;
-  setTheme: (theme: ThemeMode) => void;
   setSelectedMST: (mstId?: string) => void;
   setSelectedFiber: (fiberId?: string) => void;
   setSelectedClosure: (closureId?: string) => void;
@@ -49,7 +45,6 @@ export const useAppStore = create<AppState>()(
       token: undefined,
       user: undefined,
       branding: undefined,
-      theme: "dark",
       selectedMSTId: undefined,
       selectedFiberId: undefined,
       selectedClosureId: undefined,
@@ -61,7 +56,6 @@ export const useAppStore = create<AppState>()(
       setAuth: ({ token, user, branding }) => set({ token, user, branding }),
       setBranding: (branding) => set({ branding }),
       logout: () => set({ token: undefined, user: undefined, branding: undefined, ...initialRealtime }),
-      setTheme: (theme) => set({ theme }),
       setSelectedMST: (mstId) => set({ selectedMSTId: mstId }),
       setSelectedFiber: (fiberId) => set({ selectedFiberId: fiberId }),
       setSelectedClosure: (closureId) => set({ selectedClosureId: closureId }),
@@ -89,7 +83,6 @@ export const useAppStore = create<AppState>()(
         token: state.token,
         user: state.user,
         branding: state.branding,
-        theme: state.theme,
       }),
     },
   ),

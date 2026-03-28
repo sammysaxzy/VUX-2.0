@@ -40,3 +40,12 @@ export function useSaveCustomer() {
     onError: () => toast.error("Unable to save customer."),
   });
 }
+
+export function useExportCustomers() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useMutation({
+    mutationFn: () => apiClient.exportCustomers(tenantId, token),
+    onError: () => toast.error("Unable to export customers."),
+  });
+}

@@ -133,6 +133,88 @@ export interface RadiusSession {
   ipAddress: string;
   startedAt: string;
   status: SessionStatus;
+  dataUsage?: string;
+  duration?: string;
+  accountStatus?: RadiusUserStatus;
+  plan?: string;
+  expirationDate?: string;
+  lastUpdated?: string;
+  accountExists?: boolean;
+}
+
+export type RadiusUserStatus = "active" | "inactive";
+export type CustomerType = "individual" | "corporate";
+export type PriorityLevel = "high" | "medium" | "low";
+
+export interface RadiusUser {
+  username: string;
+  status: RadiusUserStatus;
+  plan: string;
+  customerType: CustomerType;
+  zoneId: string;
+  zone: string;
+  nasId: string;
+  nas: string;
+  expirationDate: string;
+  staticIp?: string;
+  priority?: PriorityLevel;
+  slaProfile?: string;
+  exists: boolean;
+  lastSeen: string;
+}
+
+export interface RadiusBulkImportResult {
+  imported: number;
+}
+
+export interface ServicePlan {
+  name: string;
+  speed: string;
+  price: string;
+  rateLimit: string;
+  description?: string;
+  customerTypes?: CustomerType[];
+}
+
+export type RadiusRealtimeEvent =
+  | { type: "session:connected"; payload: RadiusSession }
+  | { type: "session:updated"; payload: RadiusSession }
+  | { type: "session:disconnected"; payload: RadiusSession };
+
+export type RadiusTab = "sessions" | "users";
+
+export type SettingsTab = "nas" | "zones" | "permissions" | "services" | "logs" | "configuration";
+
+export interface NasEntry {
+  id: string;
+  name: string;
+  ipAddress: string;
+  sharedSecret: string;
+}
+
+export interface Zone {
+  id: string;
+  name: string;
+  nasId: string;
+  nasName: string;
+  description: string;
+  usersCount: number;
+}
+
+export interface PermissionRole {
+  id: string;
+  name: string;
+  scope: string;
+  description: string;
+  memberCount: number;
+}
+
+export interface SettingsLog {
+  id: string;
+  type: "authentication" | "disconnect" | "sync";
+  actor: string;
+  description: string;
+  createdAt: string;
 }
 
 export interface Customer {

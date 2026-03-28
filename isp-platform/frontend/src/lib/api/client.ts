@@ -8,18 +8,33 @@ import type {
   Fault,
   FibreCable,
   KpiSnapshot,
+  NasEntry,
   NetworkNode,
+  PermissionRole,
+  RadiusBulkImportResult,
   RadiusSession,
+  RadiusUser,
+  ServicePlan,
+  SettingsLog,
   TenantBranding,
   User,
+  Zone,
 } from "@/types";
 import {
+  addMockNasEntry,
+  addMockFault,
+  addMockRadiusUser,
+  addMockServicePlan,
+  addMockZone,
+  activateMockRadiusUser,
   assignMockCoreToCable,
   assignMockClientToMstPort,
-  addMockFault,
+  bulkImportMockRadiusUsers,
   buildKpis,
   createMockMstConnection,
   deleteMockCable,
+  disconnectMockRadiusSession,
+  extendMockRadiusUser,
   deleteMockClosure,
   deleteMockNode,
   mockActivities,
@@ -29,22 +44,49 @@ import {
   mockClosures,
   mockCustomers,
   mockFaults,
+  mockNasEntries,
   mockNodes,
+  mockPermissionRoles,
+  mockRadiusUsers,
+  mockServicePlans,
+  mockSettingsLogs,
   mockSessions,
   mockUser,
+  mockZones,
+  reconnectMockRadiusSession,
   removeMockClientFromMstPort,
   removeMockClosureSplice,
   setMockCableCoreState,
+  syncMockRadiusUser,
+  updateMockNasEntry,
   updateMockMstSplitterType,
   upsertMockClosureSplice,
   upsertCustomer,
 } from "@/lib/api/mock-data";
 import { randomId } from "@/lib/utils";
+import {
+  CUSTOMER_EXPORT_SCHEMA,
+  RADIUS_SESSION_EXPORT_SCHEMA,
+  RADIUS_USER_IMPORT_EXPORT_SCHEMA,
+  type RadiusBulkImportPayload,
+} from "@/features/import-export/schema";
+import {
+  createCsvContent,
+  mapCustomersToExportRows,
+  mapRadiusUsersToExportRows,
+  mapSessionsToExportRows,
+} from "@/features/import-export/utils";
 
 const resolvedBaseUrl = (
   import.meta.env.VITE_API_BASE_URL ||
   import.meta.env.VITE_API_URL ||
   "http://localhost:8001"
+).replace(/\/+$/, "");
+
+const wsScheme = resolvedBaseUrl.startsWith("https") ? "wss" : "ws";
+export const radiusWsUrl = (
+  import.meta.env.VITE_RADIUS_WS_URL ??
+  `${wsScheme}://${resolvedBaseUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "")}/ws/radius`
 ).replace(/\/+$/, "");
 
 const api = axios.create({
@@ -467,16 +509,252 @@ export const apiClient = {
     return data;
   },
 
-  async disconnectRadiusSession(sessionId: string, tenantId: string, token?: string) {
+  async getRadiusUsers(tenantId: string, token?: string): Promise<RadiusUser[]> {
     if (USE_MOCKS) {
-      await sleep(140);
-      const found = mockSessions.find((entry) => entry.id === sessionId);
-      if (found) found.status = "offline";
-      return found;
+      await sleep(200);
+      return mockRadiusUsers;
     }
-    return api.post(`/radius/sessions/${sessionId}/disconnect`, undefined, {
+    const { data } = await api.get<RadiusUser[]>("/radius/users", {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
+    return data;
+  },
+
+  async createRadiusUser(
+    payload: {
+      username: string;
+      password: string;
+      plan: string;
+      zoneId: string;
+      customerType: "individual" | "corporate";
+      expirationDate: string;
+      staticIp?: string;
+      priority?: "high" | "medium" | "low";
+      slaProfile?: string;
+    },
+    tenantId: string,
+    token?: string,
+  ): Promise<RadiusUser> {
+    if (USE_MOCKS) {
+      await sleep(200);
+      return addMockRadiusUser(payload);
+    }
+    const { data } = await api.post<RadiusUser>("/radius/users", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async bulkImportRadiusUsers(payload: RadiusBulkImportPayload[], tenantId: string, token?: string): Promise<RadiusBulkImportResult> {
+    if (USE_MOCKS) {
+      await sleep(350);
+      return bulkImportMockRadiusUsers(payload);
+    }
+    const { data } = await api.post<RadiusBulkImportResult>("/api/radius/bulk-import", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async activateRadiusUser(username: string, tenantId: string, token?: string): Promise<RadiusUser> {
+    if (USE_MOCKS) {
+      await sleep(150);
+      return activateMockRadiusUser(username);
+    }
+    const { data } = await api.patch<RadiusUser>(`/radius/users/${encodeURIComponent(username)}/activate`, undefined, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async syncRadiusUser(username: string, tenantId: string, token?: string): Promise<RadiusUser> {
+    if (USE_MOCKS) {
+      await sleep(170);
+      return syncMockRadiusUser(username);
+    }
+    const { data } = await api.post<RadiusUser>(`/radius/users/${encodeURIComponent(username)}/sync`, undefined, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async extendRadiusUser(username: string, expirationDate: string, tenantId: string, token?: string): Promise<RadiusUser> {
+    if (USE_MOCKS) {
+      await sleep(170);
+      return extendMockRadiusUser(username, expirationDate);
+    }
+    const { data } = await api.patch<RadiusUser>(
+      `/radius/users/${encodeURIComponent(username)}/expiration`,
+      { expiration_date: expirationDate },
+      { headers: { ...tenantHeaders(tenantId), ...authHeaders(token) } },
+    );
+    return data;
+  },
+
+  async reconnectRadiusSession(username: string, tenantId: string, token?: string): Promise<RadiusSession> {
+    if (USE_MOCKS) {
+      await sleep(150);
+      return reconnectMockRadiusSession(username);
+    }
+    const { data } = await api.post<RadiusSession>(`/radius/sessions/${encodeURIComponent(username)}/reconnect`, undefined, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async exportRadiusUsers(tenantId: string, token?: string): Promise<Blob> {
+    if (USE_MOCKS) {
+      await sleep(220);
+      return new Blob([createCsvContent(RADIUS_USER_IMPORT_EXPORT_SCHEMA, mapRadiusUsersToExportRows(mockRadiusUsers))], {
+        type: "text/csv;charset=utf-8;",
+      });
+    }
+    const { data } = await api.get<Blob>("/api/radius/export-users", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+      responseType: "blob",
+    });
+    return data;
+  },
+
+  async exportRadiusSessions(tenantId: string, token?: string): Promise<Blob> {
+    if (USE_MOCKS) {
+      await sleep(220);
+      return new Blob([createCsvContent(RADIUS_SESSION_EXPORT_SCHEMA, mapSessionsToExportRows(mockSessions))], {
+        type: "text/csv;charset=utf-8;",
+      });
+    }
+    const { data } = await api.get<Blob>("/api/radius/export-sessions", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+      responseType: "blob",
+    });
+    return data;
+  },
+
+  async exportCustomers(tenantId: string, token?: string): Promise<Blob> {
+    if (USE_MOCKS) {
+      await sleep(220);
+      return new Blob([createCsvContent(CUSTOMER_EXPORT_SCHEMA, mapCustomersToExportRows(mockCustomers))], {
+        type: "text/csv;charset=utf-8;",
+      });
+    }
+    const { data } = await api.get<Blob>("/api/customers/export", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+      responseType: "blob",
+    });
+    return data;
+  },
+
+  async getServicePlans(tenantId: string, token?: string): Promise<ServicePlan[]> {
+    if (USE_MOCKS) {
+      await sleep(200);
+      return mockServicePlans;
+    }
+    const { data } = await api.get<ServicePlan[]>("/settings/services", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async createServicePlan(payload: ServicePlan, tenantId: string, token?: string): Promise<ServicePlan> {
+    if (USE_MOCKS) {
+      await sleep(170);
+      return addMockServicePlan(payload);
+    }
+    const { data } = await api.post<ServicePlan>("/settings/services", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getNasEntries(tenantId: string, token?: string): Promise<NasEntry[]> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return mockNasEntries;
+    }
+    const { data } = await api.get<NasEntry[]>("/settings/nas", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async createNasEntry(payload: Omit<NasEntry, "id">, tenantId: string, token?: string): Promise<NasEntry> {
+    if (USE_MOCKS) {
+      await sleep(170);
+      return addMockNasEntry(payload);
+    }
+    const { data } = await api.post<NasEntry>("/settings/nas", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async updateNasEntry(id: string, payload: Omit<NasEntry, "id">, tenantId: string, token?: string): Promise<NasEntry> {
+    if (USE_MOCKS) {
+      await sleep(170);
+      return updateMockNasEntry(id, payload) as NasEntry;
+    }
+    const { data } = await api.put<NasEntry>(`/settings/nas/${encodeURIComponent(id)}`, payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getZones(tenantId: string, token?: string): Promise<Zone[]> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return mockZones;
+    }
+    const { data } = await api.get<Zone[]>("/settings/zones", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async createZone(payload: Omit<Zone, "id" | "usersCount" | "nasName"> & { usersCount?: number }, tenantId: string, token?: string): Promise<Zone> {
+    if (USE_MOCKS) {
+      await sleep(170);
+      return addMockZone(payload);
+    }
+    const { data } = await api.post<Zone>("/settings/zones", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getPermissionRoles(tenantId: string, token?: string): Promise<PermissionRole[]> {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return mockPermissionRoles;
+    }
+    const { data } = await api.get<PermissionRole[]>("/settings/permissions", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getSettingsLogs(tenantId: string, token?: string): Promise<SettingsLog[]> {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return mockSettingsLogs;
+    }
+    const { data } = await api.get<SettingsLog[]>("/settings/logs", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async disconnectRadiusSession(username: string, tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(140);
+      return disconnectMockRadiusSession(username);
+    }
+    return api.post(
+      "/radius/disconnect",
+      { username },
+      {
+        headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+      },
+    );
   },
 
   async suspendCustomer(customerId: string, tenantId: string, token?: string) {

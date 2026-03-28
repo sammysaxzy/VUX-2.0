@@ -5,7 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { Toaster } from "sonner";
 import { createQueryClient } from "@/lib/query-client";
-import { ThemeSync } from "@/components/providers/theme-sync";
+import { ThemeProvider } from "@/components/providers/theme-provider";
 import { RealtimeProvider } from "@/components/providers/realtime-provider";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
@@ -13,11 +13,12 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeSync />
-      <RealtimeProvider>
-        {children}
-        <Toaster position="top-right" richColors closeButton />
-      </RealtimeProvider>
+      <ThemeProvider>
+        <RealtimeProvider>
+          {children}
+          <Toaster position="top-right" richColors closeButton />
+        </RealtimeProvider>
+      </ThemeProvider>
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );

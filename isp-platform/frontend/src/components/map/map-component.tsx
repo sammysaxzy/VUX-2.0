@@ -2,20 +2,21 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Map, { Layer, Marker, Popup, Source, type MapMouseEvent, type MapRef, type ViewState } from "react-map-gl/mapbox";
-import { MapPinPlusInside, Menu, Search, Router, TriangleAlert } from "lucide-react";
+import { MapPinPlusInside, Menu, Router, Search, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
-import type { ClosureBox, Customer, FibreCable, GeoPoint, NetworkNode } from "@/types";
-import { useAppStore } from "@/store/app-store";
 import { AddFiberForm } from "@/components/map/add-fiber-form";
 import { AddNodeForm } from "@/components/map/add-node-form";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { ClientDropDetailsDrawer } from "@/components/map/client-drop-details-drawer";
 import { ClosureSpliceForm } from "@/components/map/closure-splice-form";
 import { FiberDetailsPanel } from "@/components/map/fiber-details-panel";
 import { MSTDetailsPanel } from "@/components/map/mst-details-panel";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { cn, randomId } from "@/lib/utils";
+import { useAppStore } from "@/store/app-store";
+import { useThemeStore } from "@/store/theme-store";
+import type { ClosureBox, Customer, FibreCable, GeoPoint, NetworkNode } from "@/types";
 
 const mapToken = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
 
@@ -35,7 +36,15 @@ type Props = {
     endMstId?: string;
   }) => void;
   onAssignCore?: (payload: { cableId: string; coreId: string }) => void;
-  onSetCoreState?: (payload: { cableId: string; coreId: string; status: "free" | "used"; fromMstId?: string; toMstId?: string; usagePath?: string; assignedToCustomerId?: string }) => void;
+  onSetCoreState?: (payload: {
+    cableId: string;
+    coreId: string;
+    status: "free" | "used";
+    fromMstId?: string;
+    toMstId?: string;
+    usagePath?: string;
+    assignedToCustomerId?: string;
+  }) => void;
   onDeleteCable?: (payload: { cableId: string }) => void;
   onDeleteMst?: (payload: { mstId: string }) => void;
   onDeleteClosure?: (payload: { closureId: string }) => void;
@@ -82,6 +91,12 @@ type SearchResult = {
   entityId?: string;
 };
 
+function resolveTheme(mode: "light" | "dark" | "system"): "light" | "dark" {
+  if (mode !== "system") return mode;
+  if (typeof window === "undefined") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
 function parseCoordinateSearch(input: string): GeoPoint | null {
   const match = input.trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
   if (!match) return null;
@@ -112,6 +127,7 @@ export function MapComponent({
   onSaveSplice,
   onDeleteSplice,
 }: Props) {
+  const theme = useThemeStore((state) => state.theme);
   const mapRef = useRef<MapRef | null>(null);
   const [hoveredCable, setHoveredCable] = useState<{ cable: FibreCable; point: GeoPoint } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -148,17 +164,12 @@ export function MapComponent({
     if (byName) return byName;
 
     return [...customers].sort((left, right) => {
-      const leftDistance = Math.hypot(
-        left.location.lat - selectedCustomerNode.location.lat,
-        left.location.lng - selectedCustomerNode.location.lng,
-      );
-      const rightDistance = Math.hypot(
-        right.location.lat - selectedCustomerNode.location.lat,
-        right.location.lng - selectedCustomerNode.location.lng,
-      );
+      const leftDistance = Math.hypot(left.location.lat - selectedCustomerNode.location.lat, left.location.lng - selectedCustomerNode.location.lng);
+      const rightDistance = Math.hypot(right.location.lat - selectedCustomerNode.location.lat, right.location.lng - selectedCustomerNode.location.lng);
       return leftDistance - rightDistance;
     })[0];
   }, [customers, selectedCustomerNode]);
+
   const selectedClosure = useMemo(() => {
     if (!selectedClosureId) return undefined;
     const found = closures.find((entry) => entry.id === selectedClosureId);
@@ -180,6 +191,9 @@ export function MapComponent({
     nodes.forEach((node) => lookup.set(node.id, node.name));
     return lookup;
   }, [nodes]);
+
+  const resolvedTheme = resolveTheme(theme);
+  const mapStyle = resolvedTheme === "dark" ? "mapbox://styles/mapbox/dark-v11" : "mapbox://styles/mapbox/light-v11";
 
   const searchResults = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -206,7 +220,7 @@ export function MapComponent({
         id: `node-${node.id}`,
         type: kind,
         title: node.name,
-        subtitle: `${node.type.toUpperCase()} • ${node.id}`,
+        subtitle: `${node.type.toUpperCase()} | ${node.id}`,
         location: node.location,
         entityId: node.id,
       });
@@ -223,7 +237,7 @@ export function MapComponent({
         id: `cable-${cable.id}`,
         type: "fibre",
         title: cable.name,
-        subtitle: `${cable.coreCount}-core • ${fromName} -> ${toName}`,
+        subtitle: `${cable.coreCount}-core | ${fromName} -> ${toName}`,
         location: middle,
         entityId: cable.id,
       });
@@ -236,7 +250,7 @@ export function MapComponent({
         id: `customer-${customer.id}`,
         type: "customer",
         title: customer.name,
-        subtitle: `CRM Customer • ${customer.id}`,
+        subtitle: `CRM Customer | ${customer.id}`,
         location: customer.location,
         entityId: customer.id,
       });
@@ -275,6 +289,7 @@ export function MapComponent({
             center?: [number, number];
           }>;
         };
+
         const mapped: SearchResult[] = (payload.features ?? [])
           .filter((feature) => Array.isArray(feature.center) && feature.center.length === 2)
           .map((feature) => ({
@@ -413,13 +428,11 @@ export function MapComponent({
     });
     const cableIdFromFeature = lineFeature?.id ? String(lineFeature.id) : (lineFeature?.properties?.id as string | undefined);
     if (cableIdFromFeature) {
-      const cableId = cableIdFromFeature;
-      setSelectedFiber(cableId);
+      setSelectedFiber(cableIdFromFeature);
       setSelectedMST(undefined);
       setSelectedClosure(undefined);
       setSelectedCustomerNode(undefined);
       setModalType("fiber-details");
-      return;
     }
   };
 
@@ -438,7 +451,7 @@ export function MapComponent({
         ref={mapRef}
         initialViewState={defaultView}
         mapboxAccessToken={mapToken}
-        mapStyle="mapbox://styles/mapbox/dark-v11"
+        mapStyle={mapStyle}
         interactiveLayerIds={["fibre-lines", "fibre-labels", "fault-glow"]}
         onClick={handleMapClick}
         onMouseMove={(event) => {
@@ -489,8 +502,8 @@ export function MapComponent({
               "text-size": 11,
             }}
             paint={{
-              "text-color": "#E2E8F0",
-              "text-halo-color": "#0F172A",
+              "text-color": resolvedTheme === "dark" ? "#E2E8F0" : "#111827",
+              "text-halo-color": resolvedTheme === "dark" ? "#0F172A" : "#FFFFFF",
               "text-halo-width": 1,
             }}
           />
@@ -561,20 +574,10 @@ export function MapComponent({
         })}
 
         {hoveredCable ? (
-          <Popup
-            closeButton={false}
-            closeOnClick={false}
-            longitude={hoveredCable.point.lng}
-            latitude={hoveredCable.point.lat}
-            anchor="top"
-          >
+          <Popup closeButton={false} closeOnClick={false} longitude={hoveredCable.point.lng} latitude={hoveredCable.point.lat} anchor="top">
             <p className="text-xs">
               {hoveredCable.cable.coreCount}-core | {hoveredCable.cable.cores.filter((core) => core.status === "used").length} used |{" "}
-              {Math.max(
-                hoveredCable.cable.coreCount - hoveredCable.cable.cores.filter((core) => core.status === "used").length,
-                0,
-              )}{" "}
-              free
+              {Math.max(hoveredCable.cable.coreCount - hoveredCable.cable.cores.filter((core) => core.status === "used").length, 0)} free
             </p>
           </Popup>
         ) : null}
@@ -629,13 +632,7 @@ export function MapComponent({
               <MapPinPlusInside className="h-3.5 w-3.5" />
               Coordinate Mapping Controls
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => setControlsOpen((current) => !current)}
-            >
+            <Button type="button" variant="outline" size="icon" className="h-7 w-7" onClick={() => setControlsOpen((current) => !current)}>
               <Menu className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -666,7 +663,7 @@ export function MapComponent({
         </div>
       </div>
 
-      <div className="pointer-events-none absolute bottom-3 right-3 z-10 rounded-xl border border-border/70 bg-card/90 p-2 text-xs shadow-soft backdrop-blur">
+      <div className="pointer-events-none absolute bottom-3 right-3 z-10 rounded-xl border border-gray-200 bg-white/95 p-2 text-xs shadow-soft backdrop-blur dark:border-border/70 dark:bg-card/90">
         <div className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
           <span>Fault segment</span>
@@ -762,11 +759,3 @@ export function MapComponent({
     </div>
   );
 }
-
-
-
-
-
-
-
-

@@ -36,7 +36,7 @@ export function CustomerTable({ customers, onSelect }: Props) {
         <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Search customers" />
       </div>
-      <div className="overflow-hidden rounded-2xl border border-border/70">
+      <div className="overflow-hidden rounded-2xl border border-gray-200 dark:border-border/70">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
