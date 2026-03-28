@@ -274,10 +274,28 @@ export interface DashboardRealtimePayload {
       | "client_reassigned"
       | "port_used"
       | "splice_created"
-      | "splitter_changed";
+      | "splitter_changed"
+      | "core_updated"
+      | "splice_updated"
+      | "cable_deleted"
+      | "node_deleted"
+      | "closure_deleted";
     mstId?: string;
     cableId?: string;
     closureId?: string;
+    portNumber?: number;
+    customerId?: string;
+    splitterType?: SplitterType;
+    core?: FibreCore;
+    node?: NetworkNode;
+    mst?: NetworkNode;
+    cable?: FibreCable;
+    closure?: ClosureBox;
+    customer?: Customer;
+    removedCableIds?: string[];
+    deletedNodeId?: string;
+    deletedCableId?: string;
+    deletedClosureId?: string;
     message?: string;
   };
 }

@@ -1,22 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import length from "@turf/length";
-import { lineString } from "@turf/helpers";
-import Map, { Layer, Marker, Popup, Source, type MapMouseEvent, type ViewState } from "react-map-gl/mapbox";
-import { Link2, MapPinPlusInside, Router, TriangleAlert } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Map, { Layer, Marker, Popup, Source, type MapMouseEvent, type MapRef, type ViewState } from "react-map-gl/mapbox";
+import { MapPinPlusInside, Menu, Router, Search, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
-import type { ClosureBox, Customer, FibreCable, GeoPoint, MstConnectionDraft, NetworkNode } from "@/types";
-import { useAppStore } from "@/store/app-store";
-import { useThemeStore } from "@/store/theme-store";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { AddFiberForm } from "@/components/map/add-fiber-form";
+import { AddNodeForm } from "@/components/map/add-node-form";
+import { ClientDropDetailsDrawer } from "@/components/map/client-drop-details-drawer";
 import { ClosureSpliceForm } from "@/components/map/closure-splice-form";
 import { FiberDetailsPanel } from "@/components/map/fiber-details-panel";
 import { MSTDetailsPanel } from "@/components/map/mst-details-panel";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { cn, randomId } from "@/lib/utils";
+import { useAppStore } from "@/store/app-store";
+import { useThemeStore } from "@/store/theme-store";
+import type { ClosureBox, Customer, FibreCable, GeoPoint, NetworkNode } from "@/types";
 
 const mapToken = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
 
@@ -27,9 +27,27 @@ type Props = {
   customers?: Customer[];
   className?: string;
   onInfrastructureAdded?: (node: NetworkNode) => void;
-  onRouteDrafted?: (route: { start: GeoPoint; end: GeoPoint; distanceMeters: number }) => void;
-  onCreateMstConnection?: (payload: MstConnectionDraft) => void;
+  onCreateFiber?: (payload: {
+    name?: string;
+    start: GeoPoint;
+    end: GeoPoint;
+    coreCount: 2 | 4 | 8 | 12 | 24;
+    startMstId?: string;
+    endMstId?: string;
+  }) => void;
   onAssignCore?: (payload: { cableId: string; coreId: string }) => void;
+  onSetCoreState?: (payload: {
+    cableId: string;
+    coreId: string;
+    status: "free" | "used";
+    fromMstId?: string;
+    toMstId?: string;
+    usagePath?: string;
+    assignedToCustomerId?: string;
+  }) => void;
+  onDeleteCable?: (payload: { cableId: string }) => void;
+  onDeleteMst?: (payload: { mstId: string }) => void;
+  onDeleteClosure?: (payload: { closureId: string }) => void;
   onAssignClient?: (payload: {
     mstId: string;
     portNumber: number;
@@ -39,6 +57,8 @@ type Props = {
     cableId?: string;
     coreId?: string;
   }) => void;
+  onRemoveClient?: (payload: { mstId: string; portNumber: number }) => void;
+  onChangeSplitterType?: (payload: { mstId: string; splitterType: "1/2" | "1/4" | "1/8" | "1/16" }) => void;
   onSaveSplice?: (payload: {
     closureId: string;
     splice: {
@@ -54,13 +74,21 @@ type Props = {
   highlightedCableId?: string;
 };
 
-type AddMode = "none" | "olt" | "mst" | "pole" | "closure";
-type CoreCount = 2 | 4 | 8 | 12 | 24;
-
 const defaultView: Partial<ViewState> = {
   latitude: 6.455,
   longitude: 3.476,
   zoom: 11.8,
+};
+
+type SearchEntityType = "mst" | "closure" | "customer-node" | "customer" | "fibre" | "coordinate" | "node" | "place";
+
+type SearchResult = {
+  id: string;
+  type: SearchEntityType;
+  title: string;
+  subtitle: string;
+  location: GeoPoint;
+  entityId?: string;
 };
 
 function resolveTheme(mode: "light" | "dark" | "system"): "light" | "dark" {
@@ -69,14 +97,14 @@ function resolveTheme(mode: "light" | "dark" | "system"): "light" | "dark" {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-const fibreCountOptions: CoreCount[] = [2, 4, 8, 12, 24];
-
-function parseCoordinatePair(lat: string, lng: string): GeoPoint | null {
-  if (!lat || !lng) return null;
-  const parsedLat = Number(lat);
-  const parsedLng = Number(lng);
-  if (Number.isNaN(parsedLat) || Number.isNaN(parsedLng)) return null;
-  return { lat: parsedLat, lng: parsedLng };
+function parseCoordinateSearch(input: string): GeoPoint | null {
+  const match = input.trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  if (!match) return null;
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
 }
 
 export function MapComponent({
@@ -87,38 +115,61 @@ export function MapComponent({
   className,
   highlightedCableId,
   onInfrastructureAdded,
-  onRouteDrafted,
-  onCreateMstConnection,
+  onCreateFiber,
   onAssignCore,
+  onSetCoreState,
+  onDeleteCable,
+  onDeleteMst,
+  onDeleteClosure,
   onAssignClient,
+  onRemoveClient,
+  onChangeSplitterType,
   onSaveSplice,
   onDeleteSplice,
 }: Props) {
   const theme = useThemeStore((state) => state.theme);
-  const [addMode, setAddMode] = useState<AddMode>("none");
-  const [connectMode, setConnectMode] = useState(false);
-  const [connectStartId, setConnectStartId] = useState<string>("");
-  const [connectEndId, setConnectEndId] = useState<string>("");
-  const [coreCount, setCoreCount] = useState<CoreCount>(12);
-  const [manualStartLat, setManualStartLat] = useState("");
-  const [manualStartLng, setManualStartLng] = useState("");
-  const [manualEndLat, setManualEndLat] = useState("");
-  const [manualEndLng, setManualEndLng] = useState("");
+  const mapRef = useRef<MapRef | null>(null);
   const [hoveredCable, setHoveredCable] = useState<{ cable: FibreCable; point: GeoPoint } | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [placeResults, setPlaceResults] = useState<SearchResult[]>([]);
+  const [isSearchingPlaces, setIsSearchingPlaces] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(true);
 
   const selectedMSTId = useAppStore((state) => state.selectedMSTId);
   const selectedFiberId = useAppStore((state) => state.selectedFiberId);
   const selectedClosureId = useAppStore((state) => state.selectedClosureId);
+  const selectedCustomerNodeId = useAppStore((state) => state.selectedCustomerNodeId);
   const modalType = useAppStore((state) => state.modalType);
   const setSelectedMST = useAppStore((state) => state.setSelectedMST);
   const setSelectedFiber = useAppStore((state) => state.setSelectedFiber);
   const setSelectedClosure = useAppStore((state) => state.setSelectedClosure);
+  const setSelectedCustomerNode = useAppStore((state) => state.setSelectedCustomerNode);
   const setModalType = useAppStore((state) => state.setModalType);
 
   const mstNodes = useMemo(() => nodes.filter((node) => node.type === "mst"), [nodes]);
   const closureNodes = useMemo(() => nodes.filter((node) => node.type === "closure"), [nodes]);
   const selectedMst = mstNodes.find((node) => node.id === selectedMSTId);
   const selectedCable = cables.find((cable) => cable.id === selectedFiberId);
+  const selectedCustomerNode = nodes.find((node) => node.id === selectedCustomerNodeId && node.type === "customer");
+  const selectedCustomer = useMemo(() => {
+    if (!selectedCustomerNode || customers.length === 0) return undefined;
+    const direct = customers.find((customer) => customer.id === selectedCustomerNode.id);
+    if (direct) return direct;
+
+    const nodeName = selectedCustomerNode.name.toLowerCase();
+    const byName = customers.find((customer) => {
+      const customerName = customer.name.toLowerCase();
+      return nodeName.includes(customerName) || customerName.includes(nodeName);
+    });
+    if (byName) return byName;
+
+    return [...customers].sort((left, right) => {
+      const leftDistance = Math.hypot(left.location.lat - selectedCustomerNode.location.lat, left.location.lng - selectedCustomerNode.location.lng);
+      const rightDistance = Math.hypot(right.location.lat - selectedCustomerNode.location.lat, right.location.lng - selectedCustomerNode.location.lng);
+      return leftDistance - rightDistance;
+    })[0];
+  }, [customers, selectedCustomerNode]);
+
   const selectedClosure = useMemo(() => {
     if (!selectedClosureId) return undefined;
     const found = closures.find((entry) => entry.id === selectedClosureId);
@@ -135,28 +186,138 @@ export function MapComponent({
     };
   }, [closureNodes, closures, selectedClosureId]);
 
-  const startNode = mstNodes.find((node) => node.id === connectStartId);
-  const endNode = mstNodes.find((node) => node.id === connectEndId);
-  const manualStart = parseCoordinatePair(manualStartLat, manualStartLng);
-  const manualEnd = parseCoordinatePair(manualEndLat, manualEndLng);
+  const nodeNameLookup = useMemo(() => {
+    const lookup = new globalThis.Map<string, string>();
+    nodes.forEach((node) => lookup.set(node.id, node.name));
+    return lookup;
+  }, [nodes]);
 
-  const resolvedStartPoint = manualStart ?? startNode?.location ?? null;
-  const resolvedEndPoint = manualEnd ?? endNode?.location ?? null;
   const resolvedTheme = resolveTheme(theme);
   const mapStyle = resolvedTheme === "dark" ? "mapbox://styles/mapbox/dark-v11" : "mapbox://styles/mapbox/light-v11";
 
-  const previewDistanceMeters = useMemo(() => {
-    if (!resolvedStartPoint || !resolvedEndPoint) return 0;
-    return Math.round(
-      length(
-        lineString([
-          [resolvedStartPoint.lng, resolvedStartPoint.lat],
-          [resolvedEndPoint.lng, resolvedEndPoint.lat],
-        ]),
-        { units: "kilometers" },
-      ) * 1000,
-    );
-  }, [resolvedEndPoint, resolvedStartPoint]);
+  const searchResults = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return [] as SearchResult[];
+
+    const results: SearchResult[] = [];
+    const coordinate = parseCoordinateSearch(query);
+    if (coordinate) {
+      results.push({
+        id: `coord-${coordinate.lat}-${coordinate.lng}`,
+        type: "coordinate",
+        title: `Coordinate ${coordinate.lat.toFixed(5)}, ${coordinate.lng.toFixed(5)}`,
+        subtitle: "Jump to typed coordinates",
+        location: coordinate,
+      });
+    }
+
+    nodes.forEach((node) => {
+      const haystack = `${node.name} ${node.id} ${node.type}`.toLowerCase();
+      if (!haystack.includes(query)) return;
+      const kind: SearchEntityType =
+        node.type === "mst" ? "mst" : node.type === "closure" ? "closure" : node.type === "customer" ? "customer-node" : "node";
+      results.push({
+        id: `node-${node.id}`,
+        type: kind,
+        title: node.name,
+        subtitle: `${node.type.toUpperCase()} | ${node.id}`,
+        location: node.location,
+        entityId: node.id,
+      });
+    });
+
+    cables.forEach((cable) => {
+      const fromName = nodeNameLookup.get(cable.fromNodeId) ?? cable.fromNodeId;
+      const toName = nodeNameLookup.get(cable.toNodeId) ?? cable.toNodeId;
+      const haystack = `${cable.name} ${cable.id} ${cable.coreCount}-core ${fromName} ${toName}`.toLowerCase();
+      if (!haystack.includes(query)) return;
+      const middle = cable.coordinates[Math.floor(cable.coordinates.length / 2)] ?? cable.coordinates[0];
+      if (!middle) return;
+      results.push({
+        id: `cable-${cable.id}`,
+        type: "fibre",
+        title: cable.name,
+        subtitle: `${cable.coreCount}-core | ${fromName} -> ${toName}`,
+        location: middle,
+        entityId: cable.id,
+      });
+    });
+
+    customers.forEach((customer) => {
+      const haystack = `${customer.name} ${customer.id} ${customer.email} ${customer.address}`.toLowerCase();
+      if (!haystack.includes(query)) return;
+      results.push({
+        id: `customer-${customer.id}`,
+        type: "customer",
+        title: customer.name,
+        subtitle: `CRM Customer | ${customer.id}`,
+        location: customer.location,
+        entityId: customer.id,
+      });
+    });
+
+    return results.slice(0, 10);
+  }, [cables, customers, nodeNameLookup, nodes, searchQuery]);
+
+  useEffect(() => {
+    const rawQuery = searchQuery.trim();
+    const coordinate = parseCoordinateSearch(rawQuery);
+    if (!rawQuery || rawQuery.length < 3 || coordinate || !mapToken) {
+      setPlaceResults([]);
+      setIsSearchingPlaces(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        setIsSearchingPlaces(true);
+        const endpoint = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(rawQuery)}.json?access_token=${encodeURIComponent(
+          mapToken,
+        )}&country=ng&types=place,locality,neighborhood,address,poi&limit=6`;
+        const response = await fetch(endpoint, { signal: controller.signal });
+        if (!response.ok) {
+          setPlaceResults([]);
+          return;
+        }
+
+        const payload = (await response.json()) as {
+          features?: Array<{
+            id: string;
+            place_name: string;
+            text?: string;
+            center?: [number, number];
+          }>;
+        };
+
+        const mapped: SearchResult[] = (payload.features ?? [])
+          .filter((feature) => Array.isArray(feature.center) && feature.center.length === 2)
+          .map((feature) => ({
+            id: `place-${feature.id}`,
+            type: "place",
+            title: feature.text ?? feature.place_name,
+            subtitle: feature.place_name,
+            location: { lat: feature.center?.[1] as number, lng: feature.center?.[0] as number },
+          }));
+        setPlaceResults(mapped);
+      } catch {
+        setPlaceResults([]);
+      } finally {
+        setIsSearchingPlaces(false);
+      }
+    }, 350);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
+  }, [searchQuery]);
+
+  const combinedSearchResults = useMemo(() => {
+    const merged = [...searchResults, ...placeResults];
+    const unique = merged.filter((result, index, list) => list.findIndex((entry) => entry.id === result.id) === index);
+    return unique.slice(0, 12);
+  }, [placeResults, searchResults]);
 
   const cableSource = useMemo(
     () => ({
@@ -185,95 +346,94 @@ export function MapComponent({
     [cables, highlightedCableId],
   );
 
-  const connectionPreview = useMemo(() => {
-    if (!resolvedStartPoint || !resolvedEndPoint) return null;
-    return {
-      type: "FeatureCollection",
-      features: [
-        {
-          type: "Feature",
-          properties: { id: "connection-preview" },
-          geometry: {
-            type: "LineString",
-            coordinates: [
-              [resolvedStartPoint.lng, resolvedStartPoint.lat],
-              [resolvedEndPoint.lng, resolvedEndPoint.lat],
-            ],
-          },
-        },
-      ],
-    };
-  }, [resolvedEndPoint, resolvedStartPoint]);
-
-  const addInfrastructure = (type: Exclude<AddMode, "none">, point: GeoPoint) => {
+  const addInfrastructure = (payload: { type: "mst" | "closure"; name: string; location: GeoPoint }) => {
     const node: NetworkNode = {
-      id: randomId(type),
+      id: randomId(payload.type),
       tenantId: "tenant-temp",
-      type,
-      name: `${type.toUpperCase()}-${Math.floor(Math.random() * 999)}`,
-      location: point,
+      type: payload.type,
+      name: payload.name,
+      location: payload.location,
       status: "healthy",
-      splitterType: type === "mst" ? "1/8" : undefined,
+      splitterType: payload.type === "mst" ? "1/8" : undefined,
       splitterPorts:
-        type === "mst"
+        payload.type === "mst"
           ? Array.from({ length: 8 }, (_, index) => ({
               port: index + 1,
               status: "free",
             }))
           : undefined,
-      clients: type === "mst" ? [] : undefined,
+      clients: payload.type === "mst" ? [] : undefined,
     };
     onInfrastructureAdded?.(node);
+    toast.success(`${payload.type.toUpperCase()} created at ${payload.location.lat.toFixed(5)}, ${payload.location.lng.toFixed(5)}.`);
+  };
+
+  const applySearchResult = (result: SearchResult) => {
+    const zoomTarget = result.type === "place" ? 12.8 : result.type === "coordinate" ? 14.5 : 15.2;
+    mapRef.current?.flyTo({
+      center: [result.location.lng, result.location.lat],
+      zoom: Math.max(zoomTarget, mapRef.current?.getZoom() ?? 0),
+      duration: 900,
+    });
+
+    if (result.type === "mst" && result.entityId) {
+      setSelectedMST(result.entityId);
+      setSelectedFiber(undefined);
+      setSelectedClosure(undefined);
+      setSelectedCustomerNode(undefined);
+      setModalType("mst-details");
+    } else if (result.type === "closure" && result.entityId) {
+      setSelectedClosure(result.entityId);
+      setSelectedMST(undefined);
+      setSelectedFiber(undefined);
+      setSelectedCustomerNode(undefined);
+      setModalType("closure-details");
+    } else if (result.type === "fibre" && result.entityId) {
+      setSelectedFiber(result.entityId);
+      setSelectedMST(undefined);
+      setSelectedClosure(undefined);
+      setSelectedCustomerNode(undefined);
+      setModalType("fiber-details");
+    } else if (result.type === "customer-node" && result.entityId) {
+      setSelectedCustomerNode(result.entityId);
+      setSelectedMST(undefined);
+      setSelectedFiber(undefined);
+      setSelectedClosure(undefined);
+      setModalType("customer-details");
+    } else if (result.type === "customer" && result.entityId) {
+      const mappedNode =
+        nodes.find((node) => node.type === "customer" && node.id === result.entityId) ??
+        nodes.find((node) => node.type === "customer" && node.name.toLowerCase().includes(result.title.toLowerCase()));
+      if (mappedNode) {
+        setSelectedCustomerNode(mappedNode.id);
+        setSelectedMST(undefined);
+        setSelectedFiber(undefined);
+        setSelectedClosure(undefined);
+        setModalType("customer-details");
+      }
+    } else {
+      setModalType(null);
+    }
+
+    setSearchQuery("");
+    setPlaceResults([]);
   };
 
   const handleMapClick = (event: MapMouseEvent) => {
-    const lineFeature = event.features?.find((feature) => feature.layer.id === "fibre-lines");
-    if (lineFeature?.id) {
-      const cableId = String(lineFeature.id);
-      setSelectedFiber(cableId);
+    const lineFeature = event.features?.find((feature) => {
+      if (feature.layer.id === "fibre-lines" || feature.layer.id === "fibre-labels" || feature.layer.id === "fault-glow") {
+        return true;
+      }
+      return false;
+    });
+    const cableIdFromFeature = lineFeature?.id ? String(lineFeature.id) : (lineFeature?.properties?.id as string | undefined);
+    if (cableIdFromFeature) {
+      setSelectedFiber(cableIdFromFeature);
       setSelectedMST(undefined);
       setSelectedClosure(undefined);
+      setSelectedCustomerNode(undefined);
       setModalType("fiber-details");
-      return;
     }
-
-    const point = { lat: event.lngLat.lat, lng: event.lngLat.lng };
-    if (addMode !== "none") {
-      addInfrastructure(addMode as Exclude<AddMode, "none">, point);
-      setAddMode("none");
-    }
-  };
-
-  const handleCreateConnection = () => {
-    if (!connectStartId || !connectEndId) {
-      toast.error("Select start and end MST before creating a fibre connection.");
-      return;
-    }
-    if (!resolvedStartPoint || !resolvedEndPoint) {
-      toast.error("Provide valid coordinates for both start and end points.");
-      return;
-    }
-    if (connectStartId === connectEndId) {
-      toast.error("Start and end MST cannot be the same.");
-      return;
-    }
-
-    const draft: MstConnectionDraft = {
-      startMstId: connectStartId,
-      endMstId: connectEndId,
-      start: resolvedStartPoint,
-      end: resolvedEndPoint,
-      coreCount,
-    };
-
-    onCreateMstConnection?.(draft);
-    onRouteDrafted?.({ start: draft.start, end: draft.end, distanceMeters: previewDistanceMeters });
-    toast.success(`${coreCount}-core link created between ${connectStartId} and ${connectEndId}.`);
-    setConnectMode(false);
-    setManualStartLat("");
-    setManualStartLng("");
-    setManualEndLat("");
-    setManualEndLng("");
   };
 
   if (!mapToken) {
@@ -288,6 +448,7 @@ export function MapComponent({
   return (
     <div className={cn("relative h-[calc(100vh-11rem)] overflow-hidden rounded-2xl border border-border/60", className)}>
       <Map
+        ref={mapRef}
         initialViewState={defaultView}
         mapboxAccessToken={mapToken}
         mapStyle={mapStyle}
@@ -359,20 +520,6 @@ export function MapComponent({
           />
         </Source>
 
-        {connectionPreview ? (
-          <Source id="connection-preview" type="geojson" data={connectionPreview as GeoJSON.FeatureCollection}>
-            <Layer
-              id="connection-preview-line"
-              type="line"
-              paint={{
-                "line-color": "#F59E0B",
-                "line-width": 4,
-                "line-dasharray": [2, 1],
-              }}
-            />
-          </Source>
-        ) : null}
-
         {nodes.map((node) => {
           const usedPorts = node.splitterPorts?.filter((port) => port.status === "used").length ?? 0;
           const totalPorts = node.splitterPorts?.length ?? 0;
@@ -395,21 +542,11 @@ export function MapComponent({
                 )}
                 onClick={(event) => {
                   event.stopPropagation();
-                  if (node.type === "mst" && connectMode) {
-                    if (!connectStartId) {
-                      setConnectStartId(node.id);
-                    } else if (!connectEndId && connectStartId !== node.id) {
-                      setConnectEndId(node.id);
-                    } else {
-                      setConnectStartId(node.id);
-                      setConnectEndId("");
-                    }
-                    return;
-                  }
                   if (node.type === "mst") {
                     setSelectedMST(node.id);
                     setSelectedFiber(undefined);
                     setSelectedClosure(undefined);
+                    setSelectedCustomerNode(undefined);
                     setModalType("mst-details");
                     return;
                   }
@@ -417,7 +554,16 @@ export function MapComponent({
                     setSelectedClosure(node.id);
                     setSelectedMST(undefined);
                     setSelectedFiber(undefined);
+                    setSelectedCustomerNode(undefined);
                     setModalType("closure-details");
+                    return;
+                  }
+                  if (node.type === "customer") {
+                    setSelectedCustomerNode(node.id);
+                    setSelectedMST(undefined);
+                    setSelectedFiber(undefined);
+                    setSelectedClosure(undefined);
+                    setModalType("customer-details");
                   }
                 }}
               >
@@ -428,89 +574,92 @@ export function MapComponent({
         })}
 
         {hoveredCable ? (
-          <Popup
-            closeButton={false}
-            closeOnClick={false}
-            longitude={hoveredCable.point.lng}
-            latitude={hoveredCable.point.lat}
-            anchor="top"
-          >
+          <Popup closeButton={false} closeOnClick={false} longitude={hoveredCable.point.lng} latitude={hoveredCable.point.lat} anchor="top">
             <p className="text-xs">
               {hoveredCable.cable.coreCount}-core | {hoveredCable.cable.cores.filter((core) => core.status === "used").length} used |{" "}
-              {Math.max(
-                hoveredCable.cable.coreCount - hoveredCable.cable.cores.filter((core) => core.status === "used").length,
-                0,
-              )}{" "}
-              free
+              {Math.max(hoveredCable.cable.coreCount - hoveredCable.cable.cores.filter((core) => core.status === "used").length, 0)} free
             </p>
           </Popup>
         ) : null}
       </Map>
 
-      <div className="pointer-events-none absolute left-3 top-3 z-10 flex max-w-[min(95vw,880px)] flex-wrap gap-2">
-        <div className="pointer-events-auto rounded-xl border border-gray-200 bg-white/95 p-2 shadow-soft backdrop-blur dark:border-border/70 dark:bg-card/90">
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            <MapPinPlusInside className="h-3.5 w-3.5" />
-            Add Infrastructure
+      <div className="pointer-events-none absolute right-3 top-3 z-20 w-[min(95vw,380px)]">
+        <div className="pointer-events-auto rounded-2xl border border-border/70 bg-card/95 p-2 shadow-soft backdrop-blur">
+          <div className="flex items-center gap-2">
+            <Search className="h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && combinedSearchResults.length > 0) {
+                  event.preventDefault();
+                  applySearchResult(combinedSearchResults[0]);
+                }
+              }}
+              placeholder="Search MST, closure, fibre, customer, place, or lat,lng"
+              className="h-9"
+            />
           </div>
-          <div className="flex gap-1">
-            {(["olt", "mst", "pole", "closure"] as const).map((type) => (
-              <Button
-                key={type}
-                size="sm"
-                variant={addMode === type ? "default" : "outline"}
-                onClick={() => setAddMode((current) => (current === type ? "none" : type))}
-              >
-                {type.toUpperCase()}
-              </Button>
-            ))}
-          </div>
-        </div>
 
-        <div className="pointer-events-auto rounded-xl border border-gray-200 bg-white/95 p-2 text-xs shadow-soft backdrop-blur dark:border-border/70 dark:bg-card/90">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="flex items-center gap-1 uppercase tracking-[0.18em] text-muted-foreground">
-              <Link2 className="h-3.5 w-3.5" />
-              MST Connection
-            </p>
-            <Button size="sm" variant={connectMode ? "default" : "outline"} onClick={() => setConnectMode((current) => !current)}>
-              {connectMode ? "Connecting..." : "Connect MST"}
+          {searchQuery.trim().length > 0 ? (
+            <div className="mt-2 max-h-56 space-y-1 overflow-y-auto rounded-xl border border-border/70 bg-background/70 p-1.5">
+              {combinedSearchResults.length > 0 ? (
+                combinedSearchResults.map((result) => (
+                  <button
+                    key={result.id}
+                    type="button"
+                    className="w-full rounded-lg px-2 py-1.5 text-left transition hover:bg-muted/50"
+                    onClick={() => applySearchResult(result)}
+                  >
+                    <p className="text-xs font-medium">{result.title}</p>
+                    <p className="text-[11px] text-muted-foreground">{result.subtitle}</p>
+                  </button>
+                ))
+              ) : isSearchingPlaces ? (
+                <p className="px-2 py-1.5 text-xs text-muted-foreground">Searching locations...</p>
+              ) : (
+                <p className="px-2 py-1.5 text-xs text-muted-foreground">No result found.</p>
+              )}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="pointer-events-none absolute left-3 top-3 z-10 grid w-[min(95vw,460px)] gap-2">
+        <div className="pointer-events-auto overflow-hidden rounded-2xl border border-border/70 bg-card/92 shadow-soft backdrop-blur">
+          <div className="flex items-center justify-between border-b border-border/60 bg-muted/25 px-3 py-2">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              <MapPinPlusInside className="h-3.5 w-3.5" />
+              Coordinate Mapping Controls
+            </div>
+            <Button type="button" variant="outline" size="icon" className="h-7 w-7" onClick={() => setControlsOpen((current) => !current)}>
+              <Menu className="h-3.5 w-3.5" />
             </Button>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Select value={connectStartId} onChange={(event) => setConnectStartId(event.target.value)}>
-              <option value="">Start MST</option>
-              {mstNodes.map((mst) => (
-                <option key={mst.id} value={mst.id}>
-                  {mst.name}
-                </option>
-              ))}
-            </Select>
-            <Select value={connectEndId} onChange={(event) => setConnectEndId(event.target.value)}>
-              <option value="">End MST</option>
-              {mstNodes.map((mst) => (
-                <option key={mst.id} value={mst.id}>
-                  {mst.name}
-                </option>
-              ))}
-            </Select>
-            <Input value={manualStartLat} onChange={(event) => setManualStartLat(event.target.value)} placeholder="Start lat (optional)" />
-            <Input value={manualStartLng} onChange={(event) => setManualStartLng(event.target.value)} placeholder="Start lng (optional)" />
-            <Input value={manualEndLat} onChange={(event) => setManualEndLat(event.target.value)} placeholder="End lat (optional)" />
-            <Input value={manualEndLng} onChange={(event) => setManualEndLng(event.target.value)} placeholder="End lng (optional)" />
-            <Select value={String(coreCount)} onChange={(event) => setCoreCount(Number(event.target.value) as CoreCount)}>
-              {fibreCountOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}-core
-                </option>
-              ))}
-            </Select>
-            <Button onClick={handleCreateConnection}>Create Polyline</Button>
-          </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">
-            {previewDistanceMeters > 0 ? `Preview distance: ${previewDistanceMeters}m` : "Pick start/end MST or enter coordinates."}
-          </p>
+          {controlsOpen ? (
+            <div className="grid gap-3 p-3">
+              <div className="rounded-xl border border-border/70 bg-background/70 p-2">
+                <AddNodeForm
+                  onSubmit={(payload) => {
+                    addInfrastructure(payload);
+                  }}
+                />
+              </div>
+              <div className="rounded-xl border border-border/70 bg-background/70 p-2">
+                <AddFiberForm
+                  mstNodes={mstNodes}
+                  onSubmit={(payload) => {
+                    if (!onCreateFiber) {
+                      toast.error("Fibre creation handler is not configured.");
+                      return;
+                    }
+                    onCreateFiber(payload);
+                  }}
+                />
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -535,10 +684,19 @@ export function MapComponent({
         cables={cables}
         customers={customers}
         onAssignClient={onAssignClient ?? (() => undefined)}
+        onRemoveClient={onRemoveClient}
+        onChangeSplitterType={onChangeSplitterType}
+        onDeleteMst={(payload) => {
+          onDeleteMst?.(payload);
+          setModalType(null);
+          setSelectedMST(undefined);
+          setSelectedCustomerNode(undefined);
+        }}
         onOpenChange={(open) => {
           if (!open) {
             setModalType(null);
             setSelectedMST(undefined);
+            setSelectedCustomerNode(undefined);
           }
         }}
       />
@@ -548,10 +706,18 @@ export function MapComponent({
         cable={selectedCable}
         nodes={nodes}
         onAssignCore={onAssignCore}
+        onSetCoreState={onSetCoreState}
+        onDeleteCable={(payload) => {
+          onDeleteCable?.(payload);
+          setModalType(null);
+          setSelectedFiber(undefined);
+          setSelectedCustomerNode(undefined);
+        }}
         onOpenChange={(open) => {
           if (!open) {
             setModalType(null);
             setSelectedFiber(undefined);
+            setSelectedCustomerNode(undefined);
           }
         }}
       />
@@ -562,10 +728,31 @@ export function MapComponent({
         cables={cables}
         onSave={onSaveSplice ?? (() => undefined)}
         onDelete={onDeleteSplice}
+        onDeleteClosure={(payload) => {
+          onDeleteClosure?.(payload);
+          setModalType(null);
+          setSelectedClosure(undefined);
+          setSelectedCustomerNode(undefined);
+        }}
         onOpenChange={(open) => {
           if (!open) {
             setModalType(null);
             setSelectedClosure(undefined);
+            setSelectedCustomerNode(undefined);
+          }
+        }}
+      />
+
+      <ClientDropDetailsDrawer
+        open={modalType === "customer-details"}
+        node={selectedCustomerNode}
+        customer={selectedCustomer}
+        cables={cables}
+        onReleaseConnection={(payload) => onRemoveClient?.(payload)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setModalType(null);
+            setSelectedCustomerNode(undefined);
           }
         }}
       />

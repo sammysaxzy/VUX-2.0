@@ -148,6 +148,10 @@ export function RadiusPage() {
     () => (zonesQuery.data ?? []).find((zone) => zone.id === newUser.zoneId),
     [newUser.zoneId, zonesQuery.data],
   );
+  const selectedNasEntry = useMemo(
+    () => (nasQuery.data ?? []).find((entry) => entry.id === selectedZone?.nasId),
+    [nasQuery.data, selectedZone?.nasId],
+  );
   const minDateTime = useMemo(() => toDateTimeLocalValue(new Date(now + 60_000).toISOString()), [now]);
   const hasValidExpirationDate =
     Boolean(newUser.expirationDate) && new Date(newUser.expirationDate).getTime() > now;
@@ -237,9 +241,11 @@ export function RadiusPage() {
               onClick={() => void handleExportSessions()}
             />
           )}
-          <Button type="button" onClick={() => setCreateOpen(true)}>
-            Create PPPoE
-          </Button>
+          {activeTab === "sessions" ? (
+            <Button type="button" onClick={() => setCreateOpen(true)}>
+              Create PPPoE
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -382,7 +388,12 @@ export function RadiusPage() {
             </div>
             <div className="space-y-1">
               <Label htmlFor="radius-nas-readonly">NAS</Label>
-              <Input id="radius-nas-readonly" value={selectedZone?.nasName ?? ""} readOnly placeholder="Determined by zone" />
+              <Input
+                id="radius-nas-readonly"
+                value={selectedNasEntry?.name ?? selectedZone?.nasName ?? ""}
+                readOnly
+                placeholder="Determined by zone"
+              />
             </div>
           </div>
 
@@ -453,7 +464,7 @@ export function RadiusPage() {
             <Button
               type="button"
               onClick={handleCreateUser}
-              disabled={createUserMutation.isPending}
+              disabled={createUserMutation.isPending || !canCreateUser}
             >
               {createUserMutation.isPending ? "Creating..." : "Create PPPoE"}
             </Button>

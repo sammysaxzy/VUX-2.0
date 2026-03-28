@@ -474,6 +474,7 @@ export function addMockRadiusUser(payload: {
   if (!zone) {
     throw new Error("Zone not found");
   }
+  const nas = mockNasEntries.find((entry) => entry.id === zone.nasId);
   const newUser: RadiusUser = {
     username: payload.username,
     status: "inactive",
@@ -482,7 +483,7 @@ export function addMockRadiusUser(payload: {
     zoneId: zone.id,
     zone: zone.name,
     nasId: zone.nasId,
-    nas: zone.nasName,
+    nas: nas?.name ?? zone.nasName,
     expirationDate: payload.expirationDate,
     staticIp: payload.staticIp,
     priority: payload.priority,
@@ -739,7 +740,7 @@ export function createMockMstConnection(payload: {
   const startNode = mockNodes.find((node) => node.id === payload.startMstId);
   const endNode = mockNodes.find((node) => node.id === payload.endMstId);
   if (!startNode || !endNode) {
-    throw new Error("Selected MST nodes were not found.");
+    throw new Error("Selected network nodes were not found.");
   }
   const cable: FibreCable = {
     id: randomId("cab"),
@@ -1018,4 +1019,73 @@ export function deleteMockCable(payload: { cableId: string }) {
   });
 
   return removed;
+}
+
+
+export function deleteMockClosure(payload: { closureId: string }) {
+  const closureIndex = mockClosures.findIndex((entry) => entry.id === payload.closureId);
+  if (closureIndex < 0) throw new Error("Closure not found.");
+
+  const removedClosure = mockClosures.splice(closureIndex, 1)[0];
+  const closureNodeIndex = mockNodes.findIndex((node) => node.type === "closure" && node.id === payload.closureId);
+  if (closureNodeIndex >= 0) {
+    mockNodes.splice(closureNodeIndex, 1);
+  }
+
+  return removedClosure;
+}
+
+export function deleteMockNode(payload: { nodeId: string }) {
+  const nodeIndex = mockNodes.findIndex((entry) => entry.id === payload.nodeId);
+  if (nodeIndex < 0) throw new Error("Node not found.");
+
+  const removedNode = mockNodes[nodeIndex];
+  const removedCableIds = new Set<string>();
+
+  if (removedNode.type === "mst") {
+    const affectedClientIds = new Set<string>();
+    (removedNode.splitterPorts ?? []).forEach((port) => {
+      if (port.customerId) affectedClientIds.add(port.customerId);
+    });
+    (removedNode.clients ?? []).forEach((client) => affectedClientIds.add(client.id));
+
+    affectedClientIds.forEach((clientId) => {
+      releaseCustomerCoreAssignments(clientId);
+      syncCustomerAssignment({ customerId: clientId });
+    });
+
+    for (let index = mockCables.length - 1; index >= 0; index -= 1) {
+      const cable = mockCables[index];
+      if (cable.fromNodeId !== removedNode.id && cable.toNodeId !== removedNode.id) continue;
+
+      removedCableIds.add(cable.id);
+      cable.cores
+        .map((core) => core.assignedToCustomerId)
+        .filter(Boolean)
+        .forEach((customerId) => syncCustomerAssignment({ customerId: customerId as string }));
+      mockCables.splice(index, 1);
+    }
+
+    if (removedCableIds.size > 0) {
+      mockClosures.forEach((closure) => {
+        closure.connectedCableIds = closure.connectedCableIds.filter((id) => !removedCableIds.has(id));
+        closure.splices = closure.splices.filter(
+          (splice) => !removedCableIds.has(splice.fromCableId) && !removedCableIds.has(splice.toCableId),
+        );
+      });
+    }
+  }
+
+  if (removedNode.type === "closure") {
+    const closureIndex = mockClosures.findIndex((entry) => entry.id === removedNode.id);
+    if (closureIndex >= 0) {
+      mockClosures.splice(closureIndex, 1);
+    }
+  }
+
+  mockNodes.splice(nodeIndex, 1);
+  return {
+    node: removedNode,
+    removedCableIds: Array.from(removedCableIds),
+  };
 }

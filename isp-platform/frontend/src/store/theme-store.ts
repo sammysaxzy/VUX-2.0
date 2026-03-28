@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
+import { createJSONStorage, persist, type PersistOptions, type PersistStorage } from "zustand/middleware";
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -11,10 +11,10 @@ type ThemeState = {
   toggleTheme: () => void;
 };
 
-const storage: StateStorage | undefined =
+const storage: PersistStorage<ThemeState> | undefined =
   typeof window === "undefined" ? undefined : createJSONStorage(() => localStorage);
 
-const persistOptions = {
+const persistOptions: PersistOptions<ThemeState> = {
   name: "isp-theme",
   ...(storage ? { storage } : {}),
 };

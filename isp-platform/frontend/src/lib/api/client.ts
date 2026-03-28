@@ -35,6 +35,8 @@ import {
   deleteMockCable,
   disconnectMockRadiusSession,
   extendMockRadiusUser,
+  deleteMockClosure,
+  deleteMockNode,
   mockActivities,
   mockAlerts,
   mockBranding,
@@ -352,6 +354,28 @@ export const apiClient = {
       return deleteMockCable(payload);
     }
     const { data } = await api.delete(`/network/fibre/${payload.cableId}`, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async deleteNetworkNode(payload: { nodeId: string }, tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return deleteMockNode(payload);
+    }
+    const { data } = await api.delete(`/network/nodes/${payload.nodeId}`, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async deleteClosure(payload: { closureId: string }, tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return deleteMockClosure(payload);
+    }
+    const { data } = await api.delete(`/network/closures/${payload.closureId}`, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;
@@ -771,3 +795,5 @@ export const apiClient = {
     return data;
   },
 };
+
+
