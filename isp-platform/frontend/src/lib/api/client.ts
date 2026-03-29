@@ -22,6 +22,7 @@ import type {
 } from "@/types";
 import {
   addMockNasEntry,
+  addMockPrivilegeAccount,
   addMockFault,
   addMockRadiusUser,
   addMockServicePlan,
@@ -33,10 +34,16 @@ import {
   buildKpis,
   createMockMstConnection,
   deleteMockCable,
+  deleteMockClosure,
+  deleteMockNasEntries,
+  deleteMockNode,
+  deleteMockPermissionRoles,
+  deleteMockRadiusUsers,
+  deleteMockServicePlans,
+  deleteMockSettingsLogs,
+  deleteMockZones,
   disconnectMockRadiusSession,
   extendMockRadiusUser,
-  deleteMockClosure,
-  deleteMockNode,
   mockActivities,
   mockAlerts,
   mockBranding,
@@ -58,6 +65,7 @@ import {
   removeMockClosureSplice,
   setMockCableCoreState,
   syncMockRadiusUser,
+  updateMockPermissionRole,
   updateMockNasEntry,
   updateMockMstSplitterType,
   upsertMockClosureSplice,
@@ -591,6 +599,18 @@ export const apiClient = {
     return data;
   },
 
+  async deleteRadiusUsers(usernames: string[], tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(170);
+      return { deleted: deleteMockRadiusUsers(usernames) };
+    }
+    const { data } = await api.delete("/radius/users", {
+      data: { usernames },
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
   async reconnectRadiusSession(username: string, tenantId: string, token?: string): Promise<RadiusSession> {
     if (USE_MOCKS) {
       await sleep(150);
@@ -666,6 +686,18 @@ export const apiClient = {
     return data;
   },
 
+  async deleteServicePlans(names: string[], tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(170);
+      return { deleted: deleteMockServicePlans(names) };
+    }
+    const { data } = await api.delete("/settings/services", {
+      data: { names },
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
   async getNasEntries(tenantId: string, token?: string): Promise<NasEntry[]> {
     if (USE_MOCKS) {
       await sleep(180);
@@ -699,6 +731,18 @@ export const apiClient = {
     return data;
   },
 
+  async deleteNasEntries(ids: string[], tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(170);
+      return { deleted: deleteMockNasEntries(ids) };
+    }
+    const { data } = await api.delete("/settings/nas", {
+      data: { ids },
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
   async getZones(tenantId: string, token?: string): Promise<Zone[]> {
     if (USE_MOCKS) {
       await sleep(180);
@@ -721,6 +765,18 @@ export const apiClient = {
     return data;
   },
 
+  async deleteZones(ids: string[], tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(170);
+      return { deleted: deleteMockZones(ids) };
+    }
+    const { data } = await api.delete("/settings/zones", {
+      data: { ids },
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
   async getPermissionRoles(tenantId: string, token?: string): Promise<PermissionRole[]> {
     if (USE_MOCKS) {
       await sleep(160);
@@ -732,12 +788,67 @@ export const apiClient = {
     return data;
   },
 
+  async deletePermissionRoles(ids: string[], tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return { deleted: deleteMockPermissionRoles(ids) };
+    }
+    const { data } = await api.delete("/settings/permissions", {
+      data: { ids },
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async updatePermissionRole(
+    id: string,
+    payload: { privilegeModel?: "Role Based" | "Approval Based" | "Hybrid"; description?: string },
+    tenantId: string,
+    token?: string,
+  ): Promise<PermissionRole> {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return updateMockPermissionRole(id, payload);
+    }
+    const { data } = await api.patch<PermissionRole>(`/settings/permissions/${encodeURIComponent(id)}`, payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async createPrivilegeAccount(
+    payload: { fullName: string; email: string; roleId: string },
+    tenantId: string,
+    token?: string,
+  ) {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return addMockPrivilegeAccount(payload);
+    }
+    const { data } = await api.post("/settings/permissions/accounts", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
   async getSettingsLogs(tenantId: string, token?: string): Promise<SettingsLog[]> {
     if (USE_MOCKS) {
       await sleep(160);
       return mockSettingsLogs;
     }
     const { data } = await api.get<SettingsLog[]>("/settings/logs", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async deleteSettingsLogs(ids: string[], tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return { deleted: deleteMockSettingsLogs(ids) };
+    }
+    const { data } = await api.delete("/settings/logs", {
+      data: { ids },
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;

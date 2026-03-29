@@ -185,6 +185,8 @@ export type RadiusTab = "sessions" | "users";
 
 export type SettingsTab = "nas" | "zones" | "permissions" | "services" | "logs" | "configuration";
 
+export type PrivilegeModel = "Role Based" | "Approval Based" | "Hybrid";
+
 export interface NasEntry {
   id: string;
   name: string;
@@ -207,6 +209,15 @@ export interface PermissionRole {
   scope: string;
   description: string;
   memberCount: number;
+  privilegeModel?: PrivilegeModel;
+  accounts?: PrivilegeAccount[];
+}
+
+export interface PrivilegeAccount {
+  id: string;
+  fullName: string;
+  email: string;
+  roleId: string;
 }
 
 export interface SettingsLog {
