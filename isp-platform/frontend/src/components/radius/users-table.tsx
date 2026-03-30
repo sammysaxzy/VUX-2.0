@@ -9,6 +9,9 @@ import { formatDateOnly, isRadiusUserExpired, isRadiusUserExpiringSoon } from "@
 
 type Props = {
   users: RadiusUser[];
+  selectedUsernames: string[];
+  onToggleSelect: (username: string) => void;
+  onToggleSelectAll: () => void;
   onActivate: (username: string) => void;
   onSync: (username: string) => void;
   onExtend: (username: string) => void;
@@ -18,7 +21,21 @@ type Props = {
   now?: number;
 };
 
-export function UsersTable({ users, onActivate, onSync, onExtend, busyActivate, busySync, busyExtend, now = Date.now() }: Props) {
+export function UsersTable({
+  users,
+  selectedUsernames,
+  onToggleSelect,
+  onToggleSelectAll,
+  onActivate,
+  onSync,
+  onExtend,
+  busyActivate,
+  busySync,
+  busyExtend,
+  now = Date.now(),
+}: Props) {
+  const allSelected = users.length > 0 && users.every((user) => selectedUsernames.includes(user.username));
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -29,6 +46,9 @@ export function UsersTable({ users, onActivate, onSync, onExtend, busyActivate, 
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <input type="checkbox" checked={allSelected} onChange={onToggleSelectAll} aria-label="Select all users" />
+              </TableHead>
               <TableHead>Username</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Expiration Date</TableHead>
@@ -45,6 +65,14 @@ export function UsersTable({ users, onActivate, onSync, onExtend, busyActivate, 
               const disabled = user.status === "active" || !user.exists || isExpired;
               return (
                 <TableRow key={user.username}>
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      checked={selectedUsernames.includes(user.username)}
+                      onChange={() => onToggleSelect(user.username)}
+                      aria-label={`Select ${user.username}`}
+                    />
+                  </TableCell>
                   <TableCell>{user.username}</TableCell>
                   <TableCell>
                     <Badge variant={isExpired ? "danger" : isExpiringSoon ? "warning" : "success"}>

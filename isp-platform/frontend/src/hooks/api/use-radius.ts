@@ -81,6 +81,21 @@ export function useCreateRadiusUser() {
   });
 }
 
+export function useDeleteRadiusUsers() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (usernames: string[]) => apiClient.deleteRadiusUsers(usernames, tenantId, token),
+    onSuccess: (_, usernames) => {
+      toast.success(`${usernames.length} PPPoE user${usernames.length === 1 ? "" : "s"} deleted.`);
+      queryClient.invalidateQueries({ queryKey: ["radius-users", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["radius-sessions", tenantId] });
+    },
+    onError: () => toast.error("Unable to delete PPPoE users."),
+  });
+}
+
 export function useBulkImportRadiusUsers() {
   const tenantId = useTenantId();
   const token = useAppStore((state) => state.token);
