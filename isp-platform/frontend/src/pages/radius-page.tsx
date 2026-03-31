@@ -7,6 +7,7 @@ import {
   useActivateRadiusUser,
   useBulkImportRadiusUsers,
   useCreateRadiusUser,
+  useDeleteRadiusUsers,
   useDisconnectSession,
   useExtendRadiusUser,
   useExportRadiusSessions,
@@ -67,6 +68,8 @@ export function RadiusPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [extendModal, setExtendModal] = useState<{ username: string; expirationDate: string } | null>(null);
+  const [selectedUsernames, setSelectedUsernames] = useState<string[]>([]);
+  const [deleteUsersOpen, setDeleteUsersOpen] = useState(false);
   const [newUser, setNewUser] = useState<RadiusUserForm>(baseForm);
   const [now, setNow] = useState(() => Date.now());
 
@@ -75,6 +78,7 @@ export function RadiusPage() {
   const reconnectMutation = useReconnectSession();
   const extendUserMutation = useExtendRadiusUser();
   const usersQuery = useRadiusUsers();
+  const deleteUsersMutation = useDeleteRadiusUsers();
   const servicesQuery = useServicePlans();
   const zonesQuery = useZones();
   const nasQuery = useNasEntries();
@@ -107,6 +111,7 @@ export function RadiusPage() {
   }, [search, usersQuery.data]);
   const validNasIds = useMemo(() => (nasQuery.data ?? []).map((entry) => entry.id), [nasQuery.data]);
   const existingUsernames = useMemo(() => (usersQuery.data ?? []).map((user) => user.username), [usersQuery.data]);
+  const visibleUsernames = useMemo(() => filteredUsers.map((user) => user.username), [filteredUsers]);
 
   useEffect(() => {
     if (!serviceOptions.length) return;
@@ -143,6 +148,11 @@ export function RadiusPage() {
     setCreateOpen(false);
     createUserMutation.reset();
   }, [availablePlans, createUserMutation, serviceOptions, zonesQuery.data]);
+
+  useEffect(() => {
+    const availableUsernames = new Set((usersQuery.data ?? []).map((user) => user.username));
+    setSelectedUsernames((current) => current.filter((username) => availableUsernames.has(username)));
+  }, [usersQuery.data]);
 
   const selectedZone = useMemo(
     () => (zonesQuery.data ?? []).find((zone) => zone.id === newUser.zoneId),
@@ -211,6 +221,32 @@ export function RadiusPage() {
     downloadBlob("radius-sessions-export.csv", normalized);
   };
 
+  const toggleUserSelection = (username: string) => {
+    setSelectedUsernames((current) =>
+      current.includes(username) ? current.filter((entry) => entry !== username) : [...current, username],
+    );
+  };
+
+  const toggleAllVisibleUsers = () => {
+    setSelectedUsernames((current) => {
+      const allVisibleSelected = visibleUsernames.length > 0 && visibleUsernames.every((username) => current.includes(username));
+      if (allVisibleSelected) {
+        return current.filter((username) => !visibleUsernames.includes(username));
+      }
+      return [...new Set([...current, ...visibleUsernames])];
+    });
+  };
+
+  const confirmDeleteUsers = () => {
+    if (selectedUsernames.length === 0) return;
+    deleteUsersMutation.mutate(selectedUsernames, {
+      onSuccess: () => {
+        setSelectedUsernames([]);
+        setDeleteUsersOpen(false);
+      },
+    });
+  };
+
   return (
     <div className="space-y-4 animate-fade-up">
       <div>
@@ -229,6 +265,9 @@ export function RadiusPage() {
           ) : null}
           {activeTab === "users" ? (
             <>
+              <Button type="button" variant="danger" disabled={selectedUsernames.length === 0} onClick={() => setDeleteUsersOpen(true)}>
+                Delete
+              </Button>
               <Button type="button" variant="outline" onClick={() => setImportOpen(true)}>
                 Import
               </Button>
@@ -271,6 +310,9 @@ export function RadiusPage() {
             <div className="space-y-4">
               <UsersTable
                 users={filteredUsers}
+                selectedUsernames={selectedUsernames}
+                onToggleSelect={toggleUserSelection}
+                onToggleSelectAll={toggleAllVisibleUsers}
                 onActivate={(username) => activateUserMutation.mutate(username)}
                 onSync={(username) => syncUserMutation.mutate(username)}
                 onExtend={(username) => {
@@ -308,6 +350,22 @@ export function RadiusPage() {
         importing={bulkImportMutation.isPending}
         onConfirmImport={(payload) => bulkImportMutation.mutateAsync(payload).then(() => undefined)}
       />
+
+      <Dialog
+        open={deleteUsersOpen}
+        title="Delete PPPoE Users"
+        description={`Are you sure you want to delete ${selectedUsernames.length} selected item${selectedUsernames.length === 1 ? "" : "s"}?`}
+        onOpenChange={setDeleteUsersOpen}
+      >
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={() => setDeleteUsersOpen(false)}>
+            Cancel
+          </Button>
+          <Button type="button" variant="danger" disabled={deleteUsersMutation.isPending} onClick={confirmDeleteUsers}>
+            {deleteUsersMutation.isPending ? "Deleting..." : "Confirm Delete"}
+          </Button>
+        </div>
+      </Dialog>
 
       <Dialog
         open={createOpen}

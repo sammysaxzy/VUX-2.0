@@ -11,6 +11,8 @@ import type {
   NasEntry,
   NetworkNode,
   PermissionRole,
+  PrivilegeAccount,
+  PrivilegeModel,
   RadiusBulkImportResult,
   RadiusSession,
   RadiusUser,
@@ -349,7 +351,7 @@ export const mockFaults: Fault[] = [
   },
 ];
 
-export const mockSessions: RadiusSession[] = [
+export let mockSessions: RadiusSession[] = [
   {
     id: "sess-1",
     customerId: "cust-1001",
@@ -382,13 +384,13 @@ export const mockSessions: RadiusSession[] = [
   },
 ];
 
-export const mockServicePlans: ServicePlan[] = [
+export let mockServicePlans: ServicePlan[] = [
   { name: "Core 10/10", speed: "10M/10M", price: "₦8,500", rateLimit: "10M/10M", description: "Residential onboarding plan" },
   { name: "Core 20/20", speed: "20M/20M", price: "₦12,500", rateLimit: "20M/20M", description: "Business starter tier" },
   { name: "Core 50/50", speed: "50M/50M", price: "₦18,900", rateLimit: "50M/50M", description: "Enterprise burst-ready" },
 ];
 
-export const mockRadiusUsers: RadiusUser[] = [
+export let mockRadiusUsers: RadiusUser[] = [
   {
     username: "adebayo_hub",
     status: "active",
@@ -443,13 +445,46 @@ export let mockZones: Zone[] = [
   { id: "zone-2", name: "Ajah Access", nasId: "nas-2", nasName: "MikroTik BRAS 02", description: "Residential PPPoE subscribers on Ajah ring", usersCount: 56 },
 ];
 
-export const mockPermissionRoles: PermissionRole[] = [
-  { id: "role-1", name: "Super Admin", scope: "global", description: "Full OSS/BSS control across tenants and infrastructure", memberCount: 2 },
-  { id: "role-2", name: "NOC Engineer", scope: "radius", description: "Manages PPPoE sessions, users, and operational troubleshooting", memberCount: 6 },
-  { id: "role-3", name: "Field Engineer", scope: "network", description: "Access to sync workflows and physical access diagnostics only", memberCount: 11 },
+export let mockPermissionRoles: PermissionRole[] = [
+  {
+    id: "role-1",
+    name: "Super Admin",
+    scope: "global",
+    description: "Full OSS/BSS control across tenants and infrastructure",
+    memberCount: 2,
+    privilegeModel: "Hybrid",
+    accounts: [
+      { id: "pa-1", fullName: "NOC Superintendent", email: "noc.superintendent@westlink.io", roleId: "role-1" },
+      { id: "pa-2", fullName: "Platform Director", email: "platform.director@westlink.io", roleId: "role-1" },
+    ],
+  },
+  {
+    id: "role-2",
+    name: "NOC Engineer",
+    scope: "radius",
+    description: "Manages PPPoE sessions, users, and operational troubleshooting",
+    memberCount: 2,
+    privilegeModel: "Role Based",
+    accounts: [
+      { id: "pa-3", fullName: "Aisha Bello", email: "aisha.bello@westlink.io", roleId: "role-2" },
+      { id: "pa-4", fullName: "Tunde James", email: "tunde.james@westlink.io", roleId: "role-2" },
+    ],
+  },
+  {
+    id: "role-3",
+    name: "Field Engineer",
+    scope: "network",
+    description: "Access to sync workflows and physical access diagnostics only",
+    memberCount: 2,
+    privilegeModel: "Approval Based",
+    accounts: [
+      { id: "pa-5", fullName: "Sade Okon", email: "sade.okon@westlink.io", roleId: "role-3" },
+      { id: "pa-6", fullName: "Emeka Obi", email: "emeka.obi@westlink.io", roleId: "role-3" },
+    ],
+  },
 ];
 
-export const mockSettingsLogs: SettingsLog[] = [
+export let mockSettingsLogs: SettingsLog[] = [
   { id: "log-1", type: "authentication", actor: "radius-engine", description: "PPPoE authentication accepted for adebayo_hub", createdAt: new Date(now - 1000 * 60 * 8).toISOString() },
   { id: "log-2", type: "disconnect", actor: "noc@westlink.io", description: "Manual disconnect sent to marina_it from NOC console", createdAt: new Date(now - 1000 * 60 * 22).toISOString() },
   { id: "log-3", type: "sync", actor: "field@westlink.io", description: "PPPoE account sync completed for korede_res on MikroTik BRAS 01", createdAt: new Date(now - 1000 * 60 * 41).toISOString() },
@@ -673,6 +708,13 @@ export function updateMockNasEntry(id: string, payload: Omit<NasEntry, "id">) {
   return mockNasEntries.find((item) => item.id === id);
 }
 
+export function deleteMockNasEntries(ids: string[]) {
+  const idSet = new Set(ids);
+  const deleted = mockNasEntries.filter((entry) => idSet.has(entry.id)).length;
+  mockNasEntries = mockNasEntries.filter((entry) => !idSet.has(entry.id));
+  return deleted;
+}
+
 export function addMockZone(payload: Omit<Zone, "id" | "usersCount" | "nasName"> & { usersCount?: number }) {
   const nas = mockNasEntries.find((entry) => entry.id === payload.nasId);
   if (!nas) {
@@ -688,11 +730,76 @@ export function addMockZone(payload: Omit<Zone, "id" | "usersCount" | "nasName">
   return zone;
 }
 
+export function deleteMockZones(ids: string[]) {
+  const idSet = new Set(ids);
+  const deleted = mockZones.filter((zone) => idSet.has(zone.id)).length;
+  mockZones = mockZones.filter((zone) => !idSet.has(zone.id));
+  return deleted;
+}
+
 export function addMockServicePlan(payload: ServicePlan) {
   const existing = mockServicePlans.find((plan) => plan.name === payload.name);
   if (existing) throw new Error("Service plan already exists");
   mockServicePlans.unshift(payload);
   return payload;
+}
+
+export function deleteMockServicePlans(names: string[]) {
+  const nameSet = new Set(names);
+  const deleted = mockServicePlans.filter((plan) => nameSet.has(plan.name)).length;
+  mockServicePlans = mockServicePlans.filter((plan) => !nameSet.has(plan.name));
+  return deleted;
+}
+
+export function deleteMockRadiusUsers(usernames: string[]) {
+  const usernameSet = new Set(usernames);
+  const deleted = mockRadiusUsers.filter((user) => usernameSet.has(user.username)).length;
+  mockRadiusUsers = mockRadiusUsers.filter((user) => !usernameSet.has(user.username));
+  mockSessions = mockSessions.filter((session) => !usernameSet.has(session.username));
+  return deleted;
+}
+
+export function deleteMockPermissionRoles(ids: string[]) {
+  const idSet = new Set(ids);
+  const deleted = mockPermissionRoles.filter((role) => idSet.has(role.id)).length;
+  mockPermissionRoles = mockPermissionRoles.filter((role) => !idSet.has(role.id));
+  return deleted;
+}
+
+export function updateMockPermissionRole(id: string, payload: { privilegeModel?: PrivilegeModel; description?: string }) {
+  const role = mockPermissionRoles.find((entry) => entry.id === id);
+  if (!role) throw new Error("Permission role not found");
+  if (payload.privilegeModel) role.privilegeModel = payload.privilegeModel;
+  if (payload.description) role.description = payload.description;
+  role.memberCount = role.accounts?.length ?? role.memberCount;
+  return role;
+}
+
+export function addMockPrivilegeAccount(payload: { fullName: string; email: string; roleId: string }): PrivilegeAccount {
+  const role = mockPermissionRoles.find((entry) => entry.id === payload.roleId);
+  if (!role) throw new Error("Permission role not found");
+  const normalizedEmail = payload.email.trim().toLowerCase();
+  const exists = mockPermissionRoles.some((entry) =>
+    (entry.accounts ?? []).some((account) => account.email.trim().toLowerCase() === normalizedEmail),
+  );
+  if (exists) throw new Error("Privilege account already exists");
+
+  const account: PrivilegeAccount = {
+    id: randomId("pa"),
+    fullName: payload.fullName.trim(),
+    email: payload.email.trim(),
+    roleId: payload.roleId,
+  };
+  role.accounts = [account, ...(role.accounts ?? [])];
+  role.memberCount = role.accounts.length;
+  return account;
+}
+
+export function deleteMockSettingsLogs(ids: string[]) {
+  const idSet = new Set(ids);
+  const deleted = mockSettingsLogs.filter((log) => idSet.has(log.id)).length;
+  mockSettingsLogs = mockSettingsLogs.filter((log) => !idSet.has(log.id));
+  return deleted;
 }
 
 export function buildKpis(): KpiSnapshot {
