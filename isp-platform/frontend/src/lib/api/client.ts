@@ -10,6 +10,7 @@ import type {
   KpiSnapshot,
   NasEntry,
   NetworkNode,
+  NotificationSettings,
   PermissionRole,
   RadiusBulkImportResult,
   RadiusSession,
@@ -34,9 +35,12 @@ import {
   buildKpis,
   createMockMstConnection,
   deleteMockCable,
+  deleteMockCustomer,
   deleteMockClosure,
   deleteMockNasEntries,
   deleteMockNode,
+  deleteMockPrivilegeAccount,
+  deleteMockPrivilegeAccounts,
   deleteMockPermissionRoles,
   deleteMockRadiusUsers,
   deleteMockServicePlans,
@@ -44,6 +48,7 @@ import {
   deleteMockZones,
   disconnectMockRadiusSession,
   extendMockRadiusUser,
+  getMockNotificationSettings,
   mockActivities,
   mockAlerts,
   mockBranding,
@@ -65,8 +70,10 @@ import {
   removeMockClosureSplice,
   setMockCableCoreState,
   syncMockRadiusUser,
+  updateMockPrivilegeAccount,
   updateMockPermissionRole,
   updateMockNasEntry,
+  updateMockNotificationSettings,
   updateMockMstSplitterType,
   upsertMockClosureSplice,
   upsertCustomer,
@@ -102,7 +109,7 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-const USE_MOCKS = (import.meta.env.VITE_USE_MOCKS ?? "true") === "true";
+export const USE_MOCKS = (import.meta.env.VITE_USE_MOCKS ?? "true") === "true";
 
 function tenantHeaders(tenantId?: string) {
   if (!tenantId) return {};
@@ -155,6 +162,17 @@ export const apiClient = {
         fullName: payload.fullName,
         role: "tenant_admin",
         tenantId: payload.tenantId,
+        permissionProfileId: "role-1",
+        delete_customer: true,
+        permissions: {
+          radius_access: true,
+          disconnect_user: true,
+          create_pppoe: true,
+          view_customers: true,
+          delete_customer: true,
+          billing_access: true,
+          settings_access: true,
+        },
       };
       const branding: TenantBranding = {
         tenantId: payload.tenantId,
@@ -252,6 +270,17 @@ export const apiClient = {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;
+  },
+
+  async deleteCustomer(customerId: string, tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(220);
+      deleteMockCustomer(customerId);
+      return;
+    }
+    await api.delete(`/customers/${customerId}`, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
   },
 
   async getNodes(tenantId: string, token?: string): Promise<NetworkNode[]> {
@@ -802,7 +831,11 @@ export const apiClient = {
 
   async updatePermissionRole(
     id: string,
-    payload: { privilegeModel?: "Role Based" | "Approval Based" | "Hybrid"; description?: string },
+    payload: {
+      privilegeModel?: "Role Based" | "Approval Based" | "Hybrid";
+      description?: string;
+      permissions?: Partial<PermissionRole["permissions"]>;
+    },
     tenantId: string,
     token?: string,
   ): Promise<PermissionRole> {
@@ -817,7 +850,7 @@ export const apiClient = {
   },
 
   async createPrivilegeAccount(
-    payload: { fullName: string; email: string; roleId: string },
+    payload: { fullName: string; email: string; role: "admin" | "support" | "noc"; permissionProfileId: string },
     tenantId: string,
     token?: string,
   ) {
@@ -831,12 +864,73 @@ export const apiClient = {
     return data;
   },
 
+  async updatePrivilegeAccount(
+    id: string,
+    payload: { permissionProfileId: string },
+    tenantId: string,
+    token?: string,
+  ) {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return updateMockPrivilegeAccount(id, payload);
+    }
+    const { data } = await api.patch(`/settings/permissions/accounts/${encodeURIComponent(id)}`, payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async deletePrivilegeAccount(id: string, tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return deleteMockPrivilegeAccount(id);
+    }
+    const { data } = await api.delete(`/settings/permissions/accounts/${encodeURIComponent(id)}`, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async deletePrivilegeAccounts(ids: string[], tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return { deleted: deleteMockPrivilegeAccounts(ids) };
+    }
+    const { data } = await api.delete("/settings/permissions/accounts", {
+      data: { ids },
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
   async getSettingsLogs(tenantId: string, token?: string): Promise<SettingsLog[]> {
     if (USE_MOCKS) {
       await sleep(160);
       return mockSettingsLogs;
     }
     const { data } = await api.get<SettingsLog[]>("/settings/logs", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getNotificationSettings(tenantId: string, token?: string): Promise<NotificationSettings> {
+    if (USE_MOCKS) {
+      await sleep(120);
+      return getMockNotificationSettings();
+    }
+    const { data } = await api.get<NotificationSettings>("/settings/notifications", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async updateNotificationSettings(payload: NotificationSettings, tenantId: string, token?: string): Promise<NotificationSettings> {
+    if (USE_MOCKS) {
+      await sleep(120);
+      return updateMockNotificationSettings(payload);
+    }
+    const { data } = await api.put<NotificationSettings>("/settings/notifications", payload, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;

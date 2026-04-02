@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { NasEntry, ServicePlan, Zone } from "@/types";
+import type { NasEntry, NotificationSettings, PermissionFlags, ServicePlan, Zone } from "@/types";
 import { apiClient } from "@/lib/api/client";
 import { useAppStore, useTenantId } from "@/store/app-store";
 
@@ -156,7 +156,11 @@ export function useUpdatePermissionRole() {
       payload,
     }: {
       id: string;
-      payload: { privilegeModel?: "Role Based" | "Approval Based" | "Hybrid"; description?: string };
+      payload: {
+        privilegeModel?: "Role Based" | "Approval Based" | "Hybrid";
+        description?: string;
+        permissions?: Partial<PermissionFlags>;
+      };
     }) => apiClient.updatePermissionRole(id, payload, tenantId, token),
     onSuccess: () => {
       toast.success("Permission role updated.");
@@ -171,13 +175,56 @@ export function useCreatePrivilegeAccount() {
   const token = useAppStore((state) => state.token);
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { fullName: string; email: string; roleId: string }) =>
+    mutationFn: (payload: { fullName: string; email: string; role: "admin" | "support" | "noc"; permissionProfileId: string }) =>
       apiClient.createPrivilegeAccount(payload, tenantId, token),
     onSuccess: () => {
       toast.success("Privilege account created.");
       queryClient.invalidateQueries({ queryKey: ["settings-permissions", tenantId] });
     },
     onError: () => toast.error("Unable to create privilege account."),
+  });
+}
+
+export function useUpdatePrivilegeAccount() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: { permissionProfileId: string } }) =>
+      apiClient.updatePrivilegeAccount(id, payload, tenantId, token),
+    onSuccess: () => {
+      toast.success("Member permission profile updated.");
+      queryClient.invalidateQueries({ queryKey: ["settings-permissions", tenantId] });
+    },
+    onError: () => toast.error("Unable to update member permission profile."),
+  });
+}
+
+export function useDeletePrivilegeAccount() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.deletePrivilegeAccount(id, tenantId, token),
+    onSuccess: () => {
+      toast.success("Member removed from permissions.");
+      queryClient.invalidateQueries({ queryKey: ["settings-permissions", tenantId] });
+    },
+    onError: () => toast.error("Unable to remove member."),
+  });
+}
+
+export function useDeletePrivilegeAccounts() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => apiClient.deletePrivilegeAccounts(ids, tenantId, token),
+    onSuccess: (_, ids) => {
+      toast.success(`${ids.length} member${ids.length === 1 ? "" : "s"} deleted successfully`);
+      queryClient.invalidateQueries({ queryKey: ["settings-permissions", tenantId] });
+    },
+    onError: () => toast.error("Unable to delete selected members."),
   });
 }
 
@@ -188,6 +235,30 @@ export function useSettingsLogs() {
     queryKey: ["settings-logs", tenantId],
     queryFn: () => apiClient.getSettingsLogs(tenantId, token),
     enabled: Boolean(tenantId),
+  });
+}
+
+export function useNotificationSettings() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["settings-notifications", tenantId],
+    queryFn: () => apiClient.getNotificationSettings(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useUpdateNotificationSettings() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: NotificationSettings) => apiClient.updateNotificationSettings(payload, tenantId, token),
+    onSuccess: () => {
+      toast.success("Notification settings saved.");
+      queryClient.invalidateQueries({ queryKey: ["settings-notifications", tenantId] });
+    },
+    onError: () => toast.error("Unable to save notification settings."),
   });
 }
 

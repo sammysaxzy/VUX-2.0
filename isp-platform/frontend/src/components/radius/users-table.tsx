@@ -1,24 +1,25 @@
 "use client";
 
+import { RotateCcw, PlugZap } from "lucide-react";
 import type { RadiusUser } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatDateOnly, isRadiusUserExpired, isRadiusUserExpiringSoon } from "@/lib/utils";
+import { formatDateOnly, isRadiusUserExpired } from "@/lib/utils";
 
 type Props = {
   users: RadiusUser[];
   selectedUsernames: string[];
   onToggleSelect: (username: string) => void;
   onToggleSelectAll: () => void;
-  onActivate: (username: string) => void;
-  onSync: (username: string) => void;
-  onExtend: (username: string) => void;
-  busyActivate?: string;
-  busySync?: string;
-  busyExtend?: string;
+  onDisconnect: (username: string) => void;
+  onReconnect: (username: string) => void;
+  busyDisconnect?: string;
+  busyReconnect?: string;
   now?: number;
+  canManageUsers?: boolean;
+  canDisconnect?: boolean;
 };
 
 export function UsersTable({
@@ -26,13 +27,13 @@ export function UsersTable({
   selectedUsernames,
   onToggleSelect,
   onToggleSelectAll,
-  onActivate,
-  onSync,
-  onExtend,
-  busyActivate,
-  busySync,
-  busyExtend,
+  onDisconnect,
+  onReconnect,
+  busyDisconnect,
+  busyReconnect,
   now = Date.now(),
+  canManageUsers = true,
+  canDisconnect = true,
 }: Props) {
   const allSelected = users.length > 0 && users.every((user) => selectedUsernames.includes(user.username));
 
@@ -46,8 +47,14 @@ export function UsersTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-10">
-                <input type="checkbox" checked={allSelected} onChange={onToggleSelectAll} aria-label="Select all users" />
+                <TableHead className="w-10">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  disabled={!canManageUsers}
+                  onChange={onToggleSelectAll}
+                  aria-label="Select all users"
+                />
               </TableHead>
               <TableHead>Username</TableHead>
               <TableHead>Status</TableHead>
@@ -61,23 +68,20 @@ export function UsersTable({
           <TableBody>
             {users.map((user) => {
               const isExpired = isRadiusUserExpired(user.expirationDate, now);
-              const isExpiringSoon = !isExpired && isRadiusUserExpiringSoon(user.expirationDate, now);
-              const disabled = user.status === "active" || !user.exists || isExpired;
               return (
                 <TableRow key={user.username}>
                   <TableCell>
                     <input
                       type="checkbox"
                       checked={selectedUsernames.includes(user.username)}
+                      disabled={!canManageUsers}
                       onChange={() => onToggleSelect(user.username)}
                       aria-label={`Select ${user.username}`}
                     />
                   </TableCell>
                   <TableCell>{user.username}</TableCell>
                   <TableCell>
-                    <Badge variant={isExpired ? "danger" : isExpiringSoon ? "warning" : "success"}>
-                      {isExpired ? "expired" : isExpiringSoon ? "expiring soon" : "active"}
-                    </Badge>
+                    <Badge variant={isExpired ? "danger" : "success"}>{isExpired ? "expired" : "active"}</Badge>
                   </TableCell>
                   <TableCell>{formatDateOnly(user.expirationDate)}</TableCell>
                   <TableCell>{user.plan}</TableCell>
@@ -92,35 +96,22 @@ export function UsersTable({
                     <div className="flex justify-end gap-2">
                       <Button
                         size="sm"
+                        variant="outline"
+                        disabled={!canDisconnect || busyDisconnect === user.username || (user.status !== "active" && !isExpired)}
+                        onClick={() => onDisconnect(user.username)}
+                      >
+                        <PlugZap className="mr-1 h-3.5 w-3.5" />
+                        Disconnect
+                      </Button>
+                      <Button
+                        size="sm"
                         variant="secondary"
-                        disabled={disabled || busyActivate === user.username}
-                        onClick={() => onActivate(user.username)}
-                        title={
-                          !user.exists
-                            ? "User missing from authentication store"
-                            : user.status === "active"
-                            ? "Already active"
-                            : undefined
-                        }
+                        disabled={!canManageUsers || !user.exists || isExpired || busyReconnect === user.username}
+                        onClick={() => onReconnect(user.username)}
+                        title={!user.exists ? "User missing from authentication store" : isExpired ? "Expired users cannot reconnect" : undefined}
                       >
-                        Activate
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busyExtend === user.username}
-                        onClick={() => onExtend(user.username)}
-                      >
-                        Extend
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={!user.exists || busySync === user.username}
-                        onClick={() => onSync(user.username)}
-                        title={!user.exists ? "User missing from authentication store" : undefined}
-                      >
-                        Sync
+                        <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                        Reconnect
                       </Button>
                     </div>
                   </TableCell>

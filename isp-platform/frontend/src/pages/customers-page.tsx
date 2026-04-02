@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
+import { hasPermission } from "@/lib/permissions";
 import type { Customer } from "@/types";
-import { useCustomers, useExportCustomers, useSaveCustomer } from "@/hooks/api/use-customers";
+import { useCustomers, useDeleteCustomer, useExportCustomers, useSaveCustomer } from "@/hooks/api/use-customers";
 import { useFibreCables, useNetworkNodes } from "@/hooks/api/use-network";
-import { useTenantId } from "@/store/app-store";
+import { useAppStore, useTenantId } from "@/store/app-store";
 import { CustomerForm } from "@/components/customers/customer-form";
 import { CustomerTable } from "@/components/customers/customer-table";
 import { ExportButton } from "@/components/import-export/export-button";
@@ -16,13 +17,27 @@ import { downloadBlob, mapCustomersToExportRows, normalizeExportBlob } from "@/f
 
 export function CustomersPage() {
   const tenantId = useTenantId();
+  const user = useAppStore((state) => state.user);
   const { data: customers, isLoading: customerLoading } = useCustomers();
   const { data: nodes, isLoading: nodesLoading } = useNetworkNodes();
   const { data: cables, isLoading: cablesLoading } = useFibreCables();
   const saveCustomer = useSaveCustomer();
+  const deleteCustomer = useDeleteCustomer();
   const exportCustomersMutation = useExportCustomers();
   const [openDrawer, setOpenDrawer] = useState(false);
   const [activeCustomer, setActiveCustomer] = useState<Customer | undefined>();
+  const canViewCustomers = hasPermission(user, "view_customers");
+  const canDeleteCustomer = hasPermission(user, "delete_customer");
+
+  if (!canViewCustomers) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center text-muted-foreground">
+          Your permission profile does not allow access to customer records.
+        </CardContent>
+      </Card>
+    );
+  }
 
   const stats = useMemo(() => {
     const list = customers ?? [];
@@ -113,8 +128,17 @@ export function CustomersPage() {
           nodes={nodes}
           cables={cables}
           submitting={saveCustomer.isPending}
+          deleting={canDeleteCustomer ? deleteCustomer.isPending : false}
           onSubmit={(payload) => {
             saveCustomer.mutate(payload, {
+              onSuccess: () => {
+                setOpenDrawer(false);
+                setActiveCustomer(undefined);
+              },
+            });
+          }}
+          onDelete={(customerId) => {
+            deleteCustomer.mutate(customerId, {
               onSuccess: () => {
                 setOpenDrawer(false);
                 setActiveCustomer(undefined);

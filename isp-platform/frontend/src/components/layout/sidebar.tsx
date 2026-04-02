@@ -10,22 +10,25 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
+import { hasPermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: Gauge },
   { href: "/map", label: "Map", icon: MapPinned },
-  { href: "/customers", label: "Customers", icon: Users },
+  { href: "/customers", label: "Customers", icon: Users, permission: "view_customers" as const },
   { href: "/infrastructure", label: "Infrastructure", icon: Cable },
   { href: "/faults", label: "Faults", icon: AlertTriangle },
   { href: "/field", label: "Field Team", icon: Wrench },
-  { href: "/radius", label: "RADIUS", icon: Signal },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/radius", label: "RADIUS", icon: Signal, permission: "radius_access" as const },
+  { href: "/settings", label: "Settings", icon: Settings, permission: "settings_access" as const },
 ];
 
 export function Sidebar() {
   const branding = useAppStore((state) => state.branding);
+  const user = useAppStore((state) => state.user);
+  const visibleNavItems = navItems.filter((item) => !item.permission || hasPermission(user, item.permission));
 
   return (
     <aside className="hidden w-72 flex-col border-r border-gray-200 bg-white px-4 py-5 dark:border-border/80 dark:bg-card/90 lg:flex">
@@ -44,7 +47,7 @@ export function Sidebar() {
       </div>
 
       <nav className="space-y-1">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const Icon = item.icon;
           return (
             <NavLink

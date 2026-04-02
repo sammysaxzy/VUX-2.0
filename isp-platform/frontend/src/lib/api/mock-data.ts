@@ -10,8 +10,10 @@ import type {
   KpiSnapshot,
   NasEntry,
   NetworkNode,
+  NotificationSettings,
   PermissionRole,
-  PrivilegeAccount,
+  PrivilegeMember,
+  PermissionFlags,
   PrivilegeModel,
   RadiusBulkImportResult,
   RadiusSession,
@@ -27,12 +29,59 @@ import type {
 import { randomId } from "@/lib/utils";
 
 const now = Date.now();
+const MOCK_STORAGE_KEY = "oss-bss-mock-backend";
 const splitterPortCount: Record<SplitterType, number> = {
   "1/2": 2,
   "1/4": 4,
   "1/8": 8,
   "1/16": 16,
 };
+
+type PersistedMockCollections = {
+  nodes: NetworkNode[];
+  cables: FibreCable[];
+  closures: ClosureBox[];
+  customers: Customer[];
+  faults: Fault[];
+  sessions: RadiusSession[];
+  servicePlans: ServicePlan[];
+  radiusUsers: RadiusUser[];
+  nasEntries: NasEntry[];
+  zones: Zone[];
+  permissionRoles: PermissionRole[];
+  settingsLogs: SettingsLog[];
+  notificationSettings: NotificationSettings;
+};
+
+function cloneValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function canUseStorage() {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+function readPersistedMockCollections(): Partial<PersistedMockCollections> | null {
+  if (!canUseStorage()) return null;
+  try {
+    const raw = window.localStorage.getItem(MOCK_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Partial<PersistedMockCollections>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readPersistedCollection<K extends keyof PersistedMockCollections>(
+  key: K,
+  fallbackFactory: () => PersistedMockCollections[K],
+): PersistedMockCollections[K] {
+  const stored = readPersistedMockCollections()?.[key];
+  return stored ? cloneValue(stored) : fallbackFactory();
+}
+
+function replaceCollection<T>(target: T[], next: T[]) {
+  target.splice(0, target.length, ...cloneValue(next));
+}
 
 export function getSplitterPortCount(splitterType: SplitterType) {
   return splitterPortCount[splitterType];
@@ -51,7 +100,36 @@ export const mockUser: User = {
   fullName: "NOC Supervisor",
   role: "noc_engineer",
   tenantId: mockBranding.tenantId,
+  permissionProfileId: "role-1",
+  delete_customer: true,
+  permissions: {
+    radius_access: true,
+    disconnect_user: true,
+    create_pppoe: true,
+    view_customers: true,
+    delete_customer: true,
+    billing_access: true,
+    settings_access: true,
+  },
 };
+
+export let mockNotificationSettings: NotificationSettings = {
+  message: "Dear {name}, your subscription will expire on {date}. Please renew.",
+  reminderDays: 3,
+};
+
+function createPermissionFlags(flags: Partial<PermissionFlags>): PermissionFlags {
+  return {
+    radius_access: false,
+    disconnect_user: false,
+    create_pppoe: false,
+    view_customers: false,
+    delete_customer: false,
+    billing_access: false,
+    settings_access: false,
+    ...flags,
+  };
+}
 
 const splitter8 = (usedPorts: number[]): SplitterPort[] =>
   Array.from({ length: 8 }, (_, idx) => ({
@@ -453,9 +531,18 @@ export let mockPermissionRoles: PermissionRole[] = [
     description: "Full OSS/BSS control across tenants and infrastructure",
     memberCount: 2,
     privilegeModel: "Hybrid",
-    accounts: [
-      { id: "pa-1", fullName: "NOC Superintendent", email: "noc.superintendent@westlink.io", roleId: "role-1" },
-      { id: "pa-2", fullName: "Platform Director", email: "platform.director@westlink.io", roleId: "role-1" },
+    permissions: createPermissionFlags({
+      radius_access: true,
+      disconnect_user: true,
+      create_pppoe: true,
+      view_customers: true,
+      delete_customer: true,
+      billing_access: true,
+      settings_access: true,
+    }),
+    members: [
+      { id: "pa-1", fullName: "NOC Superintendent", email: "noc.superintendent@westlink.io", role: "admin", permissionProfileId: "role-1", isActive: true },
+      { id: "pa-2", fullName: "Platform Director", email: "platform.director@westlink.io", role: "admin", permissionProfileId: "role-1", isActive: true },
     ],
   },
   {
@@ -465,9 +552,15 @@ export let mockPermissionRoles: PermissionRole[] = [
     description: "Manages PPPoE sessions, users, and operational troubleshooting",
     memberCount: 2,
     privilegeModel: "Role Based",
-    accounts: [
-      { id: "pa-3", fullName: "Aisha Bello", email: "aisha.bello@westlink.io", roleId: "role-2" },
-      { id: "pa-4", fullName: "Tunde James", email: "tunde.james@westlink.io", roleId: "role-2" },
+    permissions: createPermissionFlags({
+      radius_access: true,
+      disconnect_user: true,
+      create_pppoe: true,
+      view_customers: true,
+    }),
+    members: [
+      { id: "pa-3", fullName: "Aisha Bello", email: "aisha.bello@westlink.io", role: "noc", permissionProfileId: "role-2", isActive: true },
+      { id: "pa-4", fullName: "Tunde James", email: "tunde.james@westlink.io", role: "noc", permissionProfileId: "role-2", isActive: true },
     ],
   },
   {
@@ -477,9 +570,12 @@ export let mockPermissionRoles: PermissionRole[] = [
     description: "Access to sync workflows and physical access diagnostics only",
     memberCount: 2,
     privilegeModel: "Approval Based",
-    accounts: [
-      { id: "pa-5", fullName: "Sade Okon", email: "sade.okon@westlink.io", roleId: "role-3" },
-      { id: "pa-6", fullName: "Emeka Obi", email: "emeka.obi@westlink.io", roleId: "role-3" },
+    permissions: createPermissionFlags({
+      view_customers: true,
+    }),
+    members: [
+      { id: "pa-5", fullName: "Sade Okon", email: "sade.okon@westlink.io", role: "support", permissionProfileId: "role-3", isActive: true },
+      { id: "pa-6", fullName: "Emeka Obi", email: "emeka.obi@westlink.io", role: "support", permissionProfileId: "role-3", isActive: true },
     ],
   },
 ];
@@ -489,6 +585,186 @@ export let mockSettingsLogs: SettingsLog[] = [
   { id: "log-2", type: "disconnect", actor: "noc@westlink.io", description: "Manual disconnect sent to marina_it from NOC console", createdAt: new Date(now - 1000 * 60 * 22).toISOString() },
   { id: "log-3", type: "sync", actor: "field@westlink.io", description: "PPPoE account sync completed for korede_res on MikroTik BRAS 01", createdAt: new Date(now - 1000 * 60 * 41).toISOString() },
 ];
+
+function hydrateMockCollections() {
+  const stored = readPersistedMockCollections();
+  if (!stored) return;
+
+  if (stored.nodes) replaceCollection(mockNodes, stored.nodes);
+  if (stored.cables) replaceCollection(mockCables, stored.cables);
+  if (stored.closures) replaceCollection(mockClosures, stored.closures);
+  if (stored.customers) replaceCollection(mockCustomers, stored.customers);
+  if (stored.faults) replaceCollection(mockFaults, stored.faults);
+  if (stored.sessions) mockSessions = cloneValue(stored.sessions);
+  if (stored.servicePlans) mockServicePlans = cloneValue(stored.servicePlans);
+  if (stored.radiusUsers) mockRadiusUsers = cloneValue(stored.radiusUsers);
+  if (stored.nasEntries) mockNasEntries = cloneValue(stored.nasEntries);
+  if (stored.zones) mockZones = cloneValue(stored.zones);
+  if (stored.permissionRoles) mockPermissionRoles = cloneValue(stored.permissionRoles);
+  if (stored.settingsLogs) mockSettingsLogs = cloneValue(stored.settingsLogs);
+  if (stored.notificationSettings) mockNotificationSettings = cloneValue(stored.notificationSettings);
+}
+
+export function persistMockCollections() {
+  if (!canUseStorage()) return;
+  try {
+    const payload: PersistedMockCollections = {
+      nodes: mockNodes,
+      cables: mockCables,
+      closures: mockClosures,
+      customers: mockCustomers,
+      faults: mockFaults,
+      sessions: mockSessions,
+      servicePlans: mockServicePlans,
+      radiusUsers: mockRadiusUsers,
+      nasEntries: mockNasEntries,
+      zones: mockZones,
+      permissionRoles: mockPermissionRoles,
+      settingsLogs: mockSettingsLogs,
+      notificationSettings: mockNotificationSettings,
+    };
+    window.localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore storage failures and keep the simulation running in memory.
+  }
+}
+
+function recordSettingsLog(entry: Omit<SettingsLog, "id" | "createdAt">) {
+  mockSettingsLogs.unshift({
+    id: randomId("log"),
+    createdAt: new Date().toISOString(),
+    ...entry,
+  });
+}
+
+function parseUsageInGiB(value?: string) {
+  const amount = Number.parseFloat(value ?? "0");
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function formatUsageInGiB(value: number) {
+  return `${value.toFixed(1)} GiB`;
+}
+
+function formatDurationFromStart(startedAt: string) {
+  const diffMs = Math.max(0, Date.now() - new Date(startedAt).getTime());
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${hours}:${minutes}:${seconds}`;
+}
+
+export function isReminderPending(expirationDate: string, reminderDays = mockNotificationSettings.reminderDays, nowValue = Date.now()) {
+  const expiry = new Date(expirationDate).getTime();
+  const diff = expiry - nowValue;
+  return diff >= 0 && diff <= reminderDays * 24 * 60 * 60 * 1000;
+}
+
+export function getMockNotificationSettings() {
+  return cloneValue(mockNotificationSettings);
+}
+
+export function updateMockNotificationSettings(payload: NotificationSettings) {
+  mockNotificationSettings = {
+    message: payload.message.trim(),
+    reminderDays: Math.max(1, Math.floor(payload.reminderDays || 1)),
+  };
+  persistMockCollections();
+  return cloneValue(mockNotificationSettings);
+}
+
+export function simulateMockBackendTick() {
+  let changed = false;
+  let faultRaised = false;
+  const tickAt = new Date().toISOString();
+
+  mockRadiusUsers.forEach((user) => {
+    const expired = new Date(user.expirationDate).getTime() <= Date.now();
+    const nextStatus = expired ? "inactive" : user.status;
+    if (nextStatus !== user.status) {
+      user.status = nextStatus;
+      changed = true;
+    }
+    const reminderDescription = `Reminder queued for ${user.username} before ${new Date(user.expirationDate).toLocaleDateString("en-US")}`;
+    const reminderAlreadyLogged = mockSettingsLogs.some(
+      (log) => log.actor === "notification-engine" && log.description === reminderDescription,
+    );
+    if (isReminderPending(user.expirationDate) && !reminderAlreadyLogged) {
+      recordSettingsLog({
+        type: "sync",
+        actor: "notification-engine",
+        description: reminderDescription,
+      });
+      changed = true;
+    }
+  });
+
+  mockSessions.forEach((session) => {
+    const linkedUser = mockRadiusUsers.find((user) => user.username === session.username);
+    const expired = new Date(session.expirationDate ?? 0).getTime() <= Date.now();
+    const shouldBeOnline = Boolean(linkedUser?.status === "active" && !expired && session.accountExists);
+
+    session.accountStatus = shouldBeOnline ? "active" : "inactive";
+    if (shouldBeOnline && session.status !== "online") {
+      session.status = "online";
+      session.startedAt = tickAt;
+      session.ipAddress = session.ipAddress === "Pending" ? `10.20.${Math.floor(Math.random() * 30) + 10}.${Math.floor(Math.random() * 180) + 20}` : session.ipAddress;
+      changed = true;
+    }
+    if (!shouldBeOnline && session.status !== "offline") {
+      session.status = "offline";
+      changed = true;
+    }
+    if (session.status === "online") {
+      session.duration = formatDurationFromStart(session.startedAt);
+      session.dataUsage = formatUsageInGiB(parseUsageInGiB(session.dataUsage) + Math.random() * 0.08 + 0.02);
+      session.lastUpdated = tickAt;
+      changed = true;
+    } else if (expired && session.accountStatus !== "inactive") {
+      session.accountStatus = "inactive";
+      session.lastUpdated = tickAt;
+      changed = true;
+    }
+  });
+
+  mockCustomers.forEach((customer) => {
+    const session = mockSessions.find((entry) => entry.customerId === customer.id);
+    if (!session) return;
+    const nextOnline = session.status === "online";
+    const nextAccountStatus = session.accountStatus === "inactive" ? "suspended" : "active";
+    if (customer.online !== nextOnline || customer.accountStatus !== nextAccountStatus) {
+      customer.online = nextOnline;
+      customer.accountStatus = nextAccountStatus;
+      changed = true;
+    }
+  });
+
+  if (mockFaults.length < 10 && Math.random() < 0.08) {
+    const affectedNode = mockNodes.find((node) => node.type === "mst") ?? mockNodes[0];
+    mockFaults.unshift({
+      id: randomId("fault"),
+      tenantId: mockBranding.tenantId,
+      title: `Intermittent issue at ${affectedNode?.name ?? "core node"}`,
+      description: "Realtime simulator detected fluctuating optical levels and created an investigation ticket.",
+      severity: "medium",
+      location: affectedNode?.location ?? { lat: 6.45, lng: 3.48 },
+      affectedNodeId: affectedNode?.id,
+      status: "open",
+      createdAt: tickAt,
+    });
+    faultRaised = true;
+    changed = true;
+  }
+
+  if (changed) {
+    persistMockCollections();
+  }
+
+  return { changed, faultRaised };
+}
+
+hydrateMockCollections();
 
 export function addMockRadiusUser(payload: {
   username: string;
@@ -542,6 +818,7 @@ export function addMockRadiusUser(payload: {
     lastUpdated: new Date().toISOString(),
     accountExists: true,
   });
+  persistMockCollections();
   return newUser;
 }
 
@@ -614,6 +891,7 @@ export function bulkImportMockRadiusUsers(
     });
   });
 
+  persistMockCollections();
   return { imported: payloads.length };
 }
 
@@ -629,6 +907,7 @@ export function activateMockRadiusUser(username: string) {
     session.expirationDate = user.expirationDate;
     session.lastUpdated = new Date().toISOString();
   }
+  persistMockCollections();
   return user;
 }
 
@@ -636,13 +915,12 @@ export function syncMockRadiusUser(username: string) {
   const user = mockRadiusUsers.find((entry) => entry.username === username);
   if (!user) throw new Error("User not found");
   user.lastSeen = new Date().toISOString();
-  mockSettingsLogs.unshift({
-    id: randomId("log"),
+  recordSettingsLog({
     type: "sync",
     actor: "noc@westlink.io",
     description: `PPPoE account sync completed for ${username}`,
-    createdAt: new Date().toISOString(),
   });
+  persistMockCollections();
   return user;
 }
 
@@ -653,13 +931,12 @@ export function reconnectMockRadiusSession(username: string) {
   session.lastUpdated = new Date().toISOString();
   session.startedAt = new Date().toISOString();
   session.duration = "00:00:09";
-  mockSettingsLogs.unshift({
-    id: randomId("log"),
+  recordSettingsLog({
     type: "disconnect",
     actor: "noc@westlink.io",
     description: `Reconnect workflow triggered for ${username}`,
-    createdAt: new Date().toISOString(),
   });
+  persistMockCollections();
   return session;
 }
 
@@ -668,13 +945,12 @@ export function disconnectMockRadiusSession(username: string) {
   if (!session) throw new Error("Session not found");
   session.status = "offline";
   session.lastUpdated = new Date().toISOString();
-  mockSettingsLogs.unshift({
-    id: randomId("log"),
+  recordSettingsLog({
     type: "disconnect",
     actor: "noc@westlink.io",
     description: `Disconnect sent for ${username}`,
-    createdAt: new Date().toISOString(),
   });
+  persistMockCollections();
   return session;
 }
 
@@ -687,24 +963,25 @@ export function extendMockRadiusUser(username: string, expirationDate: string) {
     session.expirationDate = expirationDate;
     session.lastUpdated = new Date().toISOString();
   }
-  mockSettingsLogs.unshift({
-    id: randomId("log"),
+  recordSettingsLog({
     type: "sync",
     actor: "noc@westlink.io",
     description: `Subscription extended for ${username} until ${new Date(expirationDate).toLocaleDateString("en-US")}`,
-    createdAt: new Date().toISOString(),
   });
+  persistMockCollections();
   return user;
 }
 
 export function addMockNasEntry(payload: Omit<NasEntry, "id">) {
   const entry: NasEntry = { id: randomId("nas"), ...payload };
   mockNasEntries = [entry, ...mockNasEntries.filter((item) => item.ipAddress !== payload.ipAddress)];
+  persistMockCollections();
   return entry;
 }
 
 export function updateMockNasEntry(id: string, payload: Omit<NasEntry, "id">) {
   mockNasEntries = mockNasEntries.map((item) => (item.id === id ? { id, ...payload } : item));
+  persistMockCollections();
   return mockNasEntries.find((item) => item.id === id);
 }
 
@@ -712,6 +989,7 @@ export function deleteMockNasEntries(ids: string[]) {
   const idSet = new Set(ids);
   const deleted = mockNasEntries.filter((entry) => idSet.has(entry.id)).length;
   mockNasEntries = mockNasEntries.filter((entry) => !idSet.has(entry.id));
+  persistMockCollections();
   return deleted;
 }
 
@@ -727,6 +1005,7 @@ export function addMockZone(payload: Omit<Zone, "id" | "usersCount" | "nasName">
     nasName: nas.name,
   };
   mockZones = [zone, ...mockZones];
+  persistMockCollections();
   return zone;
 }
 
@@ -734,6 +1013,7 @@ export function deleteMockZones(ids: string[]) {
   const idSet = new Set(ids);
   const deleted = mockZones.filter((zone) => idSet.has(zone.id)).length;
   mockZones = mockZones.filter((zone) => !idSet.has(zone.id));
+  persistMockCollections();
   return deleted;
 }
 
@@ -741,6 +1021,7 @@ export function addMockServicePlan(payload: ServicePlan) {
   const existing = mockServicePlans.find((plan) => plan.name === payload.name);
   if (existing) throw new Error("Service plan already exists");
   mockServicePlans.unshift(payload);
+  persistMockCollections();
   return payload;
 }
 
@@ -748,6 +1029,7 @@ export function deleteMockServicePlans(names: string[]) {
   const nameSet = new Set(names);
   const deleted = mockServicePlans.filter((plan) => nameSet.has(plan.name)).length;
   mockServicePlans = mockServicePlans.filter((plan) => !nameSet.has(plan.name));
+  persistMockCollections();
   return deleted;
 }
 
@@ -756,6 +1038,7 @@ export function deleteMockRadiusUsers(usernames: string[]) {
   const deleted = mockRadiusUsers.filter((user) => usernameSet.has(user.username)).length;
   mockRadiusUsers = mockRadiusUsers.filter((user) => !usernameSet.has(user.username));
   mockSessions = mockSessions.filter((session) => !usernameSet.has(session.username));
+  persistMockCollections();
   return deleted;
 }
 
@@ -763,42 +1046,103 @@ export function deleteMockPermissionRoles(ids: string[]) {
   const idSet = new Set(ids);
   const deleted = mockPermissionRoles.filter((role) => idSet.has(role.id)).length;
   mockPermissionRoles = mockPermissionRoles.filter((role) => !idSet.has(role.id));
+  persistMockCollections();
   return deleted;
 }
 
-export function updateMockPermissionRole(id: string, payload: { privilegeModel?: PrivilegeModel; description?: string }) {
+export function updateMockPermissionRole(
+  id: string,
+  payload: { privilegeModel?: PrivilegeModel; description?: string; permissions?: Partial<PermissionFlags> },
+) {
   const role = mockPermissionRoles.find((entry) => entry.id === id);
   if (!role) throw new Error("Permission role not found");
   if (payload.privilegeModel) role.privilegeModel = payload.privilegeModel;
   if (payload.description) role.description = payload.description;
-  role.memberCount = role.accounts?.length ?? role.memberCount;
+  if ("permissions" in payload && payload.permissions) {
+    role.permissions = { ...role.permissions, ...payload.permissions };
+  }
+  role.memberCount = role.members?.length ?? role.memberCount;
+  persistMockCollections();
   return role;
 }
 
-export function addMockPrivilegeAccount(payload: { fullName: string; email: string; roleId: string }): PrivilegeAccount {
-  const role = mockPermissionRoles.find((entry) => entry.id === payload.roleId);
+export function addMockPrivilegeAccount(payload: {
+  fullName: string;
+  email: string;
+  role: "admin" | "support" | "noc";
+  permissionProfileId: string;
+}): PrivilegeMember {
+  const role = mockPermissionRoles.find((entry) => entry.id === payload.permissionProfileId);
   if (!role) throw new Error("Permission role not found");
   const normalizedEmail = payload.email.trim().toLowerCase();
   const exists = mockPermissionRoles.some((entry) =>
-    (entry.accounts ?? []).some((account) => account.email.trim().toLowerCase() === normalizedEmail),
+    (entry.members ?? []).some((member) => member.email.trim().toLowerCase() === normalizedEmail),
   );
   if (exists) throw new Error("Privilege account already exists");
 
-  const account: PrivilegeAccount = {
+  const account: PrivilegeMember = {
     id: randomId("pa"),
     fullName: payload.fullName.trim(),
     email: payload.email.trim(),
-    roleId: payload.roleId,
+    role: payload.role,
+    permissionProfileId: payload.permissionProfileId,
+    isActive: true,
   };
-  role.accounts = [account, ...(role.accounts ?? [])];
-  role.memberCount = role.accounts.length;
+  role.members = [account, ...(role.members ?? [])];
+  role.memberCount = role.members.length;
+  persistMockCollections();
   return account;
+}
+
+export function updateMockPrivilegeAccount(memberId: string, payload: { permissionProfileId: string }) {
+  const targetRole = mockPermissionRoles.find((entry) => entry.members?.some((member) => member.id === memberId));
+  const nextRole = mockPermissionRoles.find((entry) => entry.id === payload.permissionProfileId);
+  if (!targetRole || !nextRole) throw new Error("Privilege member not found");
+
+  const member = targetRole.members?.find((entry) => entry.id === memberId);
+  if (!member) throw new Error("Privilege member not found");
+
+  if (targetRole.id === nextRole.id) return member;
+
+  targetRole.members = (targetRole.members ?? []).filter((entry) => entry.id !== memberId);
+  targetRole.memberCount = targetRole.members.length;
+
+  member.permissionProfileId = payload.permissionProfileId;
+  nextRole.members = [member, ...(nextRole.members ?? [])];
+  nextRole.memberCount = nextRole.members.length;
+  persistMockCollections();
+  return member;
+}
+
+export function deleteMockPrivilegeAccount(memberId: string) {
+  const role = mockPermissionRoles.find((entry) => entry.members?.some((member) => member.id === memberId));
+  if (!role) throw new Error("Privilege member not found");
+  const deleted = role.members?.find((member) => member.id === memberId);
+  role.members = (role.members ?? []).filter((member) => member.id !== memberId);
+  role.memberCount = role.members.length;
+  persistMockCollections();
+  return deleted;
+}
+
+export function deleteMockPrivilegeAccounts(memberIds: string[]) {
+  const idSet = new Set(memberIds);
+  let deleted = 0;
+  mockPermissionRoles.forEach((role) => {
+    const currentMembers = role.members ?? [];
+    const nextMembers = currentMembers.filter((member) => !idSet.has(member.id));
+    deleted += currentMembers.length - nextMembers.length;
+    role.members = nextMembers;
+    role.memberCount = nextMembers.length;
+  });
+  persistMockCollections();
+  return deleted;
 }
 
 export function deleteMockSettingsLogs(ids: string[]) {
   const idSet = new Set(ids);
   const deleted = mockSettingsLogs.filter((log) => idSet.has(log.id)).length;
   mockSettingsLogs = mockSettingsLogs.filter((log) => !idSet.has(log.id));
+  persistMockCollections();
   return deleted;
 }
 
@@ -826,6 +1170,7 @@ export function addMockFault(fault: Omit<Fault, "id" | "createdAt" | "tenantId">
     acknowledged: false,
     createdAt: new Date().toISOString(),
   });
+  persistMockCollections();
   return newFault;
 }
 
@@ -836,6 +1181,33 @@ export function upsertCustomer(customer: Customer) {
   } else {
     mockCustomers.unshift(customer);
   }
+  persistMockCollections();
+}
+
+export function deleteMockCustomer(customerId: string) {
+  const customerIndex = mockCustomers.findIndex((entry) => entry.id === customerId);
+  if (customerIndex < 0) {
+    throw new Error("Customer not found.");
+  }
+
+  mockNodes.forEach((node) => {
+    if (node.type !== "mst" || !node.splitterPorts) return;
+    node.splitterPorts = node.splitterPorts.map((port) =>
+      port.customerId === customerId
+        ? {
+            ...port,
+            status: "free",
+            customerId: undefined,
+            customerName: undefined,
+            assignedCoreColor: undefined,
+          }
+        : port,
+    );
+  });
+
+  releaseCustomerCoreAssignments(customerId);
+  mockCustomers.splice(customerIndex, 1);
+  persistMockCollections();
 }
 
 export function createMockMstConnection(payload: {
@@ -864,6 +1236,7 @@ export function createMockMstConnection(payload: {
     splices: [],
   };
   mockCables.unshift(cable);
+  persistMockCollections();
   return cable;
 }
 
@@ -924,6 +1297,7 @@ export function setMockCableCoreState(payload: {
     core.usagePath = undefined;
   }
 
+  persistMockCollections();
   return { cableId: cable.id, core };
 }
 
@@ -969,6 +1343,7 @@ export function upsertMockClosureSplice(payload: {
     });
   }
 
+  persistMockCollections();
   return closure;
 }
 
@@ -976,6 +1351,7 @@ export function removeMockClosureSplice(payload: { closureId: string; spliceId: 
   const closure = mockClosures.find((entry) => entry.id === payload.closureId);
   if (!closure) throw new Error("Closure not found.");
   closure.splices = closure.splices.filter((splice) => splice.id !== payload.spliceId);
+  persistMockCollections();
   return closure;
 }
 
@@ -1016,6 +1392,7 @@ export function updateMockMstSplitterType(payload: { mstId: string; splitterType
   });
 
   mstNode.clients = (mstNode.clients ?? []).filter((client) => client.splitterPort <= nextPortCount);
+  persistMockCollections();
   return mstNode;
 }
 
@@ -1082,6 +1459,7 @@ export function assignMockClientToMstPort(payload: {
     splitterPort: payload.portNumber,
   });
 
+  persistMockCollections();
   return mstNode;
 }
 
@@ -1104,6 +1482,7 @@ export function removeMockClientFromMstPort(payload: { mstId: string; portNumber
   port.customerName = undefined;
   port.assignedCoreColor = undefined;
 
+  persistMockCollections();
   return {
     mst: mstNode,
     removedClientId,
@@ -1125,6 +1504,7 @@ export function deleteMockCable(payload: { cableId: string }) {
     closure.splices = closure.splices.filter((splice) => splice.fromCableId !== payload.cableId && splice.toCableId !== payload.cableId);
   });
 
+  persistMockCollections();
   return removed;
 }
 
@@ -1139,6 +1519,7 @@ export function deleteMockClosure(payload: { closureId: string }) {
     mockNodes.splice(closureNodeIndex, 1);
   }
 
+  persistMockCollections();
   return removedClosure;
 }
 
@@ -1191,6 +1572,7 @@ export function deleteMockNode(payload: { nodeId: string }) {
   }
 
   mockNodes.splice(nodeIndex, 1);
+  persistMockCollections();
   return {
     node: removedNode,
     removedCableIds: Array.from(removedCableIds),

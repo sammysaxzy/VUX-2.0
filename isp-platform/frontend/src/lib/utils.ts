@@ -35,6 +35,13 @@ export function isRadiusUserExpiringSoon(expirationDate: string, now = Date.now(
   return diff >= 0 && diff <= windowDays * 24 * 60 * 60 * 1000;
 }
 
+export function isReminderPending(expirationDate: string, reminderDays: number, now = Date.now()) {
+  if (reminderDays < 1) return false;
+  const expiry = new Date(expirationDate).getTime();
+  const diff = expiry - now;
+  return diff >= 0 && diff <= reminderDays * 24 * 60 * 60 * 1000;
+}
+
 export function numberWithCommas(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
 }

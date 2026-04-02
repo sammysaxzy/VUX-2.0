@@ -41,6 +41,21 @@ export function useSaveCustomer() {
   });
 }
 
+export function useDeleteCustomer() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (customerId: string) => apiClient.deleteCustomer(customerId, tenantId, token),
+    onSuccess: () => {
+      toast.success("Customer deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ["customers", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", tenantId] });
+    },
+    onError: () => toast.error("Unable to delete customer."),
+  });
+}
+
 export function useExportCustomers() {
   const tenantId = useTenantId();
   const token = useAppStore((state) => state.token);
