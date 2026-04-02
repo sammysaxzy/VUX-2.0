@@ -4,6 +4,8 @@ import { useEffect, useRef } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { USE_MOCKS } from "@/lib/api/client";
+import { simulateMockBackendTick } from "@/lib/api/mock-data";
 import type { ClosureBox, Customer, DashboardRealtimePayload, Fault, FibreCable, NetworkNode } from "@/types";
 import { useAppStore, useTenantId } from "@/store/app-store";
 
@@ -173,6 +175,29 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!token || !tenantId) return;
+
+    if (USE_MOCKS) {
+      const interval = window.setInterval(() => {
+        const result = simulateMockBackendTick();
+        if (!result.changed) return;
+        queryClient.invalidateQueries({ queryKey: ["dashboard", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["faults", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["customers", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["network-nodes", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["fibre-cables", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["closures", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["radius-sessions", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["radius-users", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["settings-logs", tenantId] });
+        if (result.faultRaised) {
+          toast.error("New simulated network fault detected.");
+        }
+      }, 10_000);
+
+      return () => {
+        window.clearInterval(interval);
+      };
+    }
 
     const ws = new WebSocket(wsEndpoint());
     socketRef.current = ws;

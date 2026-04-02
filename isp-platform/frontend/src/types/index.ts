@@ -1,4 +1,4 @@
-export type Role = "super_admin" | "tenant_admin" | "noc_engineer" | "field_engineer";
+export type Role = "super_admin" | "tenant_admin" | "isp_admin" | "noc_engineer" | "noc_viewer" | "field_engineer" | "admin" | "support" | "noc";
 export type NodeType = "olt" | "mst" | "pole" | "closure" | "customer";
 export type SessionStatus = "online" | "offline";
 export type FaultSeverity = "minor" | "major" | "critical";
@@ -18,6 +18,9 @@ export interface User {
   fullName: string;
   role: Role;
   tenantId: string;
+  permissionProfileId?: string;
+  delete_customer?: boolean;
+  permissions?: Partial<PermissionFlags>;
 }
 
 export interface AuthResponse {
@@ -145,6 +148,7 @@ export interface RadiusSession {
 export type RadiusUserStatus = "active" | "inactive";
 export type CustomerType = "individual" | "corporate";
 export type PriorityLevel = "high" | "medium" | "low";
+export type MemberRole = "admin" | "support" | "noc";
 
 export interface RadiusUser {
   username: string;
@@ -186,6 +190,24 @@ export type RadiusTab = "sessions" | "users";
 export type SettingsTab = "nas" | "zones" | "permissions" | "services" | "logs" | "configuration";
 
 export type PrivilegeModel = "Role Based" | "Approval Based" | "Hybrid";
+export type PermissionKey =
+  | "radius_access"
+  | "disconnect_user"
+  | "create_pppoe"
+  | "view_customers"
+  | "delete_customer"
+  | "billing_access"
+  | "settings_access";
+
+export interface PermissionFlags {
+  radius_access: boolean;
+  disconnect_user: boolean;
+  create_pppoe: boolean;
+  view_customers: boolean;
+  delete_customer: boolean;
+  billing_access: boolean;
+  settings_access: boolean;
+}
 
 export interface NasEntry {
   id: string;
@@ -210,14 +232,17 @@ export interface PermissionRole {
   description: string;
   memberCount: number;
   privilegeModel?: PrivilegeModel;
-  accounts?: PrivilegeAccount[];
+  permissions: PermissionFlags;
+  members?: PrivilegeMember[];
 }
 
-export interface PrivilegeAccount {
+export interface PrivilegeMember {
   id: string;
   fullName: string;
   email: string;
-  roleId: string;
+  role: MemberRole;
+  permissionProfileId: string;
+  isActive: boolean;
 }
 
 export interface SettingsLog {
@@ -226,6 +251,11 @@ export interface SettingsLog {
   actor: string;
   description: string;
   createdAt: string;
+}
+
+export interface NotificationSettings {
+  message: string;
+  reminderDays: number;
 }
 
 export interface Customer {

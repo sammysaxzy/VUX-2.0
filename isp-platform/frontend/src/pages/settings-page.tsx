@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { NasEntry, ServicePlan, SettingsTab } from "@/types";
+import { canManagePermissions, flattenPermissionMembers, hasPermission } from "@/lib/permissions";
+import { useAppStore } from "@/store/app-store";
+import { useAdminStore } from "@/store/admin-store";
+import type { MemberRole, NasEntry, ServicePlan, SettingsTab } from "@/types";
 import {
   useCreateNasEntry,
   useCreateServicePlan,
   useCreateZone,
+  useDeletePrivilegeAccounts,
   useDeleteNasEntries,
-  useDeletePermissionRoles,
   useDeleteServicePlans,
   useDeleteSettingsLogs,
   useDeleteZones,
@@ -17,6 +20,7 @@ import {
   useUpdateNasEntry,
   useZones,
 } from "@/hooks/api/use-settings";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SettingsLayout } from "@/components/settings/settings-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +28,6 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
-import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatRelativeDate } from "@/lib/utils";
 
@@ -32,7 +35,7 @@ const blankNasForm = { name: "", ipAddress: "", sharedSecret: "" };
 const blankZoneForm = { name: "", nasId: "", description: "" };
 const blankServiceForm: ServicePlan = { name: "", speed: "", price: "", rateLimit: "", description: "" };
 
-type SettingsDeleteTarget = "nas" | "zones" | "permissions" | "services" | "logs";
+type SettingsDeleteTarget = "nas" | "zones" | "services" | "logs" | "members";
 
 function toggleSelection(values: string[], id: string) {
   return values.includes(id) ? values.filter((entry) => entry !== id) : [...values, id];
@@ -48,6 +51,7 @@ function toggleSelectAll(values: string[], ids: string[]) {
 
 export function SettingsPage() {
   const [searchParams] = useSearchParams();
+  const user = useAppStore((state) => state.user);
   const [nasModalOpen, setNasModalOpen] = useState(false);
   const [editingNas, setEditingNas] = useState<NasEntry | null>(null);
   const [nasForm, setNasForm] = useState(blankNasForm);
@@ -55,9 +59,9 @@ export function SettingsPage() {
   const [serviceForm, setServiceForm] = useState<ServicePlan>(blankServiceForm);
   const [selectedNasIds, setSelectedNasIds] = useState<string[]>([]);
   const [selectedZoneIds, setSelectedZoneIds] = useState<string[]>([]);
-  const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>([]);
   const [selectedServiceNames, setSelectedServiceNames] = useState<string[]>([]);
   const [selectedLogIds, setSelectedLogIds] = useState<string[]>([]);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<SettingsDeleteTarget | null>(null);
 
   const nasQuery = useNasEntries();
@@ -68,12 +72,28 @@ export function SettingsPage() {
   const createZoneMutation = useCreateZone();
   const deleteZonesMutation = useDeleteZones();
   const permissionsQuery = usePermissionRoles();
-  const deletePermissionsMutation = useDeletePermissionRoles();
+  const deletePrivilegeAccountsMutation = useDeletePrivilegeAccounts();
   const servicesQuery = useServicePlans();
   const createServiceMutation = useCreateServicePlan();
   const deleteServicesMutation = useDeleteServicePlans();
   const logsQuery = useSettingsLogs();
   const deleteLogsMutation = useDeleteSettingsLogs();
+  const canAccessSettings = hasPermission(user, "settings_access");
+  const canEditPermissions = canManagePermissions(user);
+  const members = useAdminStore((state) => state.members);
+  const setMembers = useAdminStore((state) => state.setMembers);
+
+  if (!canAccessSettings) {
+    return (
+      <SettingsLayout activeTab="nas" summary="Restricted">
+        <Card>
+          <CardContent className="py-10 text-center text-muted-foreground">
+            Your permission profile does not allow access to Settings.
+          </CardContent>
+        </Card>
+      </SettingsLayout>
+    );
+  }
 
   const activeTab = useMemo<SettingsTab>(() => {
     const requestedTab = searchParams.get("tab");
@@ -96,7 +116,6 @@ export function SettingsPage() {
     if (activeTab === "services") return `${serviceCount} bandwidth services`;
     return `${logCount} audit events`;
   }, [activeTab, logCount, nasCount, permissionsQuery.data?.length, serviceCount, zoneCount]);
-
   const openCreateNas = () => {
     setEditingNas(null);
     setNasForm(blankNasForm);
@@ -149,29 +168,49 @@ export function SettingsPage() {
 
   const nasIds = useMemo(() => nasQuery.data?.map((entry) => entry.id) ?? [], [nasQuery.data]);
   const zoneIds = useMemo(() => zonesQuery.data?.map((zone) => zone.id) ?? [], [zonesQuery.data]);
-  const permissionIds = useMemo(() => permissionsQuery.data?.map((role) => role.id) ?? [], [permissionsQuery.data]);
   const serviceNames = useMemo(() => servicesQuery.data?.map((plan) => plan.name) ?? [], [servicesQuery.data]);
   const logIds = useMemo(() => logsQuery.data?.map((log) => log.id) ?? [], [logsQuery.data]);
 
   useEffect(() => {
     setSelectedNasIds((current) => current.filter((id) => nasIds.includes(id)));
     setSelectedZoneIds((current) => current.filter((id) => zoneIds.includes(id)));
-    setSelectedPermissionIds((current) => current.filter((id) => permissionIds.includes(id)));
     setSelectedServiceNames((current) => current.filter((name) => serviceNames.includes(name)));
     setSelectedLogIds((current) => current.filter((id) => logIds.includes(id)));
-  }, [logIds, nasIds, permissionIds, serviceNames, zoneIds]);
+  }, [logIds, nasIds, serviceNames, zoneIds]);
+
+  useEffect(() => {
+    setMembers(flattenPermissionMembers(permissionsQuery.data ?? []));
+  }, [permissionsQuery.data, setMembers]);
+
+  useEffect(() => {
+    setSelectedMemberIds((current) => current.filter((id) => members.some((member) => member.id === id)));
+  }, [members]);
+
+  const toggleSelectMember = (id: string) => {
+    setSelectedMemberIds((current) => (current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]));
+  };
+
+  const toggleSelectAllMembers = () => {
+    setSelectedMemberIds((current) => (current.length === members.length ? [] : members.map((member) => member.id)));
+  };
+
+  const roleBadgeVariant: Record<MemberRole, "danger" | "info" | "success"> = {
+    admin: "danger",
+    support: "info",
+    noc: "success",
+  };
 
   const deleteCount =
     deleteTarget === "nas"
       ? selectedNasIds.length
       : deleteTarget === "zones"
       ? selectedZoneIds.length
-      : deleteTarget === "permissions"
-      ? selectedPermissionIds.length
       : deleteTarget === "services"
       ? selectedServiceNames.length
       : deleteTarget === "logs"
       ? selectedLogIds.length
+      : deleteTarget === "members"
+      ? selectedMemberIds.length
       : 0;
 
   const confirmDelete = () => {
@@ -193,15 +232,6 @@ export function SettingsPage() {
       });
       return;
     }
-    if (deleteTarget === "permissions" && selectedPermissionIds.length > 0) {
-      deletePermissionsMutation.mutate(selectedPermissionIds, {
-        onSuccess: () => {
-          setSelectedPermissionIds([]);
-          setDeleteTarget(null);
-        },
-      });
-      return;
-    }
     if (deleteTarget === "services" && selectedServiceNames.length > 0) {
       deleteServicesMutation.mutate(selectedServiceNames, {
         onSuccess: () => {
@@ -215,6 +245,15 @@ export function SettingsPage() {
       deleteLogsMutation.mutate(selectedLogIds, {
         onSuccess: () => {
           setSelectedLogIds([]);
+          setDeleteTarget(null);
+        },
+      });
+      return;
+    }
+    if (deleteTarget === "members" && selectedMemberIds.length > 0) {
+      deletePrivilegeAccountsMutation.mutate(selectedMemberIds, {
+        onSuccess: () => {
+          setSelectedMemberIds([]);
           setDeleteTarget(null);
         },
       });
@@ -386,70 +425,68 @@ export function SettingsPage() {
         (permissionsQuery.isLoading || !permissionsQuery.data ? (
           <PageSkeleton />
         ) : (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Permissions</CardTitle>
-                <CardDescription>Role-based access control across OSS/BSS operational domains.</CardDescription>
-              </div>
-              <Button type="button" variant="danger" disabled={selectedPermissionIds.length === 0} onClick={() => setDeleteTarget("permissions")}>
-                Delete
-              </Button>
-            </CardHeader>
-            <CardContent className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">
-                      <input
-                        type="checkbox"
-                        checked={permissionIds.length > 0 && permissionIds.every((id) => selectedPermissionIds.includes(id))}
-                        onChange={() => setSelectedPermissionIds((current) => toggleSelectAll(current, permissionIds))}
-                        aria-label="Select all permissions"
-                      />
-                    </TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Privilege Model</TableHead>
-                    <TableHead>Scope</TableHead>
-                    <TableHead>Accounts</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Members</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {permissionsQuery.data.map((role) => (
-                    <TableRow key={role.id}>
-                      <TableCell>
-                        <input
-                          type="checkbox"
-                          checked={selectedPermissionIds.includes(role.id)}
-                          onChange={() => setSelectedPermissionIds((current) => toggleSelection(current, role.id))}
-                          aria-label={`Select ${role.name}`}
-                        />
-                      </TableCell>
-                      <TableCell>{role.name}</TableCell>
-                      <TableCell>{role.privilegeModel ?? "Role Based"}</TableCell>
-                      <TableCell>{role.scope}</TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          {(role.accounts ?? []).slice(0, 2).map((account) => (
-                            <p key={account.id} className="text-xs">
-                              {account.fullName}
-                            </p>
-                          ))}
-                          {(role.accounts ?? []).length > 2 ? (
-                            <p className="text-xs text-muted-foreground">+{(role.accounts ?? []).length - 2} more</p>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                      <TableCell>{role.description}</TableCell>
-                      <TableCell>{role.accounts?.length ?? role.memberCount}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <div className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Member Access</CardTitle>
+                  <CardDescription>Members created from Admin appear here instantly for permission operations.</CardDescription>
+                </div>
+                <Button
+                  type="button"
+                  variant="danger"
+                  disabled={!canEditPermissions || selectedMemberIds.length === 0}
+                  onClick={() => setDeleteTarget("members")}
+                >
+                  Delete
+                </Button>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                {members.length === 0 ? (
+                  <div className="py-10 text-center text-muted-foreground">
+                    No members found. Create members from Admin page.
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10">
+                          <input
+                            type="checkbox"
+                            checked={members.length > 0 && selectedMemberIds.length === members.length}
+                            onChange={toggleSelectAllMembers}
+                            aria-label="Select all members"
+                          />
+                        </TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Role</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {members.map((member) => (
+                        <TableRow key={member.id}>
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              checked={selectedMemberIds.includes(member.id)}
+                              onChange={() => toggleSelectMember(member.id)}
+                              aria-label={`Select ${member.fullName}`}
+                            />
+                          </TableCell>
+                          <TableCell>{member.fullName}</TableCell>
+                          <TableCell>{member.email}</TableCell>
+                          <TableCell>
+                            <Badge variant={roleBadgeVariant[member.role]}>{member.role}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         ))}
 
       {activeTab === "services" &&
@@ -611,24 +648,24 @@ export function SettingsPage() {
           <Button
             type="button"
             variant="danger"
-            disabled={
-              deleteCount === 0 ||
-              deleteNasMutation.isPending ||
+              disabled={
+                deleteCount === 0 ||
+                deleteNasMutation.isPending ||
+                deleteZonesMutation.isPending ||
+                deleteServicesMutation.isPending ||
+                deleteLogsMutation.isPending ||
+                deletePrivilegeAccountsMutation.isPending
+              }
+              onClick={confirmDelete}
+            >
+              {deleteNasMutation.isPending ||
               deleteZonesMutation.isPending ||
-              deletePermissionsMutation.isPending ||
               deleteServicesMutation.isPending ||
-              deleteLogsMutation.isPending
-            }
-            onClick={confirmDelete}
-          >
-            {deleteNasMutation.isPending ||
-            deleteZonesMutation.isPending ||
-            deletePermissionsMutation.isPending ||
-            deleteServicesMutation.isPending ||
-            deleteLogsMutation.isPending
-              ? "Deleting..."
-              : "Confirm Delete"}
-          </Button>
+              deleteLogsMutation.isPending ||
+              deletePrivilegeAccountsMutation.isPending
+                ? "Deleting..."
+                : "Confirm Delete"}
+            </Button>
         </div>
       </Dialog>
 

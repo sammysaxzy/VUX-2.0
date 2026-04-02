@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { hasPermission } from "@/lib/permissions";
+import { useAppStore } from "@/store/app-store";
 import type { CustomerType, PriorityLevel, RadiusTab } from "@/types";
 import {
-  useActivateRadiusUser,
   useBulkImportRadiusUsers,
   useCreateRadiusUser,
   useDeleteRadiusUsers,
   useDisconnectSession,
-  useExtendRadiusUser,
   useExportRadiusSessions,
   useExportRadiusUsers,
   useRadiusSessions,
@@ -24,6 +24,7 @@ import { useRadiusRealtime } from "@/hooks/use-radius-realtime";
 import { RadiusSessionTable } from "@/components/radius/radius-session-table";
 import { RadiusTabs } from "@/components/radius/radius-tabs";
 import { UsersTable } from "@/components/radius/users-table";
+import { toDateTimeLocalValue } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
@@ -36,8 +37,6 @@ import {
   RADIUS_USER_IMPORT_EXPORT_SCHEMA,
 } from "@/features/import-export/schema";
 import { downloadBlob, normalizeExportBlob, mapRadiusUsersToExportRows, mapSessionsToExportRows } from "@/features/import-export/utils";
-import { toDateTimeLocalValue } from "@/lib/utils";
-
 type RadiusUserForm = {
   username: string;
   password: string;
@@ -63,11 +62,11 @@ const baseForm: RadiusUserForm = {
 };
 
 export function RadiusPage() {
+  const user = useAppStore((state) => state.user);
   const [activeTab, setActiveTab] = useState<RadiusTab>("sessions");
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [extendModal, setExtendModal] = useState<{ username: string; expirationDate: string } | null>(null);
   const [selectedUsernames, setSelectedUsernames] = useState<string[]>([]);
   const [deleteUsersOpen, setDeleteUsersOpen] = useState(false);
   const [newUser, setNewUser] = useState<RadiusUserForm>(baseForm);
@@ -76,7 +75,6 @@ export function RadiusPage() {
   const sessionsQuery = useRadiusSessions();
   const disconnectMutation = useDisconnectSession();
   const reconnectMutation = useReconnectSession();
-  const extendUserMutation = useExtendRadiusUser();
   const usersQuery = useRadiusUsers();
   const deleteUsersMutation = useDeleteRadiusUsers();
   const servicesQuery = useServicePlans();
@@ -84,12 +82,24 @@ export function RadiusPage() {
   const nasQuery = useNasEntries();
   const createUserMutation = useCreateRadiusUser();
   const bulkImportMutation = useBulkImportRadiusUsers();
-  const activateUserMutation = useActivateRadiusUser();
   const syncUserMutation = useSyncRadiusUser();
   const exportUsersMutation = useExportRadiusUsers();
   const exportSessionsMutation = useExportRadiusSessions();
+  const canAccessRadius = hasPermission(user, "radius_access");
+  const canDisconnectUsers = hasPermission(user, "disconnect_user");
+  const canCreatePppoe = hasPermission(user, "create_pppoe");
 
   useRadiusRealtime();
+
+  if (!canAccessRadius) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center text-muted-foreground">
+          Your permission profile does not allow access to RADIUS operations.
+        </CardContent>
+      </Card>
+    );
+  }
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -175,6 +185,10 @@ export function RadiusPage() {
     hasValidExpirationDate;
 
   const handleCreateUser = () => {
+    if (!canCreatePppoe) {
+      toast.error("Your permission profile cannot create PPPoE users.");
+      return;
+    }
     if (!newUser.username.trim() || !newUser.password.trim() || !newUser.plan.trim() || !newUser.zoneId.trim()) {
       toast.error("Fill in the required PPPoE fields.");
       return;
@@ -265,10 +279,15 @@ export function RadiusPage() {
           ) : null}
           {activeTab === "users" ? (
             <>
-              <Button type="button" variant="danger" disabled={selectedUsernames.length === 0} onClick={() => setDeleteUsersOpen(true)}>
+              <Button
+                type="button"
+                variant="danger"
+                disabled={!canCreatePppoe || selectedUsernames.length === 0}
+                onClick={() => setDeleteUsersOpen(true)}
+              >
                 Delete
               </Button>
-              <Button type="button" variant="outline" onClick={() => setImportOpen(true)}>
+              <Button type="button" variant="outline" disabled={!canCreatePppoe} onClick={() => setImportOpen(true)}>
                 Import
               </Button>
               <ExportButton label="Export" isLoading={exportUsersMutation.isPending} onClick={() => void handleExportUsers()} />
@@ -281,7 +300,7 @@ export function RadiusPage() {
             />
           )}
           {activeTab === "sessions" ? (
-            <Button type="button" onClick={() => setCreateOpen(true)}>
+            <Button type="button" disabled={!canCreatePppoe} onClick={() => setCreateOpen(true)}>
               Create PPPoE
             </Button>
           ) : null}
@@ -295,11 +314,9 @@ export function RadiusPage() {
           ) : (
             <RadiusSessionTable
               sessions={sessionsQuery.data}
-              onDisconnect={(username) => disconnectMutation.mutate(username)}
-              onReconnect={(username) => reconnectMutation.mutate(username)}
-              busyDisconnect={disconnectMutation.variables}
-              busyReconnect={reconnectMutation.variables}
-              now={now}
+              onSync={(username) => syncUserMutation.mutate(username)}
+              busySync={syncUserMutation.variables}
+              canSync={canCreatePppoe}
             />
           ))}
 
@@ -313,16 +330,12 @@ export function RadiusPage() {
                 selectedUsernames={selectedUsernames}
                 onToggleSelect={toggleUserSelection}
                 onToggleSelectAll={toggleAllVisibleUsers}
-                onActivate={(username) => activateUserMutation.mutate(username)}
-                onSync={(username) => syncUserMutation.mutate(username)}
-                onExtend={(username) => {
-                  const target = filteredUsers.find((user) => user.username === username);
-                  if (!target) return;
-                  setExtendModal({ username, expirationDate: toDateTimeLocalValue(target.expirationDate) });
-                }}
-                busyActivate={activateUserMutation.variables}
-                busySync={syncUserMutation.variables}
-                busyExtend={extendUserMutation.variables?.username}
+                onDisconnect={(username) => disconnectMutation.mutate(username)}
+                onReconnect={(username) => reconnectMutation.mutate(username)}
+                busyDisconnect={disconnectMutation.variables}
+                busyReconnect={reconnectMutation.variables}
+                canManageUsers={canCreatePppoe}
+                canDisconnect={canDisconnectUsers}
                 now={now}
               />
 
@@ -348,7 +361,10 @@ export function RadiusPage() {
         existingUsernames={existingUsernames}
         validNasIds={validNasIds}
         importing={bulkImportMutation.isPending}
-        onConfirmImport={(payload) => bulkImportMutation.mutateAsync(payload).then(() => undefined)}
+        onConfirmImport={(payload) => {
+          if (!canCreatePppoe) return Promise.resolve(undefined);
+          return bulkImportMutation.mutateAsync(payload).then(() => undefined);
+        }}
       />
 
       <Dialog
@@ -361,7 +377,12 @@ export function RadiusPage() {
           <Button type="button" variant="ghost" onClick={() => setDeleteUsersOpen(false)}>
             Cancel
           </Button>
-          <Button type="button" variant="danger" disabled={deleteUsersMutation.isPending} onClick={confirmDeleteUsers}>
+          <Button
+            type="button"
+            variant="danger"
+            disabled={!canCreatePppoe || deleteUsersMutation.isPending}
+            onClick={confirmDeleteUsers}
+          >
             {deleteUsersMutation.isPending ? "Deleting..." : "Confirm Delete"}
           </Button>
         </div>
@@ -371,7 +392,10 @@ export function RadiusPage() {
         open={createOpen}
         title="Create PPPoE User"
         description="Provision a RADIUS user only. CRM and shared service definitions remain outside this module."
-        onOpenChange={setCreateOpen}
+        onOpenChange={(open) => {
+          if (!canCreatePppoe) return;
+          setCreateOpen(open);
+        }}
       >
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
@@ -530,54 +554,6 @@ export function RadiusPage() {
         </div>
       </Dialog>
 
-      <Dialog
-        open={Boolean(extendModal)}
-        title="Extend Subscription"
-        description="Select a new expiration date for this PPPoE account."
-        onOpenChange={(open) => {
-          if (!open) setExtendModal(null);
-        }}
-      >
-        <div className="space-y-4">
-          <div className="space-y-1">
-            <Label htmlFor="radius-extend-date">Expiration Date</Label>
-            <Input
-              id="radius-extend-date"
-              type="datetime-local"
-              value={extendModal?.expirationDate ?? ""}
-              min={minDateTime}
-              onChange={(event) =>
-                setExtendModal((current) => (current ? { ...current, expirationDate: event.target.value } : current))
-              }
-            />
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => setExtendModal(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              disabled={
-                !extendModal?.expirationDate ||
-                new Date(extendModal.expirationDate).getTime() <= now ||
-                extendUserMutation.isPending
-              }
-              onClick={() => {
-                if (!extendModal) return;
-                extendUserMutation.mutate(
-                  {
-                    username: extendModal.username,
-                    expirationDate: new Date(extendModal.expirationDate).toISOString(),
-                  },
-                  { onSuccess: () => setExtendModal(null) },
-                );
-              }}
-            >
-              {extendUserMutation.isPending ? "Saving..." : "Extend"}
-            </Button>
-          </div>
-        </div>
-      </Dialog>
     </div>
   );
 }

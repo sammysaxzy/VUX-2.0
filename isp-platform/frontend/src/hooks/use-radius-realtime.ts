@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAppStore, useTenantId } from "@/store/app-store";
-import { radiusWsUrl } from "@/lib/api/client";
+import { radiusWsUrl, USE_MOCKS } from "@/lib/api/client";
 import type { RadiusRealtimeEvent, RadiusSession } from "@/types";
 
 export function useRadiusRealtime() {
@@ -13,6 +13,7 @@ export function useRadiusRealtime() {
 
   useEffect(() => {
     if (!tenantId) return undefined;
+    if (USE_MOCKS) return undefined;
 
     const url = new URL(radiusWsUrl, window.location.origin);
     url.searchParams.set("tenantId", tenantId);

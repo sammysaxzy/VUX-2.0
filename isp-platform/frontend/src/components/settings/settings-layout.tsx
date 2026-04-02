@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { hasPermission } from "@/lib/permissions";
+import { useAppStore } from "@/store/app-store";
 import type { SettingsTab } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +32,9 @@ export function SettingsLayout({
 }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
+  const user = useAppStore((state) => state.user);
+  const canAccessSettings = hasPermission(user, "settings_access");
+  const visibleTabs = canAccessSettings ? tabs : [];
 
   return (
     <div className="space-y-5 animate-fade-up">
@@ -40,7 +45,7 @@ export function SettingsLayout({
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          {tabs.map((tab) => {
+          {visibleTabs.map((tab) => {
             const isActive =
               tab.key === "configuration"
                 ? location.pathname.startsWith("/settings/configuration")

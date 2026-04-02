@@ -1,12 +1,15 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { hasPermission } from "@/lib/permissions";
 import { randomId } from "@/lib/utils";
+import { useAppStore } from "@/store/app-store";
 import type { Customer, FibreCable, NetworkNode } from "@/types";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -40,10 +43,14 @@ type Props = {
   cables: FibreCable[];
   tenantId: string;
   onSubmit: (payload: Customer) => void;
+  onDelete?: (customerId: string) => void;
   submitting?: boolean;
+  deleting?: boolean;
 };
 
-export function CustomerForm({ initial, nodes, cables, tenantId, onSubmit, submitting }: Props) {
+export function CustomerForm({ initial, nodes, cables, tenantId, onSubmit, onDelete, submitting, deleting }: Props) {
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const user = useAppStore((state) => state.user);
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -71,6 +78,7 @@ export function CustomerForm({ initial, nodes, cables, tenantId, onSubmit, submi
     [mstId, nodes],
   );
   const allCores = useMemo(() => cables.flatMap((cable) => cable.cores), [cables]);
+  const canDeleteCustomer = Boolean(initial && hasPermission(user, "delete_customer"));
 
   const save = form.handleSubmit((values) => {
     onSubmit({
@@ -95,106 +103,138 @@ export function CustomerForm({ initial, nodes, cables, tenantId, onSubmit, submi
   });
 
   return (
-    <form onSubmit={save} className="space-y-5">
-      <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <Label htmlFor="name">Customer Name</Label>
-          <Input id="name" {...form.register("name")} />
-          {form.formState.errors.name ? (
-            <p className="mt-1 text-xs text-danger">{form.formState.errors.name.message}</p>
-          ) : null}
+    <>
+      <form onSubmit={save} className="space-y-5">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <Label htmlFor="name">Customer Name</Label>
+            <Input id="name" {...form.register("name")} />
+            {form.formState.errors.name ? (
+              <p className="mt-1 text-xs text-danger">{form.formState.errors.name.message}</p>
+            ) : null}
+          </div>
+          <div>
+            <Label htmlFor="email">Email</Label>
+            <Input id="email" type="email" {...form.register("email")} />
+          </div>
+          <div>
+            <Label htmlFor="phone">Phone</Label>
+            <Input id="phone" {...form.register("phone")} />
+          </div>
+          <div>
+            <Label htmlFor="accountStatus">Account Status</Label>
+            <Select id="accountStatus" {...form.register("accountStatus")}>
+              <option value="active">Active</option>
+              <option value="suspended">Suspended</option>
+            </Select>
+          </div>
         </div>
-        <div>
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" {...form.register("email")} />
-        </div>
-        <div>
-          <Label htmlFor="phone">Phone</Label>
-          <Input id="phone" {...form.register("phone")} />
-        </div>
-        <div>
-          <Label htmlFor="accountStatus">Account Status</Label>
-          <Select id="accountStatus" {...form.register("accountStatus")}>
-            <option value="active">Active</option>
-            <option value="suspended">Suspended</option>
-          </Select>
-        </div>
-      </div>
 
-      <div>
-        <Label htmlFor="address">Address</Label>
-        <Textarea id="address" {...form.register("address")} />
-      </div>
+        <div>
+          <Label htmlFor="address">Address</Label>
+          <Textarea id="address" {...form.register("address")} />
+        </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <Label htmlFor="lat">Latitude</Label>
-          <Input id="lat" type="number" step="any" {...form.register("lat")} />
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <Label htmlFor="lat">Latitude</Label>
+            <Input id="lat" type="number" step="any" {...form.register("lat")} />
+          </div>
+          <div>
+            <Label htmlFor="lng">Longitude</Label>
+            <Input id="lng" type="number" step="any" {...form.register("lng")} />
+          </div>
         </div>
-        <div>
-          <Label htmlFor="lng">Longitude</Label>
-          <Input id="lng" type="number" step="any" {...form.register("lng")} />
-        </div>
-      </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <div>
-          <Label htmlFor="mstId">Assigned MST</Label>
-          <Select id="mstId" {...form.register("mstId")}>
-            <option value="">Select MST</option>
-            {nodes
-              .filter((node) => node.type === "mst")
-              .map((mst) => (
-                <option key={mst.id} value={mst.id}>
-                  {mst.name}
-                </option>
-              ))}
-          </Select>
+        <div className="grid gap-4 md:grid-cols-3">
+          <div>
+            <Label htmlFor="mstId">Assigned MST</Label>
+            <Select id="mstId" {...form.register("mstId")}>
+              <option value="">Select MST</option>
+              {nodes
+                .filter((node) => node.type === "mst")
+                .map((mst) => (
+                  <option key={mst.id} value={mst.id}>
+                    {mst.name}
+                  </option>
+                ))}
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="onuSerial">ONU Serial</Label>
+            <Input id="onuSerial" {...form.register("onuSerial")} />
+          </div>
+          <div>
+            <Label htmlFor="ponPort">OLT/PON Port</Label>
+            <Input id="ponPort" {...form.register("ponPort")} placeholder="1/3/7" />
+          </div>
         </div>
-        <div>
-          <Label htmlFor="onuSerial">ONU Serial</Label>
-          <Input id="onuSerial" {...form.register("onuSerial")} />
-        </div>
-        <div>
-          <Label htmlFor="ponPort">OLT/PON Port</Label>
-          <Input id="ponPort" {...form.register("ponPort")} placeholder="1/3/7" />
-        </div>
-      </div>
 
-      {selectedMst?.splitterPorts ? (
-        <SplitterSelector
-          ports={selectedMst.splitterPorts}
-          selectedPort={form.watch("splitterPort")}
-          onSelect={(port) => form.setValue("splitterPort", port)}
+        {selectedMst?.splitterPorts ? (
+          <SplitterSelector
+            ports={selectedMst.splitterPorts}
+            selectedPort={form.watch("splitterPort")}
+            onSelect={(port) => form.setValue("splitterPort", port)}
+          />
+        ) : null}
+
+        <FibreViewer
+          cores={allCores}
+          selectedCoreId={form.watch("fibreCoreId")}
+          onSelect={(coreId) => form.setValue("fibreCoreId", coreId)}
         />
-      ) : null}
 
-      <FibreViewer
-        cores={allCores}
-        selectedCoreId={form.watch("fibreCoreId")}
-        onSelect={(coreId) => form.setValue("fibreCoreId", coreId)}
-      />
+        <div className="grid gap-4 md:grid-cols-3">
+          <div>
+            <Label htmlFor="oltName">OLT</Label>
+            <Input id="oltName" {...form.register("oltName")} />
+          </div>
+          <div>
+            <Label htmlFor="rxSignal">RX (dBm)</Label>
+            <Input id="rxSignal" type="number" step="any" {...form.register("rxSignal")} />
+          </div>
+          <div>
+            <Label htmlFor="txSignal">TX (dBm)</Label>
+            <Input id="txSignal" type="number" step="any" {...form.register("txSignal")} />
+          </div>
+        </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <div>
-          <Label htmlFor="oltName">OLT</Label>
-          <Input id="oltName" {...form.register("oltName")} />
+        <div className="flex justify-end gap-2">
+          {canDeleteCustomer ? (
+            <Button type="button" variant="danger" disabled={submitting || deleting} onClick={() => setDeleteDialogOpen(true)}>
+              Delete Customer
+            </Button>
+          ) : null}
+          <Button type="submit" disabled={submitting || deleting}>
+            {submitting ? "Saving..." : "Save Customer"}
+          </Button>
         </div>
-        <div>
-          <Label htmlFor="rxSignal">RX (dBm)</Label>
-          <Input id="rxSignal" type="number" step="any" {...form.register("rxSignal")} />
-        </div>
-        <div>
-          <Label htmlFor="txSignal">TX (dBm)</Label>
-          <Input id="txSignal" type="number" step="any" {...form.register("txSignal")} />
-        </div>
-      </div>
+      </form>
 
-      <div className="flex justify-end gap-2">
-        <Button type="submit" disabled={submitting}>
-          {submitting ? "Saving..." : "Save Customer"}
-        </Button>
-      </div>
-    </form>
+      <Dialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete Customer"
+        description="Are you sure you want to delete this customer? This action cannot be undone."
+        className="max-w-md"
+      >
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" disabled={deleting} onClick={() => setDeleteDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            disabled={deleting}
+            onClick={() => {
+              if (!initial || !onDelete) return;
+              onDelete(initial.id);
+            }}
+          >
+            {deleting ? "Deleting..." : "Confirm Delete"}
+          </Button>
+        </div>
+      </Dialog>
+    </>
   );
 }

@@ -9,6 +9,7 @@ type AppState = {
   token?: string;
   user?: User;
   branding?: TenantBranding;
+  activeMemberId?: string;
   selectedMSTId?: string;
   selectedFiberId?: string;
   selectedClosureId?: string;
@@ -21,6 +22,7 @@ type AppState = {
   recentActivity: EngineerActivity[];
   setAuth: (payload: { token: string; user: User; branding: TenantBranding }) => void;
   setBranding: (branding: TenantBranding) => void;
+  setSimulatedUser: (user: User, memberId?: string) => void;
   logout: () => void;
   setSelectedMST: (mstId?: string) => void;
   setSelectedFiber: (fiberId?: string) => void;
@@ -45,6 +47,7 @@ export const useAppStore = create<AppState>()(
       token: undefined,
       user: undefined,
       branding: undefined,
+      activeMemberId: undefined,
       selectedMSTId: undefined,
       selectedFiberId: undefined,
       selectedClosureId: undefined,
@@ -53,9 +56,10 @@ export const useAppStore = create<AppState>()(
       activePanel: null,
       activeModal: null,
       ...initialRealtime,
-      setAuth: ({ token, user, branding }) => set({ token, user, branding }),
+      setAuth: ({ token, user, branding }) => set({ token, user, branding, activeMemberId: undefined }),
       setBranding: (branding) => set({ branding }),
-      logout: () => set({ token: undefined, user: undefined, branding: undefined, ...initialRealtime }),
+      setSimulatedUser: (user, memberId) => set({ user, activeMemberId: memberId }),
+      logout: () => set({ token: undefined, user: undefined, branding: undefined, activeMemberId: undefined, ...initialRealtime }),
       setSelectedMST: (mstId) => set({ selectedMSTId: mstId }),
       setSelectedFiber: (fiberId) => set({ selectedFiberId: fiberId }),
       setSelectedClosure: (closureId) => set({ selectedClosureId: closureId }),
@@ -79,11 +83,12 @@ export const useAppStore = create<AppState>()(
     {
       name: "oss-bss-state",
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        token: state.token,
-        user: state.user,
-        branding: state.branding,
-      }),
+        partialize: (state) => ({
+          token: state.token,
+          user: state.user,
+          branding: state.branding,
+          activeMemberId: state.activeMemberId,
+        }),
     },
   ),
 );

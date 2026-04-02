@@ -159,7 +159,6 @@ export const configurationItems: ConfigurationItem[] = [
         description: "Choose how system events fan out to customers and operations teams.",
         fields: [
           { type: "toggle", id: "notify-payment-success", label: "Payment Success Alerts", helper: "Notify customers immediately after successful payment." },
-          { type: "toggle", id: "notify-expiry-warning", label: "Expiry Warnings", helper: "Send reminders before subscription expiration." },
           { type: "select", id: "default-channel", label: "Default Channel", options: ["Email", "SMS", "Email and SMS"] },
           { type: "textarea", id: "notification-notes", label: "Internal Rules Notes", placeholder: "Escalation, quiet hours, and exception handling..." },
         ],
