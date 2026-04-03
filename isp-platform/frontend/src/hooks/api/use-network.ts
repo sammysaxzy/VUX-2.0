@@ -201,6 +201,14 @@ export function useAssignClientToMstPort() {
       clientId: string;
       clientName: string;
       fiberCore: string;
+      coreId: string;
+      coreLabel: string;
+      cableId: string;
+      clientLocation: { lat: number; lng: number };
+      geometry: Array<{ lat: number; lng: number }>;
+      routeMode: "road" | "straight";
+      routeSource: "mapbox-directions" | "seeded" | "straight-line-fallback";
+      routeFallbackReason?: string;
     }) => apiClient.assignClientToMstPort(payload, tenantId, token),
     onSuccess: () => {
       toast.success("Client assigned to splitter port.");

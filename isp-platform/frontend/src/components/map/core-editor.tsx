@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 type CoreEditorProps = {
   cable: FibreCable;
+  disabled?: boolean;
   onSetCoreState: (payload: {
     cableId: string;
     coreId: string;
@@ -21,7 +22,7 @@ type CoreEditorProps = {
 
 type CoreAction = "assign" | "free" | "reroute";
 
-export function CoreEditor({ cable, onSetCoreState }: CoreEditorProps) {
+export function CoreEditor({ cable, disabled = false, onSetCoreState }: CoreEditorProps) {
   const [action, setAction] = useState<CoreAction>("assign");
   const [coreId, setCoreId] = useState("");
   const [fromEndpoint, setFromEndpoint] = useState(cable.startMstId ?? cable.fromNodeId);
@@ -36,12 +37,12 @@ export function CoreEditor({ cable, onSetCoreState }: CoreEditorProps) {
   return (
     <div className="space-y-2 rounded-xl border border-border/70 bg-background/60 p-3">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Core Editor</p>
-      <Select value={action} onChange={(event) => setAction(event.target.value as CoreAction)}>
+      <Select value={action} disabled={disabled} onChange={(event) => setAction(event.target.value as CoreAction)}>
         <option value="assign">Assign Free Core</option>
         <option value="free">Free Used Core</option>
         <option value="reroute">Re-route Used Core</option>
       </Select>
-      <Select value={coreId} onChange={(event) => setCoreId(event.target.value)}>
+      <Select value={coreId} disabled={disabled} onChange={(event) => setCoreId(event.target.value)}>
         <option value="">Select core</option>
         {options.map((core) => (
           <option key={core.id} value={core.id}>
@@ -52,15 +53,15 @@ export function CoreEditor({ cable, onSetCoreState }: CoreEditorProps) {
 
       {action !== "free" ? (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <Input value={fromEndpoint} onChange={(event) => setFromEndpoint(event.target.value)} placeholder="From (MST/Client)" />
-          <Input value={toEndpoint} onChange={(event) => setToEndpoint(event.target.value)} placeholder="To (MST/Client)" />
+          <Input value={fromEndpoint} disabled={disabled} onChange={(event) => setFromEndpoint(event.target.value)} placeholder="From (MST/Client)" />
+          <Input value={toEndpoint} disabled={disabled} onChange={(event) => setToEndpoint(event.target.value)} placeholder="To (MST/Client)" />
           <div className="sm:col-span-2">
-            <Textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Engineering note for this core path" />
+            <Textarea value={note} disabled={disabled} onChange={(event) => setNote(event.target.value)} placeholder="Engineering note for this core path" />
           </div>
         </div>
       ) : null}
       <Button
-        disabled={!selectedCore}
+        disabled={!selectedCore || disabled}
         onClick={() => {
           if (!selectedCore) return;
           if (action === "free") {

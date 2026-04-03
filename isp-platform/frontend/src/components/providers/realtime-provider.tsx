@@ -152,6 +152,30 @@ function patchMapEvent(queryClient: QueryClient, tenantId: string, mapEvent?: Da
 
       return next;
     });
+
+    if (mapEvent.customer) {
+      queryClient.setQueryData<NetworkNode[]>(["network-nodes", tenantId], (current) => {
+        if (!current) return current;
+        const customerNode: NetworkNode = {
+          id: mapEvent.customer?.id ?? "",
+          tenantId: mapEvent.customer?.tenantId ?? tenantId,
+          type: "customer",
+          name: mapEvent.customer?.name ?? "Customer",
+          location: mapEvent.customer?.location ?? { lat: 0, lng: 0 },
+          status:
+            mapEvent.customer?.accountStatus === "suspended"
+              ? "warning"
+              : mapEvent.customer?.online
+                ? "healthy"
+                : "warning",
+        };
+        const index = current.findIndex((node) => node.type === "customer" && node.id === customerNode.id);
+        if (index < 0) return [customerNode, ...current];
+        const next = [...current];
+        next[index] = { ...next[index], ...customerNode };
+        return next;
+      });
+    }
   }
 
   return touched;

@@ -3,6 +3,13 @@ import type {
   AlertItem,
   ClosureBox,
   Customer,
+  CustomerNotification,
+  CustomerPayment,
+  CustomerPlan,
+  CustomerPortalProfile,
+  CustomerTicket,
+  CustomerTicketCategory,
+  OnuTelemetryPayload,
   EngineerActivity,
   Fault,
   FibreCable,
@@ -10,11 +17,8 @@ import type {
   KpiSnapshot,
   NasEntry,
   NetworkNode,
-  NotificationSettings,
+  PermissionMember,
   PermissionRole,
-  PrivilegeMember,
-  PermissionFlags,
-  PrivilegeModel,
   RadiusBulkImportResult,
   RadiusSession,
   RadiusUser,
@@ -25,63 +29,19 @@ import type {
   TenantBranding,
   User,
   Zone,
+  UsageSnapshot,
 } from "@/types";
+import { calculatePolylineDistanceMeters } from "@/lib/fibre-routing";
+import { buildCustomerFromTelemetry } from "@/lib/onu-telemetry";
 import { randomId } from "@/lib/utils";
 
 const now = Date.now();
-const MOCK_STORAGE_KEY = "oss-bss-mock-backend";
 const splitterPortCount: Record<SplitterType, number> = {
   "1/2": 2,
   "1/4": 4,
   "1/8": 8,
   "1/16": 16,
 };
-
-type PersistedMockCollections = {
-  nodes: NetworkNode[];
-  cables: FibreCable[];
-  closures: ClosureBox[];
-  customers: Customer[];
-  faults: Fault[];
-  sessions: RadiusSession[];
-  servicePlans: ServicePlan[];
-  radiusUsers: RadiusUser[];
-  nasEntries: NasEntry[];
-  zones: Zone[];
-  permissionRoles: PermissionRole[];
-  settingsLogs: SettingsLog[];
-  notificationSettings: NotificationSettings;
-};
-
-function cloneValue<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
-
-function canUseStorage() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
-}
-
-function readPersistedMockCollections(): Partial<PersistedMockCollections> | null {
-  if (!canUseStorage()) return null;
-  try {
-    const raw = window.localStorage.getItem(MOCK_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Partial<PersistedMockCollections>) : null;
-  } catch {
-    return null;
-  }
-}
-
-function readPersistedCollection<K extends keyof PersistedMockCollections>(
-  key: K,
-  fallbackFactory: () => PersistedMockCollections[K],
-): PersistedMockCollections[K] {
-  const stored = readPersistedMockCollections()?.[key];
-  return stored ? cloneValue(stored) : fallbackFactory();
-}
-
-function replaceCollection<T>(target: T[], next: T[]) {
-  target.splice(0, target.length, ...cloneValue(next));
-}
 
 export function getSplitterPortCount(splitterType: SplitterType) {
   return splitterPortCount[splitterType];
@@ -100,35 +60,77 @@ export const mockUser: User = {
   fullName: "NOC Supervisor",
   role: "noc_engineer",
   tenantId: mockBranding.tenantId,
-  permissionProfileId: "role-1",
-  delete_customer: true,
-  permissions: {
-    radius_access: true,
-    disconnect_user: true,
-    create_pppoe: true,
-    view_customers: true,
-    delete_customer: true,
-    billing_access: true,
-    settings_access: true,
+};
+
+const mapPermissionMembers: PermissionMember[] = [
+  {
+    id: "perm-member-1",
+    userId: mockUser.id,
+    fullName: mockUser.fullName,
+    email: mockUser.email,
+    mapRole: "admin",
+    canDelete: true,
   },
-};
+  {
+    id: "perm-member-2",
+    userId: "u-field-1",
+    fullName: "Field Engineer East",
+    email: "field@westlink.io",
+    mapRole: "engineer",
+    canDelete: false,
+  },
+  {
+    id: "perm-member-3",
+    userId: "u-view-1",
+    fullName: "Audit Viewer",
+    email: "audit@westlink.io",
+    mapRole: "viewer",
+    canDelete: false,
+  },
+];
 
-export let mockNotificationSettings: NotificationSettings = {
-  message: "Dear {name}, your subscription will expire on {date}. Please renew.",
-  reminderDays: 3,
-};
-
-function createPermissionFlags(flags: Partial<PermissionFlags>): PermissionFlags {
-  return {
-    radius_access: false,
-    disconnect_user: false,
-    create_pppoe: false,
-    view_customers: false,
-    delete_customer: false,
-    billing_access: false,
-    settings_access: false,
-    ...flags,
+function buildPermissionRoles(members: PermissionMember[]): PermissionRole[] {
+  const grouped = {
+    admin: members.filter((member) => member.mapRole === "admin"),
+    engineer: members.filter((member) => member.mapRole === "engineer"),
+    viewer: members.filter((member) => member.mapRole === "viewer"),
   };
+
+  return [
+    {
+      id: "role-1",
+      name: "ADMIN",
+      scope: "map",
+      description: "Full access to add, edit, delete, assign clients, and manage map permissions.",
+      memberCount: grouped.admin.length,
+      mapRole: "admin",
+      permissions: ["add", "edit", "delete", "assign_client", "reroute_fibre", "manage_permissions"],
+      canGrantPermissions: true,
+      members: grouped.admin,
+    },
+    {
+      id: "role-2",
+      name: "ENGINEER",
+      scope: "map",
+      description: "Can add and edit infrastructure, assign clients from MST, and re-route fibre drops.",
+      memberCount: grouped.engineer.length,
+      mapRole: "engineer",
+      permissions: ["add", "edit", "assign_client", "reroute_fibre"],
+      canGrantPermissions: false,
+      members: grouped.engineer,
+    },
+    {
+      id: "role-3",
+      name: "VIEWER",
+      scope: "map",
+      description: "Read-only access to network topology, splitter usage, and client fibre paths.",
+      memberCount: grouped.viewer.length,
+      mapRole: "viewer",
+      permissions: [],
+      canGrantPermissions: false,
+      members: grouped.viewer,
+    },
+  ];
 }
 
 const splitter8 = (usedPorts: number[]): SplitterPort[] =>
@@ -148,6 +150,35 @@ export const mockNodes: NetworkNode[] = [
     name: "OLT HQ Core",
     location: { lat: 6.514, lng: 3.379 },
     status: "healthy",
+  },
+  {
+    id: "odf-1",
+    tenantId: mockBranding.tenantId,
+    type: "odf",
+    name: "ODF NOC Room",
+    location: { lat: 6.512, lng: 3.383 },
+    status: "healthy",
+    facilityCables: [{ cableId: "cab-1", notes: "Backbone termination shelf A." }],
+    facilitySplices: [
+      {
+        id: "odf-sp-1",
+        fromCableId: "cab-1",
+        fromCoreLabel: "Blue-1",
+        toCableId: "cab-2",
+        toCoreLabel: "Blue-1",
+        notes: "Primary cross-connect at ODF shelf A.",
+      },
+    ],
+  },
+  {
+    id: "cab-1",
+    tenantId: mockBranding.tenantId,
+    type: "cabinet",
+    name: "Cabinet Admiralty Hub",
+    location: { lat: 6.452, lng: 3.463 },
+    status: "healthy",
+    facilityCables: [{ cableId: "cab-2", notes: "Distribution cabinet row 2." }],
+    facilitySplices: [],
   },
   {
     id: "mst-1",
@@ -197,20 +228,36 @@ export const mockNodes: NetworkNode[] = [
     status: "healthy",
   },
   {
-    id: "cust-node-1",
+    id: "cust-1001",
     tenantId: mockBranding.tenantId,
     type: "customer",
-    name: "Residence C-21",
+    name: "Adebayo Tech Hub",
     location: { lat: 6.455, lng: 3.472 },
     status: "healthy",
   },
   {
-    id: "cust-node-2",
+    id: "cust-1002",
     tenantId: mockBranding.tenantId,
     type: "customer",
-    name: "Office Marina View",
+    name: "Marina View Offices",
     location: { lat: 6.442, lng: 3.497 },
     status: "fault",
+  },
+  {
+    id: "cust-1003",
+    tenantId: mockBranding.tenantId,
+    type: "customer",
+    name: "Korede Residential",
+    location: { lat: 6.451, lng: 3.461 },
+    status: "warning",
+  },
+  {
+    id: "cust-demo",
+    tenantId: mockBranding.tenantId,
+    type: "customer",
+    name: "Demo Customer",
+    location: { lat: 6.454, lng: 3.471 },
+    status: "healthy",
   },
 ];
 
@@ -239,12 +286,22 @@ export const mockCables: FibreCable[] = [
   {
     id: "cab-1",
     name: "Backbone OLT to MST-1",
+    segmentType: "backbone",
     coreCount: 24,
     fromNodeId: "olt-1",
     toNodeId: "mst-1",
     startMstId: "olt-1",
     endMstId: "mst-1",
+    start: { lat: 6.514, lng: 3.379 },
+    end: { lat: 6.449, lng: 3.469 },
+    geometry: [
+      { lat: 6.514, lng: 3.379 },
+      { lat: 6.486, lng: 3.423 },
+      { lat: 6.449, lng: 3.469 },
+    ],
     distanceMeters: 3680,
+    routeMode: "road",
+    routeSource: "seeded",
     faulted: false,
     coordinates: [
       { lat: 6.514, lng: 3.379 },
@@ -260,12 +317,22 @@ export const mockCables: FibreCable[] = [
   {
     id: "cab-2",
     name: "Distribution MST-1 to MST-2",
+    segmentType: "distribution",
     coreCount: 12,
     fromNodeId: "mst-1",
     toNodeId: "mst-2",
     startMstId: "mst-1",
     endMstId: "mst-2",
+    start: { lat: 6.449, lng: 3.469 },
+    end: { lat: 6.438, lng: 3.494 },
+    geometry: [
+      { lat: 6.449, lng: 3.469 },
+      { lat: 6.444, lng: 3.482 },
+      { lat: 6.438, lng: 3.494 },
+    ],
     distanceMeters: 2220,
+    routeMode: "road",
+    routeSource: "seeded",
     faulted: true,
     coordinates: [
       { lat: 6.449, lng: 3.469 },
@@ -302,6 +369,35 @@ export const mockClosures: ClosureBox[] = [
 
 export const mockCustomers: Customer[] = [
   {
+    id: "cust-demo",
+    tenantId: mockBranding.tenantId,
+    name: "Demo Customer",
+    email: "demo_user@example.com",
+    phone: "+234 800 000 0000",
+    address: "Demo Address",
+    location: { lat: 6.454, lng: 3.471 },
+    pppoeUsername: "demo_user",
+    onuVendor: "ZTE",
+    onuModel: "zte-f660",
+    onuSerial: "DEMO-ONU-001",
+    routerBrand: "ZTE",
+    routerType: "standard",
+    deviceStatus: "online",
+    lastSeenAt: new Date(now - 1000 * 60 * 5).toISOString(),
+    uptimeMinutes: 5420,
+    oltName: "OLT HQ Core",
+    ponPort: "1/1/2",
+    rxSignal: -18.2,
+    txSignal: 2.4,
+    accountStatus: "active",
+    online: true,
+    installStatus: "installed",
+    installDate: new Date(now - 1000 * 60 * 60 * 24 * 40).toISOString(),
+    assignedEngineer: "Bolanle O.",
+    lastLogin: new Date(now - 1000 * 60 * 45).toISOString(),
+    slaTier: "silver",
+  },
+  {
     id: "cust-1001",
     tenantId: mockBranding.tenantId,
     name: "Adebayo Tech Hub",
@@ -309,16 +405,29 @@ export const mockCustomers: Customer[] = [
     phone: "+234 803 200 1122",
     address: "6 Admiralty Way, Lekki",
     location: { lat: 6.455, lng: 3.472 },
+    pppoeUsername: "adebayo_hub",
+    onuVendor: "Huawei",
+    onuModel: "huawei-hg8245",
     mstId: "mst-1",
     splitterPort: 2,
     fibreCoreId: "core-2",
     onuSerial: "ZTEG12398A",
+    routerBrand: "Huawei",
+    routerType: "upgraded",
+    deviceStatus: "online",
+    lastSeenAt: new Date(now - 1000 * 60 * 2).toISOString(),
+    uptimeMinutes: 8600,
     oltName: "OLT HQ Core",
     ponPort: "1/3/7",
     rxSignal: -19.1,
     txSignal: 2.1,
     accountStatus: "active",
     online: true,
+    installStatus: "installed",
+    installDate: new Date(now - 1000 * 60 * 60 * 24 * 120).toISOString(),
+    assignedEngineer: "Samuel A.",
+    lastLogin: new Date(now - 1000 * 60 * 10).toISOString(),
+    slaTier: "gold",
   },
   {
     id: "cust-1002",
@@ -328,16 +437,29 @@ export const mockCustomers: Customer[] = [
     phone: "+234 805 900 3388",
     address: "11 Prince Yesufu Abiodun, Oniru",
     location: { lat: 6.442, lng: 3.497 },
+    pppoeUsername: "marina_view",
+    onuVendor: "Nokia",
+    onuModel: "nokia-g240",
     mstId: "mst-2",
     splitterPort: 12,
     fibreCoreId: "core-3",
     onuSerial: "HWT89912XYZ",
+    routerBrand: "Nokia",
+    routerType: "standard",
+    deviceStatus: "offline",
+    lastSeenAt: new Date(now - 1000 * 60 * 60 * 3).toISOString(),
+    uptimeMinutes: 1200,
     oltName: "OLT HQ Core",
     ponPort: "1/5/3",
     rxSignal: -30.9,
     txSignal: 0.9,
     accountStatus: "active",
     online: false,
+    installStatus: "installed",
+    installDate: new Date(now - 1000 * 60 * 60 * 24 * 70).toISOString(),
+    assignedEngineer: "Ibrahim D.",
+    lastLogin: new Date(now - 1000 * 60 * 60 * 8).toISOString(),
+    slaTier: "silver",
   },
   {
     id: "cust-1003",
@@ -347,16 +469,29 @@ export const mockCustomers: Customer[] = [
     phone: "+234 808 611 0556",
     address: "Block C24, Ikate Elegushi",
     location: { lat: 6.451, lng: 3.461 },
+    pppoeUsername: "korede_home",
+    onuVendor: "Genexis",
+    onuModel: "genexis-xg6846",
     mstId: "mst-1",
     splitterPort: 4,
     fibreCoreId: "core-4",
     onuSerial: "NOK001ABB12",
+    routerBrand: "Genexis",
+    routerType: "standard",
+    deviceStatus: "offline",
+    lastSeenAt: new Date(now - 1000 * 60 * 60 * 6).toISOString(),
+    uptimeMinutes: 980,
     oltName: "OLT HQ Core",
     ponPort: "1/3/8",
     rxSignal: -17.8,
     txSignal: 2.9,
     accountStatus: "suspended",
     online: false,
+    installStatus: "scheduled",
+    installDate: new Date(now + 1000 * 60 * 60 * 24 * 2).toISOString(),
+    assignedEngineer: "Bolanle O.",
+    lastLogin: new Date(now - 1000 * 60 * 60 * 48).toISOString(),
+    slaTier: "bronze",
   },
 ];
 
@@ -429,7 +564,7 @@ export const mockFaults: Fault[] = [
   },
 ];
 
-export let mockSessions: RadiusSession[] = [
+export const mockSessions: RadiusSession[] = [
   {
     id: "sess-1",
     customerId: "cust-1001",
@@ -462,13 +597,13 @@ export let mockSessions: RadiusSession[] = [
   },
 ];
 
-export let mockServicePlans: ServicePlan[] = [
+export const mockServicePlans: ServicePlan[] = [
   { name: "Core 10/10", speed: "10M/10M", price: "₦8,500", rateLimit: "10M/10M", description: "Residential onboarding plan" },
   { name: "Core 20/20", speed: "20M/20M", price: "₦12,500", rateLimit: "20M/20M", description: "Business starter tier" },
   { name: "Core 50/50", speed: "50M/50M", price: "₦18,900", rateLimit: "50M/50M", description: "Enterprise burst-ready" },
 ];
 
-export let mockRadiusUsers: RadiusUser[] = [
+export const mockRadiusUsers: RadiusUser[] = [
   {
     username: "adebayo_hub",
     status: "active",
@@ -523,248 +658,50 @@ export let mockZones: Zone[] = [
   { id: "zone-2", name: "Ajah Access", nasId: "nas-2", nasName: "MikroTik BRAS 02", description: "Residential PPPoE subscribers on Ajah ring", usersCount: 56 },
 ];
 
-export let mockPermissionRoles: PermissionRole[] = [
-  {
-    id: "role-1",
-    name: "Super Admin",
-    scope: "global",
-    description: "Full OSS/BSS control across tenants and infrastructure",
-    memberCount: 2,
-    privilegeModel: "Hybrid",
-    permissions: createPermissionFlags({
-      radius_access: true,
-      disconnect_user: true,
-      create_pppoe: true,
-      view_customers: true,
-      delete_customer: true,
-      billing_access: true,
-      settings_access: true,
-    }),
-    members: [
-      { id: "pa-1", fullName: "NOC Superintendent", email: "noc.superintendent@westlink.io", role: "admin", permissionProfileId: "role-1", isActive: true },
-      { id: "pa-2", fullName: "Platform Director", email: "platform.director@westlink.io", role: "admin", permissionProfileId: "role-1", isActive: true },
-    ],
-  },
-  {
-    id: "role-2",
-    name: "NOC Engineer",
-    scope: "radius",
-    description: "Manages PPPoE sessions, users, and operational troubleshooting",
-    memberCount: 2,
-    privilegeModel: "Role Based",
-    permissions: createPermissionFlags({
-      radius_access: true,
-      disconnect_user: true,
-      create_pppoe: true,
-      view_customers: true,
-    }),
-    members: [
-      { id: "pa-3", fullName: "Aisha Bello", email: "aisha.bello@westlink.io", role: "noc", permissionProfileId: "role-2", isActive: true },
-      { id: "pa-4", fullName: "Tunde James", email: "tunde.james@westlink.io", role: "noc", permissionProfileId: "role-2", isActive: true },
-    ],
-  },
-  {
-    id: "role-3",
-    name: "Field Engineer",
-    scope: "network",
-    description: "Access to sync workflows and physical access diagnostics only",
-    memberCount: 2,
-    privilegeModel: "Approval Based",
-    permissions: createPermissionFlags({
-      view_customers: true,
-    }),
-    members: [
-      { id: "pa-5", fullName: "Sade Okon", email: "sade.okon@westlink.io", role: "support", permissionProfileId: "role-3", isActive: true },
-      { id: "pa-6", fullName: "Emeka Obi", email: "emeka.obi@westlink.io", role: "support", permissionProfileId: "role-3", isActive: true },
-    ],
-  },
-];
+export let mockPermissionRoles: PermissionRole[] = buildPermissionRoles(mapPermissionMembers);
 
-export let mockSettingsLogs: SettingsLog[] = [
+export function upsertMockPermissionMemberAccess(payload: {
+  member: {
+    id?: string;
+    userId?: string;
+    fullName: string;
+    email: string;
+    mapRole: "admin" | "engineer" | "viewer";
+    canDelete: boolean;
+  };
+}) {
+  const normalizedEmail = payload.member.email.trim().toLowerCase();
+  const existingMembers = mockPermissionRoles.flatMap((role) => role.members ?? []);
+  const existing = existingMembers.find(
+    (member) =>
+      (payload.member.userId && member.userId === payload.member.userId) ||
+      member.email.toLowerCase() === normalizedEmail ||
+      (payload.member.id && member.id === payload.member.id),
+  );
+
+  const nextMember: PermissionMember = {
+    id: existing?.id ?? payload.member.id ?? randomId("perm-member"),
+    userId: payload.member.userId ?? existing?.userId,
+    fullName: payload.member.fullName.trim(),
+    email: normalizedEmail,
+    mapRole: payload.member.mapRole,
+    canDelete: payload.member.canDelete,
+  };
+
+  const nextMembers = [
+    ...existingMembers.filter((member) => member.id !== existing?.id && member.email.toLowerCase() !== normalizedEmail),
+    nextMember,
+  ];
+
+  mockPermissionRoles = buildPermissionRoles(nextMembers);
+  return mockPermissionRoles;
+}
+
+export const mockSettingsLogs: SettingsLog[] = [
   { id: "log-1", type: "authentication", actor: "radius-engine", description: "PPPoE authentication accepted for adebayo_hub", createdAt: new Date(now - 1000 * 60 * 8).toISOString() },
   { id: "log-2", type: "disconnect", actor: "noc@westlink.io", description: "Manual disconnect sent to marina_it from NOC console", createdAt: new Date(now - 1000 * 60 * 22).toISOString() },
   { id: "log-3", type: "sync", actor: "field@westlink.io", description: "PPPoE account sync completed for korede_res on MikroTik BRAS 01", createdAt: new Date(now - 1000 * 60 * 41).toISOString() },
 ];
-
-function hydrateMockCollections() {
-  const stored = readPersistedMockCollections();
-  if (!stored) return;
-
-  if (stored.nodes) replaceCollection(mockNodes, stored.nodes);
-  if (stored.cables) replaceCollection(mockCables, stored.cables);
-  if (stored.closures) replaceCollection(mockClosures, stored.closures);
-  if (stored.customers) replaceCollection(mockCustomers, stored.customers);
-  if (stored.faults) replaceCollection(mockFaults, stored.faults);
-  if (stored.sessions) mockSessions = cloneValue(stored.sessions);
-  if (stored.servicePlans) mockServicePlans = cloneValue(stored.servicePlans);
-  if (stored.radiusUsers) mockRadiusUsers = cloneValue(stored.radiusUsers);
-  if (stored.nasEntries) mockNasEntries = cloneValue(stored.nasEntries);
-  if (stored.zones) mockZones = cloneValue(stored.zones);
-  if (stored.permissionRoles) mockPermissionRoles = cloneValue(stored.permissionRoles);
-  if (stored.settingsLogs) mockSettingsLogs = cloneValue(stored.settingsLogs);
-  if (stored.notificationSettings) mockNotificationSettings = cloneValue(stored.notificationSettings);
-}
-
-export function persistMockCollections() {
-  if (!canUseStorage()) return;
-  try {
-    const payload: PersistedMockCollections = {
-      nodes: mockNodes,
-      cables: mockCables,
-      closures: mockClosures,
-      customers: mockCustomers,
-      faults: mockFaults,
-      sessions: mockSessions,
-      servicePlans: mockServicePlans,
-      radiusUsers: mockRadiusUsers,
-      nasEntries: mockNasEntries,
-      zones: mockZones,
-      permissionRoles: mockPermissionRoles,
-      settingsLogs: mockSettingsLogs,
-      notificationSettings: mockNotificationSettings,
-    };
-    window.localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(payload));
-  } catch {
-    // Ignore storage failures and keep the simulation running in memory.
-  }
-}
-
-function recordSettingsLog(entry: Omit<SettingsLog, "id" | "createdAt">) {
-  mockSettingsLogs.unshift({
-    id: randomId("log"),
-    createdAt: new Date().toISOString(),
-    ...entry,
-  });
-}
-
-function parseUsageInGiB(value?: string) {
-  const amount = Number.parseFloat(value ?? "0");
-  return Number.isFinite(amount) ? amount : 0;
-}
-
-function formatUsageInGiB(value: number) {
-  return `${value.toFixed(1)} GiB`;
-}
-
-function formatDurationFromStart(startedAt: string) {
-  const diffMs = Math.max(0, Date.now() - new Date(startedAt).getTime());
-  const totalSeconds = Math.floor(diffMs / 1000);
-  const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
-  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-  return `${hours}:${minutes}:${seconds}`;
-}
-
-export function isReminderPending(expirationDate: string, reminderDays = mockNotificationSettings.reminderDays, nowValue = Date.now()) {
-  const expiry = new Date(expirationDate).getTime();
-  const diff = expiry - nowValue;
-  return diff >= 0 && diff <= reminderDays * 24 * 60 * 60 * 1000;
-}
-
-export function getMockNotificationSettings() {
-  return cloneValue(mockNotificationSettings);
-}
-
-export function updateMockNotificationSettings(payload: NotificationSettings) {
-  mockNotificationSettings = {
-    message: payload.message.trim(),
-    reminderDays: Math.max(1, Math.floor(payload.reminderDays || 1)),
-  };
-  persistMockCollections();
-  return cloneValue(mockNotificationSettings);
-}
-
-export function simulateMockBackendTick() {
-  let changed = false;
-  let faultRaised = false;
-  const tickAt = new Date().toISOString();
-
-  mockRadiusUsers.forEach((user) => {
-    const expired = new Date(user.expirationDate).getTime() <= Date.now();
-    const nextStatus = expired ? "inactive" : user.status;
-    if (nextStatus !== user.status) {
-      user.status = nextStatus;
-      changed = true;
-    }
-    const reminderDescription = `Reminder queued for ${user.username} before ${new Date(user.expirationDate).toLocaleDateString("en-US")}`;
-    const reminderAlreadyLogged = mockSettingsLogs.some(
-      (log) => log.actor === "notification-engine" && log.description === reminderDescription,
-    );
-    if (isReminderPending(user.expirationDate) && !reminderAlreadyLogged) {
-      recordSettingsLog({
-        type: "sync",
-        actor: "notification-engine",
-        description: reminderDescription,
-      });
-      changed = true;
-    }
-  });
-
-  mockSessions.forEach((session) => {
-    const linkedUser = mockRadiusUsers.find((user) => user.username === session.username);
-    const expired = new Date(session.expirationDate ?? 0).getTime() <= Date.now();
-    const shouldBeOnline = Boolean(linkedUser?.status === "active" && !expired && session.accountExists);
-
-    session.accountStatus = shouldBeOnline ? "active" : "inactive";
-    if (shouldBeOnline && session.status !== "online") {
-      session.status = "online";
-      session.startedAt = tickAt;
-      session.ipAddress = session.ipAddress === "Pending" ? `10.20.${Math.floor(Math.random() * 30) + 10}.${Math.floor(Math.random() * 180) + 20}` : session.ipAddress;
-      changed = true;
-    }
-    if (!shouldBeOnline && session.status !== "offline") {
-      session.status = "offline";
-      changed = true;
-    }
-    if (session.status === "online") {
-      session.duration = formatDurationFromStart(session.startedAt);
-      session.dataUsage = formatUsageInGiB(parseUsageInGiB(session.dataUsage) + Math.random() * 0.08 + 0.02);
-      session.lastUpdated = tickAt;
-      changed = true;
-    } else if (expired && session.accountStatus !== "inactive") {
-      session.accountStatus = "inactive";
-      session.lastUpdated = tickAt;
-      changed = true;
-    }
-  });
-
-  mockCustomers.forEach((customer) => {
-    const session = mockSessions.find((entry) => entry.customerId === customer.id);
-    if (!session) return;
-    const nextOnline = session.status === "online";
-    const nextAccountStatus = session.accountStatus === "inactive" ? "suspended" : "active";
-    if (customer.online !== nextOnline || customer.accountStatus !== nextAccountStatus) {
-      customer.online = nextOnline;
-      customer.accountStatus = nextAccountStatus;
-      changed = true;
-    }
-  });
-
-  if (mockFaults.length < 10 && Math.random() < 0.08) {
-    const affectedNode = mockNodes.find((node) => node.type === "mst") ?? mockNodes[0];
-    mockFaults.unshift({
-      id: randomId("fault"),
-      tenantId: mockBranding.tenantId,
-      title: `Intermittent issue at ${affectedNode?.name ?? "core node"}`,
-      description: "Realtime simulator detected fluctuating optical levels and created an investigation ticket.",
-      severity: "medium",
-      location: affectedNode?.location ?? { lat: 6.45, lng: 3.48 },
-      affectedNodeId: affectedNode?.id,
-      status: "open",
-      createdAt: tickAt,
-    });
-    faultRaised = true;
-    changed = true;
-  }
-
-  if (changed) {
-    persistMockCollections();
-  }
-
-  return { changed, faultRaised };
-}
-
-hydrateMockCollections();
 
 export function addMockRadiusUser(payload: {
   username: string;
@@ -818,7 +755,6 @@ export function addMockRadiusUser(payload: {
     lastUpdated: new Date().toISOString(),
     accountExists: true,
   });
-  persistMockCollections();
   return newUser;
 }
 
@@ -891,7 +827,6 @@ export function bulkImportMockRadiusUsers(
     });
   });
 
-  persistMockCollections();
   return { imported: payloads.length };
 }
 
@@ -907,7 +842,6 @@ export function activateMockRadiusUser(username: string) {
     session.expirationDate = user.expirationDate;
     session.lastUpdated = new Date().toISOString();
   }
-  persistMockCollections();
   return user;
 }
 
@@ -915,12 +849,13 @@ export function syncMockRadiusUser(username: string) {
   const user = mockRadiusUsers.find((entry) => entry.username === username);
   if (!user) throw new Error("User not found");
   user.lastSeen = new Date().toISOString();
-  recordSettingsLog({
+  mockSettingsLogs.unshift({
+    id: randomId("log"),
     type: "sync",
     actor: "noc@westlink.io",
     description: `PPPoE account sync completed for ${username}`,
+    createdAt: new Date().toISOString(),
   });
-  persistMockCollections();
   return user;
 }
 
@@ -931,12 +866,13 @@ export function reconnectMockRadiusSession(username: string) {
   session.lastUpdated = new Date().toISOString();
   session.startedAt = new Date().toISOString();
   session.duration = "00:00:09";
-  recordSettingsLog({
+  mockSettingsLogs.unshift({
+    id: randomId("log"),
     type: "disconnect",
     actor: "noc@westlink.io",
     description: `Reconnect workflow triggered for ${username}`,
+    createdAt: new Date().toISOString(),
   });
-  persistMockCollections();
   return session;
 }
 
@@ -945,12 +881,13 @@ export function disconnectMockRadiusSession(username: string) {
   if (!session) throw new Error("Session not found");
   session.status = "offline";
   session.lastUpdated = new Date().toISOString();
-  recordSettingsLog({
+  mockSettingsLogs.unshift({
+    id: randomId("log"),
     type: "disconnect",
     actor: "noc@westlink.io",
     description: `Disconnect sent for ${username}`,
+    createdAt: new Date().toISOString(),
   });
-  persistMockCollections();
   return session;
 }
 
@@ -963,34 +900,25 @@ export function extendMockRadiusUser(username: string, expirationDate: string) {
     session.expirationDate = expirationDate;
     session.lastUpdated = new Date().toISOString();
   }
-  recordSettingsLog({
+  mockSettingsLogs.unshift({
+    id: randomId("log"),
     type: "sync",
     actor: "noc@westlink.io",
     description: `Subscription extended for ${username} until ${new Date(expirationDate).toLocaleDateString("en-US")}`,
+    createdAt: new Date().toISOString(),
   });
-  persistMockCollections();
   return user;
 }
 
 export function addMockNasEntry(payload: Omit<NasEntry, "id">) {
   const entry: NasEntry = { id: randomId("nas"), ...payload };
   mockNasEntries = [entry, ...mockNasEntries.filter((item) => item.ipAddress !== payload.ipAddress)];
-  persistMockCollections();
   return entry;
 }
 
 export function updateMockNasEntry(id: string, payload: Omit<NasEntry, "id">) {
   mockNasEntries = mockNasEntries.map((item) => (item.id === id ? { id, ...payload } : item));
-  persistMockCollections();
   return mockNasEntries.find((item) => item.id === id);
-}
-
-export function deleteMockNasEntries(ids: string[]) {
-  const idSet = new Set(ids);
-  const deleted = mockNasEntries.filter((entry) => idSet.has(entry.id)).length;
-  mockNasEntries = mockNasEntries.filter((entry) => !idSet.has(entry.id));
-  persistMockCollections();
-  return deleted;
 }
 
 export function addMockZone(payload: Omit<Zone, "id" | "usersCount" | "nasName"> & { usersCount?: number }) {
@@ -1005,145 +933,14 @@ export function addMockZone(payload: Omit<Zone, "id" | "usersCount" | "nasName">
     nasName: nas.name,
   };
   mockZones = [zone, ...mockZones];
-  persistMockCollections();
   return zone;
-}
-
-export function deleteMockZones(ids: string[]) {
-  const idSet = new Set(ids);
-  const deleted = mockZones.filter((zone) => idSet.has(zone.id)).length;
-  mockZones = mockZones.filter((zone) => !idSet.has(zone.id));
-  persistMockCollections();
-  return deleted;
 }
 
 export function addMockServicePlan(payload: ServicePlan) {
   const existing = mockServicePlans.find((plan) => plan.name === payload.name);
   if (existing) throw new Error("Service plan already exists");
   mockServicePlans.unshift(payload);
-  persistMockCollections();
   return payload;
-}
-
-export function deleteMockServicePlans(names: string[]) {
-  const nameSet = new Set(names);
-  const deleted = mockServicePlans.filter((plan) => nameSet.has(plan.name)).length;
-  mockServicePlans = mockServicePlans.filter((plan) => !nameSet.has(plan.name));
-  persistMockCollections();
-  return deleted;
-}
-
-export function deleteMockRadiusUsers(usernames: string[]) {
-  const usernameSet = new Set(usernames);
-  const deleted = mockRadiusUsers.filter((user) => usernameSet.has(user.username)).length;
-  mockRadiusUsers = mockRadiusUsers.filter((user) => !usernameSet.has(user.username));
-  mockSessions = mockSessions.filter((session) => !usernameSet.has(session.username));
-  persistMockCollections();
-  return deleted;
-}
-
-export function deleteMockPermissionRoles(ids: string[]) {
-  const idSet = new Set(ids);
-  const deleted = mockPermissionRoles.filter((role) => idSet.has(role.id)).length;
-  mockPermissionRoles = mockPermissionRoles.filter((role) => !idSet.has(role.id));
-  persistMockCollections();
-  return deleted;
-}
-
-export function updateMockPermissionRole(
-  id: string,
-  payload: { privilegeModel?: PrivilegeModel; description?: string; permissions?: Partial<PermissionFlags> },
-) {
-  const role = mockPermissionRoles.find((entry) => entry.id === id);
-  if (!role) throw new Error("Permission role not found");
-  if (payload.privilegeModel) role.privilegeModel = payload.privilegeModel;
-  if (payload.description) role.description = payload.description;
-  if ("permissions" in payload && payload.permissions) {
-    role.permissions = { ...role.permissions, ...payload.permissions };
-  }
-  role.memberCount = role.members?.length ?? role.memberCount;
-  persistMockCollections();
-  return role;
-}
-
-export function addMockPrivilegeAccount(payload: {
-  fullName: string;
-  email: string;
-  role: "admin" | "support" | "noc";
-  permissionProfileId: string;
-}): PrivilegeMember {
-  const role = mockPermissionRoles.find((entry) => entry.id === payload.permissionProfileId);
-  if (!role) throw new Error("Permission role not found");
-  const normalizedEmail = payload.email.trim().toLowerCase();
-  const exists = mockPermissionRoles.some((entry) =>
-    (entry.members ?? []).some((member) => member.email.trim().toLowerCase() === normalizedEmail),
-  );
-  if (exists) throw new Error("Privilege account already exists");
-
-  const account: PrivilegeMember = {
-    id: randomId("pa"),
-    fullName: payload.fullName.trim(),
-    email: payload.email.trim(),
-    role: payload.role,
-    permissionProfileId: payload.permissionProfileId,
-    isActive: true,
-  };
-  role.members = [account, ...(role.members ?? [])];
-  role.memberCount = role.members.length;
-  persistMockCollections();
-  return account;
-}
-
-export function updateMockPrivilegeAccount(memberId: string, payload: { permissionProfileId: string }) {
-  const targetRole = mockPermissionRoles.find((entry) => entry.members?.some((member) => member.id === memberId));
-  const nextRole = mockPermissionRoles.find((entry) => entry.id === payload.permissionProfileId);
-  if (!targetRole || !nextRole) throw new Error("Privilege member not found");
-
-  const member = targetRole.members?.find((entry) => entry.id === memberId);
-  if (!member) throw new Error("Privilege member not found");
-
-  if (targetRole.id === nextRole.id) return member;
-
-  targetRole.members = (targetRole.members ?? []).filter((entry) => entry.id !== memberId);
-  targetRole.memberCount = targetRole.members.length;
-
-  member.permissionProfileId = payload.permissionProfileId;
-  nextRole.members = [member, ...(nextRole.members ?? [])];
-  nextRole.memberCount = nextRole.members.length;
-  persistMockCollections();
-  return member;
-}
-
-export function deleteMockPrivilegeAccount(memberId: string) {
-  const role = mockPermissionRoles.find((entry) => entry.members?.some((member) => member.id === memberId));
-  if (!role) throw new Error("Privilege member not found");
-  const deleted = role.members?.find((member) => member.id === memberId);
-  role.members = (role.members ?? []).filter((member) => member.id !== memberId);
-  role.memberCount = role.members.length;
-  persistMockCollections();
-  return deleted;
-}
-
-export function deleteMockPrivilegeAccounts(memberIds: string[]) {
-  const idSet = new Set(memberIds);
-  let deleted = 0;
-  mockPermissionRoles.forEach((role) => {
-    const currentMembers = role.members ?? [];
-    const nextMembers = currentMembers.filter((member) => !idSet.has(member.id));
-    deleted += currentMembers.length - nextMembers.length;
-    role.members = nextMembers;
-    role.memberCount = nextMembers.length;
-  });
-  persistMockCollections();
-  return deleted;
-}
-
-export function deleteMockSettingsLogs(ids: string[]) {
-  const idSet = new Set(ids);
-  const deleted = mockSettingsLogs.filter((log) => idSet.has(log.id)).length;
-  mockSettingsLogs = mockSettingsLogs.filter((log) => !idSet.has(log.id));
-  persistMockCollections();
-  return deleted;
 }
 
 export function buildKpis(): KpiSnapshot {
@@ -1170,7 +967,6 @@ export function addMockFault(fault: Omit<Fault, "id" | "createdAt" | "tenantId">
     acknowledged: false,
     createdAt: new Date().toISOString(),
   });
-  persistMockCollections();
   return newFault;
 }
 
@@ -1181,33 +977,24 @@ export function upsertCustomer(customer: Customer) {
   } else {
     mockCustomers.unshift(customer);
   }
-  persistMockCollections();
+  upsertCustomerNode(customer);
 }
 
-export function deleteMockCustomer(customerId: string) {
-  const customerIndex = mockCustomers.findIndex((entry) => entry.id === customerId);
-  if (customerIndex < 0) {
-    throw new Error("Customer not found.");
+function upsertCustomerNode(customer: Customer) {
+  const existingIndex = mockNodes.findIndex((node) => node.type === "customer" && node.id === customer.id);
+  const node: NetworkNode = {
+    id: customer.id,
+    tenantId: customer.tenantId,
+    type: "customer",
+    name: customer.name,
+    location: customer.location,
+    status: customer.accountStatus === "suspended" ? "warning" : customer.online ? "healthy" : "warning",
+  };
+  if (existingIndex >= 0) {
+    mockNodes[existingIndex] = { ...mockNodes[existingIndex], ...node };
+  } else {
+    mockNodes.unshift(node);
   }
-
-  mockNodes.forEach((node) => {
-    if (node.type !== "mst" || !node.splitterPorts) return;
-    node.splitterPorts = node.splitterPorts.map((port) =>
-      port.customerId === customerId
-        ? {
-            ...port,
-            status: "free",
-            customerId: undefined,
-            customerName: undefined,
-            assignedCoreColor: undefined,
-          }
-        : port,
-    );
-  });
-
-  releaseCustomerCoreAssignments(customerId);
-  mockCustomers.splice(customerIndex, 1);
-  persistMockCollections();
 }
 
 export function createMockMstConnection(payload: {
@@ -1224,19 +1011,24 @@ export function createMockMstConnection(payload: {
   const cable: FibreCable = {
     id: randomId("cab"),
     name: `${startNode.name} to ${endNode.name}`,
+    segmentType: startNode.type === "olt" || endNode.type === "olt" ? "backbone" : "distribution",
     coreCount: payload.coreCount,
     fromNodeId: payload.startMstId,
     toNodeId: payload.endMstId,
     startMstId: payload.startMstId,
     endMstId: payload.endMstId,
+    start: payload.geometry[0],
+    end: payload.geometry[payload.geometry.length - 1],
+    geometry: payload.geometry,
     coordinates: payload.geometry,
-    distanceMeters: Math.round(Math.hypot(startNode.location.lat - endNode.location.lat, startNode.location.lng - endNode.location.lng) * 111000),
+    distanceMeters: calculatePolylineDistanceMeters(payload.geometry),
+    routeMode: payload.geometry.length > 2 ? "road" : "straight",
+    routeSource: payload.geometry.length > 2 ? "mapbox-directions" : "straight-line-fallback",
     faulted: false,
     cores: buildCores(payload.coreCount, 0, undefined, payload.startMstId, payload.endMstId),
     splices: [],
   };
   mockCables.unshift(cable);
-  persistMockCollections();
   return cable;
 }
 
@@ -1245,12 +1037,93 @@ function syncCustomerAssignment(payload: {
   mstId?: string;
   splitterPort?: number;
   fibreCoreId?: string;
+  dropCableId?: string;
+  location?: Customer["location"];
 }) {
   const customer = mockCustomers.find((entry) => entry.id === payload.customerId);
   if (!customer) return;
   customer.mstId = payload.mstId;
   customer.splitterPort = payload.splitterPort;
   customer.fibreCoreId = payload.fibreCoreId;
+  customer.dropCableId = payload.dropCableId;
+  if (payload.location) {
+    customer.location = payload.location;
+    upsertCustomerNode(customer);
+  }
+}
+
+function ensureMstSplitterPorts(mstNode: NetworkNode) {
+  if (mstNode.type !== "mst") return;
+  if (mstNode.splitterPorts?.length) return;
+  const defaultType = mstNode.splitterType ?? "1/8";
+  mstNode.splitterPorts = Array.from({ length: getSplitterPortCount(defaultType) }, (_, index) => ({
+    port: index + 1,
+    status: "free",
+  }));
+}
+
+function clearCustomerFromMstPorts(customerId: string) {
+  mockNodes.forEach((node) => {
+    if (node.type !== "mst") return;
+    ensureMstSplitterPorts(node);
+    node.splitterPorts = (node.splitterPorts ?? []).map((port) =>
+      port.customerId === customerId
+        ? {
+            ...port,
+            status: "free",
+            customerId: undefined,
+            customerName: undefined,
+            assignedCoreColor: undefined,
+          }
+        : port,
+    );
+    node.clients = (node.clients ?? []).filter((client) => client.id !== customerId);
+  });
+}
+
+function removeCustomerDropCable(customerId: string) {
+  const removedCableIds: string[] = [];
+  for (let index = mockCables.length - 1; index >= 0; index -= 1) {
+    const cable = mockCables[index];
+    const isClientDrop = cable.segmentType === "drop" || cable.clientId === customerId;
+    if (!isClientDrop || cable.clientId !== customerId) continue;
+    removedCableIds.push(cable.id);
+    mockCables.splice(index, 1);
+  }
+  return removedCableIds;
+}
+
+function buildDropCableCores(payload: {
+  coreId: string;
+  coreLabel: string;
+  fiberCore: string;
+  mstId: string;
+  clientId: string;
+}): FibreCore[] {
+  const paletteEntry = FIBRE_CORE_PALETTE.find((entry) => entry.label.toLowerCase() === payload.fiberCore.toLowerCase());
+  const usedColor = paletteEntry?.hex ?? payload.fiberCore;
+  const spareColor = FIBRE_CORE_PALETTE[1]?.hex ?? "#CBD5E1";
+
+  return [
+    {
+      id: `${payload.coreId}-drop-active`,
+      index: 1,
+      label: payload.coreLabel,
+      color: usedColor,
+      status: "used",
+      fromMstId: payload.mstId,
+      toMstId: payload.clientId,
+      usagePath: `${payload.coreLabel} core is assigned from ${payload.mstId} to ${payload.clientId}`,
+      assignedToCustomerId: payload.clientId,
+    },
+    {
+      id: `${payload.coreId}-drop-spare`,
+      index: 2,
+      label: "Spare-2",
+      color: spareColor,
+      status: "free",
+    },
+  ];
 }
 
 function releaseCustomerCoreAssignments(customerId: string) {
@@ -1264,6 +1137,16 @@ function releaseCustomerCoreAssignments(customerId: string) {
       core.usagePath = undefined;
     });
   });
+  clearCustomerFromMstPorts(customerId);
+  const removedCableIds = removeCustomerDropCable(customerId);
+  syncCustomerAssignment({
+    customerId,
+    mstId: undefined,
+    splitterPort: undefined,
+    fibreCoreId: undefined,
+    dropCableId: undefined,
+  });
+  return removedCableIds;
 }
 
 export function setMockCableCoreState(payload: {
@@ -1297,7 +1180,6 @@ export function setMockCableCoreState(payload: {
     core.usagePath = undefined;
   }
 
-  persistMockCollections();
   return { cableId: cable.id, core };
 }
 
@@ -1343,7 +1225,6 @@ export function upsertMockClosureSplice(payload: {
     });
   }
 
-  persistMockCollections();
   return closure;
 }
 
@@ -1351,7 +1232,6 @@ export function removeMockClosureSplice(payload: { closureId: string; spliceId: 
   const closure = mockClosures.find((entry) => entry.id === payload.closureId);
   if (!closure) throw new Error("Closure not found.");
   closure.splices = closure.splices.filter((splice) => splice.id !== payload.spliceId);
-  persistMockCollections();
   return closure;
 }
 
@@ -1369,7 +1249,6 @@ export function updateMockMstSplitterType(payload: { mstId: string; splitterType
 
   removedClientIds.forEach((clientId) => {
     releaseCustomerCoreAssignments(clientId);
-    syncCustomerAssignment({ customerId: clientId });
   });
 
   mstNode.splitterType = payload.splitterType;
@@ -1392,7 +1271,6 @@ export function updateMockMstSplitterType(payload: { mstId: string; splitterType
   });
 
   mstNode.clients = (mstNode.clients ?? []).filter((client) => client.splitterPort <= nextPortCount);
-  persistMockCollections();
   return mstNode;
 }
 
@@ -1402,28 +1280,39 @@ export function assignMockClientToMstPort(payload: {
   clientId: string;
   clientName: string;
   fiberCore: string;
+  coreId: string;
+  coreLabel: string;
+  cableId: string;
+  clientLocation: Customer["location"];
+  geometry: FibreCable["coordinates"];
+  routeMode: NonNullable<FibreCable["routeMode"]>;
+  routeSource: NonNullable<FibreCable["routeSource"]>;
+  routeFallbackReason?: string;
 }) {
   const mstNode = mockNodes.find((node) => node.id === payload.mstId && node.type === "mst");
   if (!mstNode) throw new Error("MST splitter not found.");
+  const customer = mockCustomers.find((entry) => entry.id === payload.clientId);
+  if (!customer) throw new Error("Client was not found in CRM.");
+  const upstreamCable = mockCables.find((entry) => entry.id === payload.cableId);
+  if (!upstreamCable) throw new Error("Selected fibre cable was not found.");
+  const selectedCore = upstreamCable.cores.find((entry) => entry.id === payload.coreId);
+  if (!selectedCore) throw new Error("Selected fibre core was not found.");
 
-  if (!mstNode.splitterPorts) {
-    const defaultType = mstNode.splitterType ?? "1/8";
-    mstNode.splitterPorts = Array.from({ length: getSplitterPortCount(defaultType) }, (_, index) => ({
-      port: index + 1,
-      status: "free",
-    }));
+  ensureMstSplitterPorts(mstNode);
+
+  const port = mstNode.splitterPorts?.find((entry) => entry.port === payload.portNumber);
+  if (!port) throw new Error("Selected splitter port was not found.");
+  if (selectedCore.status === "used" && selectedCore.assignedToCustomerId !== payload.clientId) {
+    throw new Error("Selected fibre core is already assigned.");
   }
 
-  const port = mstNode.splitterPorts.find((entry) => entry.port === payload.portNumber);
-  if (!port) throw new Error("Selected splitter port was not found.");
-
-  const clientExistingPort = mstNode.splitterPorts.find((entry) => entry.customerId === payload.clientId);
+  const clientExistingPort = mstNode.splitterPorts?.find((entry) => entry.customerId === payload.clientId);
   const replacedClientId = port.customerId && port.customerId !== payload.clientId ? port.customerId : undefined;
+  const previousDropCableIds = removeCustomerDropCable(payload.clientId);
+  releaseCustomerCoreAssignments(payload.clientId);
 
   if (replacedClientId) {
     releaseCustomerCoreAssignments(replacedClientId);
-    syncCustomerAssignment({ customerId: replacedClientId });
-    mstNode.clients = (mstNode.clients ?? []).filter((client) => client.id !== replacedClientId);
   }
 
   if (clientExistingPort && clientExistingPort.port !== payload.portNumber) {
@@ -1453,14 +1342,66 @@ export function assignMockClientToMstPort(payload: {
     });
   }
 
+  selectedCore.status = "used";
+  selectedCore.assignedToCustomerId = payload.clientId;
+  selectedCore.fromMstId = payload.mstId;
+  selectedCore.toMstId = payload.clientId;
+  selectedCore.usagePath = `${payload.coreLabel} core is assigned from ${payload.mstId} to ${payload.clientName} on splitter port ${payload.portNumber}`;
+
+  const dropCableId = customer.dropCableId ?? randomId("drop");
+  const geometry = payload.geometry.length
+    ? payload.geometry
+    : [mstNode.location, payload.clientLocation];
+  const dropCable: FibreCable = {
+    id: dropCableId,
+    name: `${mstNode.name} -> ${payload.clientName}`,
+    segmentType: "drop",
+    coreCount: 2,
+    fromNodeId: mstNode.id,
+    toNodeId: payload.clientId,
+    startMstId: mstNode.id,
+    endMstId: payload.clientId,
+    start: geometry[0],
+    end: geometry[geometry.length - 1],
+    geometry,
+    coordinates: geometry,
+    distanceMeters: calculatePolylineDistanceMeters(geometry),
+    routeMode: payload.routeMode,
+    routeSource: payload.routeSource,
+    routeFallbackReason: payload.routeFallbackReason,
+    clientId: payload.clientId,
+    splitterPort: payload.portNumber,
+    assignedCoreId: payload.coreId,
+    coreUsed: payload.coreLabel,
+    faulted: false,
+    cores: buildDropCableCores({
+      coreId: payload.coreId,
+      coreLabel: payload.coreLabel,
+      fiberCore: payload.fiberCore,
+      mstId: payload.mstId,
+      clientId: payload.clientId,
+    }),
+    splices: [],
+  };
+  mockCables.unshift(dropCable);
+
   syncCustomerAssignment({
     customerId: payload.clientId,
     mstId: payload.mstId,
     splitterPort: payload.portNumber,
+    fibreCoreId: payload.coreId,
+    dropCableId,
+    location: payload.clientLocation,
   });
 
-  persistMockCollections();
-  return mstNode;
+  return {
+    mst: mstNode,
+    customer: mockCustomers.find((entry) => entry.id === payload.clientId),
+    cable: dropCable,
+    core: selectedCore,
+    replacedClientId,
+    removedCableIds: previousDropCableIds,
+  };
 }
 
 export function removeMockClientFromMstPort(payload: { mstId: string; portNumber: number }) {
@@ -1471,10 +1412,10 @@ export function removeMockClientFromMstPort(payload: { mstId: string; portNumber
   if (!port) throw new Error("Selected splitter port was not found.");
 
   const removedClientId = port.customerId;
+  let removedCableId: string | undefined;
   if (removedClientId) {
     mstNode.clients = (mstNode.clients ?? []).filter((client) => client.id !== removedClientId);
-    releaseCustomerCoreAssignments(removedClientId);
-    syncCustomerAssignment({ customerId: removedClientId });
+    removedCableId = releaseCustomerCoreAssignments(removedClientId)[0];
   }
 
   port.status = "free";
@@ -1482,10 +1423,10 @@ export function removeMockClientFromMstPort(payload: { mstId: string; portNumber
   port.customerName = undefined;
   port.assignedCoreColor = undefined;
 
-  persistMockCollections();
   return {
     mst: mstNode,
     removedClientId,
+    removedCableId,
   };
 }
 
@@ -1494,17 +1435,20 @@ export function deleteMockCable(payload: { cableId: string }) {
   if (cableIndex < 0) throw new Error("Cable not found.");
 
   const removed = mockCables.splice(cableIndex, 1)[0];
-  removed.cores
-    .map((core) => core.assignedToCustomerId)
-    .filter(Boolean)
-    .forEach((customerId) => syncCustomerAssignment({ customerId: customerId as string }));
+  if (removed.segmentType === "drop" && removed.clientId) {
+    releaseCustomerCoreAssignments(removed.clientId);
+  } else {
+    removed.cores
+      .map((core) => core.assignedToCustomerId)
+      .filter(Boolean)
+      .forEach((customerId) => releaseCustomerCoreAssignments(customerId as string));
+  }
 
   mockClosures.forEach((closure) => {
     closure.connectedCableIds = closure.connectedCableIds.filter((id) => id !== payload.cableId);
     closure.splices = closure.splices.filter((splice) => splice.fromCableId !== payload.cableId && splice.toCableId !== payload.cableId);
   });
 
-  persistMockCollections();
   return removed;
 }
 
@@ -1519,7 +1463,6 @@ export function deleteMockClosure(payload: { closureId: string }) {
     mockNodes.splice(closureNodeIndex, 1);
   }
 
-  persistMockCollections();
   return removedClosure;
 }
 
@@ -1537,11 +1480,6 @@ export function deleteMockNode(payload: { nodeId: string }) {
     });
     (removedNode.clients ?? []).forEach((client) => affectedClientIds.add(client.id));
 
-    affectedClientIds.forEach((clientId) => {
-      releaseCustomerCoreAssignments(clientId);
-      syncCustomerAssignment({ customerId: clientId });
-    });
-
     for (let index = mockCables.length - 1; index >= 0; index -= 1) {
       const cable = mockCables[index];
       if (cable.fromNodeId !== removedNode.id && cable.toNodeId !== removedNode.id) continue;
@@ -1550,9 +1488,13 @@ export function deleteMockNode(payload: { nodeId: string }) {
       cable.cores
         .map((core) => core.assignedToCustomerId)
         .filter(Boolean)
-        .forEach((customerId) => syncCustomerAssignment({ customerId: customerId as string }));
+        .forEach((customerId) => affectedClientIds.add(customerId as string));
       mockCables.splice(index, 1);
     }
+
+    affectedClientIds.forEach((clientId) => {
+      releaseCustomerCoreAssignments(clientId);
+    });
 
     if (removedCableIds.size > 0) {
       mockClosures.forEach((closure) => {
@@ -1572,9 +1514,349 @@ export function deleteMockNode(payload: { nodeId: string }) {
   }
 
   mockNodes.splice(nodeIndex, 1);
-  persistMockCollections();
   return {
     node: removedNode,
     removedCableIds: Array.from(removedCableIds),
   };
+}
+
+export function activateMockCustomer(customerId: string) {
+  const customer = mockCustomers.find((entry) => entry.id === customerId);
+  if (!customer) throw new Error("Customer not found.");
+  customer.accountStatus = "active";
+  return customer;
+}
+
+export function ingestOnuTelemetry(payload: OnuTelemetryPayload) {
+  const existing = mockCustomers.find((entry) => entry.onuSerial === payload.serial_number);
+  const nextCustomer = buildCustomerFromTelemetry(payload, existing, mockBranding.tenantId);
+  upsertCustomer(nextCustomer);
+  return nextCustomer;
+}
+
+type PortalCredential = {
+  username: string;
+  password: string;
+  customerId: string;
+};
+
+export const mockCustomerPlans: CustomerPlan[] = [
+  { id: "plan-basic", name: "Basic 10Mbps", speedMbps: 10, priceMonthly: 8500, description: "Starter home plan" },
+  { id: "plan-plus", name: "Plus 20Mbps", speedMbps: 20, priceMonthly: 12000, description: "Great for streaming", recommended: true },
+  { id: "plan-pro", name: "Pro 50Mbps", speedMbps: 50, priceMonthly: 20000, description: "Multi-device power user" },
+  { id: "plan-ultra", name: "Ultra 100Mbps", speedMbps: 100, priceMonthly: 32000, description: "SME & creator bundle" },
+];
+
+const portalCredentials: PortalCredential[] = [
+  { username: "adebayo_hub", password: "pppoe-1234", customerId: "cust-1001" },
+  { username: "marina_view", password: "pppoe-1234", customerId: "cust-1002" },
+  { username: "korede_home", password: "pppoe-1234", customerId: "cust-1003" },
+  { username: "demo_user", password: "pppoe-1234", customerId: "cust-demo" },
+];
+
+const portalProfiles = new Map<string, CustomerPortalProfile>([
+  [
+    "cust-1001",
+    {
+      id: "cust-1001",
+      name: "Adebayo Tech Hub",
+      pppoeUsername: "adebayo_hub",
+      planName: "Plus 20Mbps",
+      speedMbps: 20,
+      status: "active" as const,
+      expiryDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 12).toISOString(),
+      usageGb: 380,
+      capGb: 500,
+    },
+  ],
+  [
+    "cust-1002",
+    {
+      id: "cust-1002",
+      name: "Marina View Offices",
+      pppoeUsername: "marina_view",
+      planName: "Pro 50Mbps",
+      speedMbps: 50,
+      status: "active" as const,
+      expiryDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 6).toISOString(),
+      usageGb: 620,
+      capGb: 700,
+    },
+  ],
+  [
+    "cust-1003",
+    {
+      id: "cust-1003",
+      name: "Korede Residential",
+      pppoeUsername: "korede_home",
+      planName: "Basic 10Mbps",
+      speedMbps: 10,
+      status: "suspended" as const,
+      expiryDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+      usageGb: 140,
+      capGb: 200,
+    },
+  ],
+  [
+    "cust-demo",
+    {
+      id: "cust-demo",
+      name: "Demo Customer",
+      pppoeUsername: "demo_user",
+      planName: "Plus 20Mbps",
+      speedMbps: 20,
+      status: "active" as const,
+      expiryDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString(),
+      usageGb: 120,
+      capGb: 300,
+    },
+  ],
+]);
+
+const portalTickets = new Map<string, CustomerTicket[]>([
+  [
+    "cust-1001",
+    [
+      {
+        id: "tkt-001",
+        subject: "Evening speed drops",
+        description: "Streaming buffers between 8pm-10pm daily.",
+        category: "slow speed",
+      status: "in_progress" as const,
+        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 30).toISOString(),
+        updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
+        history: [
+          {
+            id: "tkt-001-1",
+            message: "Ticket assigned to field engineer.",
+            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
+            author: "NOC",
+          },
+        ],
+      },
+    ],
+  ],
+]);
+
+const portalNotifications = new Map<string, CustomerNotification[]>([
+  [
+    "cust-1001",
+    [
+      {
+        id: "ntf-1",
+        title: "Planned Maintenance",
+        message: "Overnight upgrade scheduled for 2am-4am tomorrow.",
+        severity: "info",
+        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
+        read: false,
+      },
+      {
+        id: "ntf-2",
+        title: "Payment Reminder",
+        message: "Your subscription renews in 7 days.",
+        severity: "warning",
+        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 20).toISOString(),
+        read: false,
+      },
+    ],
+  ],
+]);
+
+const portalPayments = new Map<string, CustomerPayment[]>([
+  [
+    "cust-1001",
+    [
+      {
+        id: "pay-001",
+        amount: 12000,
+        status: "success",
+        reference: "PSK-0001",
+        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 20).toISOString(),
+        method: "paystack",
+        planName: "Plus 20Mbps",
+      },
+    ],
+  ],
+]);
+
+const portalUsage = new Map<string, UsageSnapshot[]>([
+  [
+    "cust-1001",
+    [
+      { month: "2026-01", usedGb: 420, capGb: 500 },
+      { month: "2026-02", usedGb: 380, capGb: 500 },
+      { month: "2026-03", usedGb: 210, capGb: 500 },
+    ],
+  ],
+]);
+
+export function portalLogin(username: string, password: string) {
+  const match = portalCredentials.find((entry) => entry.username === username);
+  if (!match || match.password !== password) {
+    throw new Error("Invalid PPPoE credentials.");
+  }
+  return {
+    token: `portal-${match.customerId}-${Date.now()}`,
+    customerId: match.customerId,
+  };
+}
+
+export function getPortalProfile(customerId: string) {
+  const profile = portalProfiles.get(customerId);
+  if (!profile) throw new Error("Customer portal profile not found.");
+  return profile;
+}
+
+export function getPortalPlans() {
+  return mockCustomerPlans;
+}
+
+export function getPortalTickets(customerId: string) {
+  return portalTickets.get(customerId) ?? [];
+}
+
+export function addPortalTicket(customerId: string, payload: { subject: string; description: string; category: CustomerTicketCategory }) {
+  const nextTicket: CustomerTicket = {
+    id: randomId("tkt"),
+    subject: payload.subject,
+    description: payload.description,
+    category: payload.category,
+    status: "open" as const,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    history: [
+      {
+        id: randomId("tkt-hist"),
+        message: "Ticket created by customer.",
+        createdAt: new Date().toISOString(),
+        author: "Customer",
+      },
+    ],
+  };
+  const existing = portalTickets.get(customerId) ?? [];
+  portalTickets.set(customerId, [nextTicket, ...existing]);
+  return nextTicket;
+}
+
+export function updatePortalTicketStatus(
+  customerId: string,
+  payload: { ticketId: string; status: CustomerTicket["status"]; note?: string },
+) {
+  const list = portalTickets.get(customerId) ?? [];
+  const next = list.map((ticket) => {
+    if (ticket.id !== payload.ticketId) return ticket;
+    return {
+      ...ticket,
+      status: payload.status,
+      updatedAt: new Date().toISOString(),
+      history: [
+        {
+          id: randomId("tkt-hist"),
+          message: payload.note || `Ticket marked ${payload.status.replace("_", " ")}`,
+          createdAt: new Date().toISOString(),
+          author: "Customer Care",
+        },
+        ...ticket.history,
+      ],
+    };
+  });
+  portalTickets.set(customerId, next);
+  return next.find((ticket) => ticket.id === payload.ticketId);
+}
+
+export function getPortalNotifications(customerId: string) {
+  return portalNotifications.get(customerId) ?? [];
+}
+
+export function getPortalPayments(customerId: string) {
+  return portalPayments.get(customerId) ?? [];
+}
+
+export function createPortalPayment(customerId: string, payload: { planId: string; method: CustomerPayment["method"] }) {
+  const plan = mockCustomerPlans.find((entry) => entry.id === payload.planId);
+  if (!plan) throw new Error("Selected plan not found.");
+  const payment: CustomerPayment = {
+    id: randomId("pay"),
+    amount: plan.priceMonthly,
+    status: "success" as const,
+    reference: `PAY-${Math.floor(Math.random() * 99999).toString().padStart(5, "0")}`,
+    createdAt: new Date().toISOString(),
+    method: payload.method,
+    planName: plan.name,
+  };
+  const existing = portalPayments.get(customerId) ?? [];
+  portalPayments.set(customerId, [payment, ...existing]);
+
+  const profile = portalProfiles.get(customerId);
+  if (profile) {
+    portalProfiles.set(customerId, {
+      ...profile,
+      planName: plan.name,
+      speedMbps: plan.speedMbps,
+      status: "active" as const,
+      expiryDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
+    });
+  }
+  return payment;
+}
+
+export function upgradePortalPlan(customerId: string, planId: string) {
+  const plan = mockCustomerPlans.find((entry) => entry.id === planId);
+  if (!plan) throw new Error("Plan not found.");
+  const profile = portalProfiles.get(customerId);
+  if (!profile) throw new Error("Customer profile not found.");
+  const nextProfile = {
+    ...profile,
+    planName: plan.name,
+    speedMbps: plan.speedMbps,
+    status: "active" as const,
+  };
+  portalProfiles.set(customerId, nextProfile);
+  return nextProfile;
+}
+
+export function getPortalUsage(customerId: string) {
+  return portalUsage.get(customerId) ?? [];
+}
+
+export function bulkImportCustomers(rows: Array<{ name: string; phone: string; pppoe_username: string; plan: string }>) {
+  let inserted = 0;
+  let skipped = 0;
+
+  rows.forEach((row) => {
+    const existing = mockCustomers.find((customer) => customer.pppoeUsername === row.pppoe_username);
+    if (existing) {
+      skipped += 1;
+      return;
+    }
+    const newCustomer: Customer = {
+      id: randomId("cust"),
+      tenantId: mockBranding.tenantId,
+      name: row.name,
+      email: `${row.pppoe_username}@example.com`,
+      phone: row.phone,
+      address: "Imported",
+      location: { lat: 6.45, lng: 3.47 },
+      pppoeUsername: row.pppoe_username,
+      onuVendor: "ZTE",
+      onuModel: "zte-f660",
+      onuSerial: `ONU-${Math.floor(Math.random() * 99999)}`,
+      routerBrand: "ZTE",
+      routerType: "standard",
+      deviceStatus: "offline",
+      lastSeenAt: new Date().toISOString(),
+      uptimeMinutes: 0,
+      oltName: "OLT HQ Core",
+      ponPort: "1/1/1",
+      rxSignal: -20,
+      txSignal: 2,
+      accountStatus: "active",
+      online: false,
+    };
+    mockCustomers.unshift(newCustomer);
+    upsertCustomerNode(newCustomer);
+    inserted += 1;
+  });
+
+  return { inserted, skipped };
 }

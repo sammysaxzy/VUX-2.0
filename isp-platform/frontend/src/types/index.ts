@@ -1,9 +1,17 @@
-export type Role = "super_admin" | "tenant_admin" | "isp_admin" | "noc_engineer" | "noc_viewer" | "field_engineer" | "admin" | "support" | "noc";
-export type NodeType = "olt" | "mst" | "pole" | "closure" | "customer";
+export type Role = "super_admin" | "tenant_admin" | "noc_engineer" | "field_engineer";
+export type NodeType = "olt" | "odf" | "cabinet" | "mst" | "pole" | "closure" | "customer";
 export type SessionStatus = "online" | "offline";
 export type FaultSeverity = "minor" | "major" | "critical";
 export type AccountStatus = "active" | "suspended";
 export type SplitterType = "1/2" | "1/4" | "1/8" | "1/16";
+export type MapAccessRole = "admin" | "engineer" | "viewer";
+export type MapPermission =
+  | "add"
+  | "edit"
+  | "delete"
+  | "assign_client"
+  | "reroute_fibre"
+  | "manage_permissions";
 
 export interface TenantBranding {
   tenantId: string;
@@ -18,9 +26,6 @@ export interface User {
   fullName: string;
   role: Role;
   tenantId: string;
-  permissionProfileId?: string;
-  delete_customer?: boolean;
-  permissions?: Partial<PermissionFlags>;
 }
 
 export interface AuthResponse {
@@ -50,6 +55,9 @@ export interface GeoPoint {
   lng: number;
 }
 
+export type FibreRouteMode = "road" | "straight";
+export type FibreRouteSource = "mapbox-directions" | "seeded" | "straight-line-fallback";
+
 export interface FibreCore {
   id: string;
   index: number;
@@ -60,6 +68,20 @@ export interface FibreCore {
   toMstId?: string;
   usagePath?: string;
   assignedToCustomerId?: string;
+}
+
+export interface FacilityCableLink {
+  cableId: string;
+  notes?: string;
+}
+
+export interface FacilitySplice {
+  id: string;
+  fromCableId: string;
+  fromCoreLabel: string;
+  toCableId: string;
+  toCoreLabel: string;
+  notes?: string;
 }
 
 export interface SpliceRecord {
@@ -77,8 +99,20 @@ export interface FibreCable {
   toNodeId: string;
   startMstId?: string;
   endMstId?: string;
+  start?: GeoPoint;
+  end?: GeoPoint;
+  geometry?: GeoPoint[];
   coordinates: GeoPoint[];
   distanceMeters: number;
+  routeMode?: FibreRouteMode;
+  routeSource?: FibreRouteSource;
+  routeFallbackReason?: string;
+  segmentType?: "backbone" | "distribution" | "drop";
+  flowDirection?: "incoming" | "outgoing" | "drop";
+  clientId?: string;
+  splitterPort?: number;
+  assignedCoreId?: string;
+  coreUsed?: string;
   faulted: boolean;
   cores: FibreCore[];
   splices: SpliceRecord[];
@@ -112,6 +146,8 @@ export interface NetworkNode {
   splitterType?: SplitterType;
   splitterPorts?: SplitterPort[];
   clients?: MSTClient[];
+  facilityCables?: FacilityCableLink[];
+  facilitySplices?: FacilitySplice[];
 }
 
 export interface SplitterPort {
@@ -148,7 +184,6 @@ export interface RadiusSession {
 export type RadiusUserStatus = "active" | "inactive";
 export type CustomerType = "individual" | "corporate";
 export type PriorityLevel = "high" | "medium" | "low";
-export type MemberRole = "admin" | "support" | "noc";
 
 export interface RadiusUser {
   username: string;
@@ -189,26 +224,6 @@ export type RadiusTab = "sessions" | "users";
 
 export type SettingsTab = "nas" | "zones" | "permissions" | "services" | "logs" | "configuration";
 
-export type PrivilegeModel = "Role Based" | "Approval Based" | "Hybrid";
-export type PermissionKey =
-  | "radius_access"
-  | "disconnect_user"
-  | "create_pppoe"
-  | "view_customers"
-  | "delete_customer"
-  | "billing_access"
-  | "settings_access";
-
-export interface PermissionFlags {
-  radius_access: boolean;
-  disconnect_user: boolean;
-  create_pppoe: boolean;
-  view_customers: boolean;
-  delete_customer: boolean;
-  billing_access: boolean;
-  settings_access: boolean;
-}
-
 export interface NasEntry {
   id: string;
   name: string;
@@ -231,18 +246,19 @@ export interface PermissionRole {
   scope: string;
   description: string;
   memberCount: number;
-  privilegeModel?: PrivilegeModel;
-  permissions: PermissionFlags;
-  members?: PrivilegeMember[];
+  mapRole?: MapAccessRole;
+  permissions?: MapPermission[];
+  canGrantPermissions?: boolean;
+  members?: PermissionMember[];
 }
 
-export interface PrivilegeMember {
+export interface PermissionMember {
   id: string;
+  userId?: string;
   fullName: string;
   email: string;
-  role: MemberRole;
-  permissionProfileId: string;
-  isActive: boolean;
+  mapRole: MapAccessRole;
+  canDelete: boolean;
 }
 
 export interface SettingsLog {
@@ -251,11 +267,6 @@ export interface SettingsLog {
   actor: string;
   description: string;
   createdAt: string;
-}
-
-export interface NotificationSettings {
-  message: string;
-  reminderDays: number;
 }
 
 export interface Customer {
@@ -269,13 +280,112 @@ export interface Customer {
   mstId?: string;
   splitterPort?: number;
   fibreCoreId?: string;
+  dropCableId?: string;
+  onuVendor?: string;
+  onuModel?: string;
   onuSerial: string;
+  routerBrand?: string;
+  routerType?: "standard" | "upgraded";
+  deviceStatus?: "online" | "offline";
+  lastSeenAt?: string;
+  uptimeMinutes?: number;
   oltName: string;
   ponPort: string;
   rxSignal: number;
   txSignal: number;
   accountStatus: AccountStatus;
   online: boolean;
+  pppoeUsername?: string;
+  installStatus?: "pending" | "scheduled" | "installed";
+  installDate?: string;
+  assignedEngineer?: string;
+  lastLogin?: string;
+  slaTier?: "gold" | "silver" | "bronze";
+}
+
+export type CustomerPortalStatus = "active" | "suspended";
+export type CustomerTicketStatus = "open" | "in_progress" | "resolved";
+export type CustomerTicketCategory = "slow speed" | "no internet" | "billing" | "other";
+export type NotificationSeverity = "info" | "warning" | "critical";
+export type PaymentStatus = "pending" | "success" | "failed";
+
+export interface CustomerPortalProfile {
+  id: string;
+  name: string;
+  pppoeUsername: string;
+  planName: string;
+  speedMbps: number;
+  status: CustomerPortalStatus;
+  expiryDate?: string;
+  usageGb?: number;
+  capGb?: number;
+}
+
+export interface CustomerPlan {
+  id: string;
+  name: string;
+  speedMbps: number;
+  priceMonthly: number;
+  description?: string;
+  recommended?: boolean;
+}
+
+export interface CustomerTicketUpdate {
+  id: string;
+  message: string;
+  createdAt: string;
+  author: string;
+}
+
+export interface CustomerTicket {
+  id: string;
+  subject: string;
+  description: string;
+  category: CustomerTicketCategory;
+  status: CustomerTicketStatus;
+  createdAt: string;
+  updatedAt: string;
+  history: CustomerTicketUpdate[];
+}
+
+export interface CustomerNotification {
+  id: string;
+  title: string;
+  message: string;
+  severity: NotificationSeverity;
+  createdAt: string;
+  read: boolean;
+}
+
+export interface CustomerPayment {
+  id: string;
+  amount: number;
+  status: PaymentStatus;
+  reference: string;
+  createdAt: string;
+  method: "paystack" | "flutterwave" | "stripe";
+  planName: string;
+}
+
+export interface UsageSnapshot {
+  month: string;
+  usedGb: number;
+  capGb?: number;
+}
+
+export interface OnuTelemetryPayload {
+  serial_number: string;
+  brand?: string;
+  pon_port: string;
+  olt_name: string;
+  rx_power: number;
+  tx_power: number;
+  status: "online" | "offline";
+  pppoe_username?: string;
+  router_type?: "standard" | "upgraded";
+  location?: GeoPoint;
+  uptime_minutes?: number;
+  last_seen?: string;
 }
 
 export interface EngineerActivity {
@@ -306,6 +416,7 @@ export interface DashboardRealtimePayload {
   activity?: EngineerActivity;
   fault?: Fault;
   customerStatusUpdate?: { customerId: string; online: boolean };
+  deviceTelemetry?: OnuTelemetryPayload;
   mapEvent?: {
     type:
       | "core_assigned"
@@ -313,6 +424,7 @@ export interface DashboardRealtimePayload {
       | "client_added"
       | "client_removed"
       | "client_reassigned"
+      | "client_route_updated"
       | "port_used"
       | "splice_created"
       | "splitter_changed"

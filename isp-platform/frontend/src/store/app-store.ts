@@ -1,19 +1,28 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { AlertItem, DashboardRealtimePayload, EngineerActivity, KpiSnapshot, TenantBranding, User } from "@/types";
-type ActiveModal = "fibre-details" | "mst-details" | null;
-type ModalType = "mst-details" | "fiber-details" | "closure-details" | "customer-details" | null;
+type ActiveModal = "fibre-details" | "mst-details" | "odf-details" | "cabinet-details" | null;
+type ModalType =
+  | "mst-details"
+  | "fiber-details"
+  | "closure-details"
+  | "customer-details"
+  | "odf-details"
+  | "cabinet-details"
+  | null;
 type ActivePanel = ModalType;
 
 type AppState = {
   token?: string;
   user?: User;
   branding?: TenantBranding;
-  activeMemberId?: string;
   selectedMSTId?: string;
   selectedFiberId?: string;
   selectedClosureId?: string;
   selectedCustomerNodeId?: string;
+  selectedClientId?: string;
+  selectedOdfId?: string;
+  selectedCabinetId?: string;
   modalType: ModalType;
   activePanel: ActivePanel;
   activeModal: ActiveModal;
@@ -22,12 +31,14 @@ type AppState = {
   recentActivity: EngineerActivity[];
   setAuth: (payload: { token: string; user: User; branding: TenantBranding }) => void;
   setBranding: (branding: TenantBranding) => void;
-  setSimulatedUser: (user: User, memberId?: string) => void;
   logout: () => void;
   setSelectedMST: (mstId?: string) => void;
   setSelectedFiber: (fiberId?: string) => void;
   setSelectedClosure: (closureId?: string) => void;
   setSelectedCustomerNode: (nodeId?: string) => void;
+  setSelectedClient: (clientId?: string) => void;
+  setSelectedOdf: (odfId?: string) => void;
+  setSelectedCabinet: (cabinetId?: string) => void;
   setModalType: (modal: ModalType) => void;
   setActivePanel: (panel: ActivePanel) => void;
   setActiveModal: (modal: ActiveModal) => void;
@@ -47,23 +58,27 @@ export const useAppStore = create<AppState>()(
       token: undefined,
       user: undefined,
       branding: undefined,
-      activeMemberId: undefined,
       selectedMSTId: undefined,
       selectedFiberId: undefined,
       selectedClosureId: undefined,
       selectedCustomerNodeId: undefined,
+      selectedClientId: undefined,
+      selectedOdfId: undefined,
+      selectedCabinetId: undefined,
       modalType: null,
       activePanel: null,
       activeModal: null,
       ...initialRealtime,
-      setAuth: ({ token, user, branding }) => set({ token, user, branding, activeMemberId: undefined }),
+      setAuth: ({ token, user, branding }) => set({ token, user, branding }),
       setBranding: (branding) => set({ branding }),
-      setSimulatedUser: (user, memberId) => set({ user, activeMemberId: memberId }),
-      logout: () => set({ token: undefined, user: undefined, branding: undefined, activeMemberId: undefined, ...initialRealtime }),
+      logout: () => set({ token: undefined, user: undefined, branding: undefined, ...initialRealtime }),
       setSelectedMST: (mstId) => set({ selectedMSTId: mstId }),
       setSelectedFiber: (fiberId) => set({ selectedFiberId: fiberId }),
       setSelectedClosure: (closureId) => set({ selectedClosureId: closureId }),
       setSelectedCustomerNode: (nodeId) => set({ selectedCustomerNodeId: nodeId }),
+      setSelectedClient: (clientId) => set({ selectedClientId: clientId }),
+      setSelectedOdf: (odfId) => set({ selectedOdfId: odfId }),
+      setSelectedCabinet: (cabinetId) => set({ selectedCabinetId: cabinetId }),
       setModalType: (modal) => set({ modalType: modal, activePanel: modal }),
       setActivePanel: (panel) => set({ activePanel: panel, modalType: panel }),
       setActiveModal: (modal) =>
@@ -83,12 +98,11 @@ export const useAppStore = create<AppState>()(
     {
       name: "oss-bss-state",
       storage: createJSONStorage(() => localStorage),
-        partialize: (state) => ({
-          token: state.token,
-          user: state.user,
-          branding: state.branding,
-          activeMemberId: state.activeMemberId,
-        }),
+      partialize: (state) => ({
+        token: state.token,
+        user: state.user,
+        branding: state.branding,
+      }),
     },
   ),
 );

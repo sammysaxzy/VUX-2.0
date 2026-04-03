@@ -18,6 +18,7 @@ type ClientDropDetailsDrawerProps = {
   node?: NetworkNode;
   customer?: Customer;
   cables: FibreCable[];
+  canDelete?: boolean;
   onOpenChange: (open: boolean) => void;
   onReleaseConnection?: (payload: { mstId: string; portNumber: number }) => void;
 };
@@ -31,6 +32,7 @@ export function ClientDropDetailsDrawer({
   node,
   customer,
   cables,
+  canDelete = false,
   onOpenChange,
   onReleaseConnection,
 }: ClientDropDetailsDrawerProps) {
@@ -105,6 +107,7 @@ export function ClientDropDetailsDrawer({
                   <Button
                     variant="danger"
                     size="sm"
+                    disabled={!canDelete}
                     onClick={() =>
                       onReleaseConnection({
                         mstId: customer.mstId as string,
@@ -152,6 +155,9 @@ export function ClientDropDetailsDrawer({
               </div>
             ))}
             {coreTraces.length === 0 ? <p className="text-xs text-muted-foreground">No core currently assigned to this client.</p> : null}
+            {customer?.mstId ? (
+              <p className="text-[11px] text-muted-foreground">Edit location, splitter port, core, and route from the MST drawer.</p>
+            ) : null}
           </div>
         </div>
       ) : (

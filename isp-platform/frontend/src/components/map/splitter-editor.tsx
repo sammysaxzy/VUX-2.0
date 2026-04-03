@@ -8,6 +8,8 @@ type SplitterEditorProps = {
   splitterType: SplitterType;
   ports: SplitterPort[];
   clients?: MSTClient[];
+  disabled?: boolean;
+  canRemove?: boolean;
   onChangeSplitterType: (splitterType: SplitterType) => void;
   onAssignOrEdit: (portNumber: number) => void;
   onRemoveClient: (portNumber: number) => void;
@@ -33,6 +35,8 @@ export function SplitterEditor({
   splitterType,
   ports,
   clients = [],
+  disabled = false,
+  canRemove = false,
   onChangeSplitterType,
   onAssignOrEdit,
   onRemoveClient,
@@ -45,7 +49,7 @@ export function SplitterEditor({
       <div className="rounded-xl border border-border/70 bg-background/60 p-3">
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Splitter Configuration</p>
         <div className="flex items-center gap-2">
-          <Select value={splitterType} onChange={(event) => onChangeSplitterType(event.target.value as SplitterType)}>
+          <Select value={splitterType} disabled={disabled} onChange={(event) => onChangeSplitterType(event.target.value as SplitterType)}>
             {splitterOptions.map((option) => (
               <option key={option} value={option}>
                 {option}
@@ -90,11 +94,11 @@ export function SplitterEditor({
               )}
 
               <div className="flex items-center gap-1">
-                <Button size="sm" variant="outline" className="h-7 flex-1 px-1.5 text-[11px]" onClick={() => onAssignOrEdit(port.port)}>
+                <Button size="sm" variant="outline" className="h-7 flex-1 px-1.5 text-[11px]" disabled={disabled} onClick={() => onAssignOrEdit(port.port)}>
                   {linkedClient ? "Edit" : "Assign"}
                 </Button>
                 {linkedClient ? (
-                  <Button size="sm" variant="danger" className="h-7 px-1.5 text-[11px]" onClick={() => onRemoveClient(port.port)}>
+                  <Button size="sm" variant="danger" className="h-7 px-1.5 text-[11px]" disabled={disabled || !canRemove} onClick={() => onRemoveClient(port.port)}>
                     Remove
                   </Button>
                 ) : null}

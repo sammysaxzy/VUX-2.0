@@ -4,13 +4,19 @@ import type {
   AuthResponse,
   ClosureBox,
   Customer,
+  CustomerNotification,
+  CustomerPayment,
+  CustomerPlan,
+  CustomerPortalProfile,
+  CustomerTicket,
+  CustomerTicketCategory,
+  OnuTelemetryPayload,
   EngineerActivity,
   Fault,
   FibreCable,
   KpiSnapshot,
   NasEntry,
   NetworkNode,
-  NotificationSettings,
   PermissionRole,
   RadiusBulkImportResult,
   RadiusSession,
@@ -20,10 +26,10 @@ import type {
   TenantBranding,
   User,
   Zone,
+  UsageSnapshot,
 } from "@/types";
 import {
   addMockNasEntry,
-  addMockPrivilegeAccount,
   addMockFault,
   addMockRadiusUser,
   addMockServicePlan,
@@ -32,23 +38,24 @@ import {
   assignMockCoreToCable,
   assignMockClientToMstPort,
   bulkImportMockRadiusUsers,
+  addPortalTicket,
+  activateMockCustomer,
+  bulkImportCustomers,
   buildKpis,
   createMockMstConnection,
+  createPortalPayment,
   deleteMockCable,
-  deleteMockCustomer,
-  deleteMockClosure,
-  deleteMockNasEntries,
-  deleteMockNode,
-  deleteMockPrivilegeAccount,
-  deleteMockPrivilegeAccounts,
-  deleteMockPermissionRoles,
-  deleteMockRadiusUsers,
-  deleteMockServicePlans,
-  deleteMockSettingsLogs,
-  deleteMockZones,
   disconnectMockRadiusSession,
   extendMockRadiusUser,
-  getMockNotificationSettings,
+  deleteMockClosure,
+  deleteMockNode,
+  getPortalNotifications,
+  getPortalPayments,
+  getPortalPlans,
+  getPortalProfile,
+  getPortalTickets,
+  getPortalUsage,
+  updatePortalTicketStatus,
   mockActivities,
   mockAlerts,
   mockBranding,
@@ -68,16 +75,18 @@ import {
   reconnectMockRadiusSession,
   removeMockClientFromMstPort,
   removeMockClosureSplice,
+  ingestOnuTelemetry,
+  portalLogin,
   setMockCableCoreState,
+  upsertMockPermissionMemberAccess,
   syncMockRadiusUser,
-  updateMockPrivilegeAccount,
-  updateMockPermissionRole,
   updateMockNasEntry,
-  updateMockNotificationSettings,
   updateMockMstSplitterType,
+  upgradePortalPlan,
   upsertMockClosureSplice,
   upsertCustomer,
 } from "@/lib/api/mock-data";
+import { hydrateCableRoute } from "@/lib/fibre-routing";
 import { randomId } from "@/lib/utils";
 import {
   CUSTOMER_EXPORT_SCHEMA,
@@ -109,7 +118,7 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-export const USE_MOCKS = (import.meta.env.VITE_USE_MOCKS ?? "true") === "true";
+const USE_MOCKS = (import.meta.env.VITE_USE_MOCKS ?? "true") === "true";
 
 function tenantHeaders(tenantId?: string) {
   if (!tenantId) return {};
@@ -162,17 +171,6 @@ export const apiClient = {
         fullName: payload.fullName,
         role: "tenant_admin",
         tenantId: payload.tenantId,
-        permissionProfileId: "role-1",
-        delete_customer: true,
-        permissions: {
-          radius_access: true,
-          disconnect_user: true,
-          create_pppoe: true,
-          view_customers: true,
-          delete_customer: true,
-          billing_access: true,
-          settings_access: true,
-        },
       };
       const branding: TenantBranding = {
         tenantId: payload.tenantId,
@@ -272,17 +270,6 @@ export const apiClient = {
     return data;
   },
 
-  async deleteCustomer(customerId: string, tenantId: string, token?: string) {
-    if (USE_MOCKS) {
-      await sleep(220);
-      deleteMockCustomer(customerId);
-      return;
-    }
-    await api.delete(`/customers/${customerId}`, {
-      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
-    });
-  },
-
   async getNodes(tenantId: string, token?: string): Promise<NetworkNode[]> {
     if (USE_MOCKS) {
       await sleep(200);
@@ -301,13 +288,13 @@ export const apiClient = {
   async getFibre(tenantId: string, token?: string): Promise<FibreCable[]> {
     if (USE_MOCKS) {
       await sleep(260);
-      return mockCables;
+      return mockCables.map((cable) => hydrateCableRoute(cable));
     }
     const { data } = await api.get<Array<FibreCable & { core_count?: number }>>("/network/fibre", {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data.map((cable) => ({
-      ...cable,
+      ...hydrateCableRoute(cable),
       coreCount: cable.coreCount ?? (cable.core_count as 2 | 4 | 8 | 12 | 24) ?? (cable.cores.length as 2 | 4 | 8 | 12 | 24),
     }));
   },
@@ -324,7 +311,7 @@ export const apiClient = {
   ) {
     if (USE_MOCKS) {
       await sleep(220);
-      return createMockMstConnection(payload);
+      return hydrateCableRoute(createMockMstConnection(payload));
     }
     const { data } = await api.post<FibreCable>(
       "/network/fibre",
@@ -338,7 +325,7 @@ export const apiClient = {
         headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
       },
     );
-    return data;
+    return hydrateCableRoute(data);
   },
 
   async assignCableCore(payload: { cableId: string; coreId: string }, tenantId: string, token?: string) {
@@ -473,6 +460,14 @@ export const apiClient = {
       clientId: string;
       clientName: string;
       fiberCore: string;
+      coreId: string;
+      coreLabel: string;
+      cableId: string;
+      clientLocation: { lat: number; lng: number };
+      geometry: Array<{ lat: number; lng: number }>;
+      routeMode: "road" | "straight";
+      routeSource: "mapbox-directions" | "seeded" | "straight-line-fallback";
+      routeFallbackReason?: string;
     },
     tenantId: string,
     token?: string,
@@ -488,6 +483,14 @@ export const apiClient = {
         client_id: payload.clientId,
         client_name: payload.clientName,
         fiber_core: payload.fiberCore,
+        core_id: payload.coreId,
+        core_label: payload.coreLabel,
+        cable_id: payload.cableId,
+        client_location: payload.clientLocation,
+        geometry: payload.geometry,
+        route_mode: payload.routeMode,
+        route_source: payload.routeSource,
+        route_fallback_reason: payload.routeFallbackReason,
       },
       {
         headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
@@ -628,18 +631,6 @@ export const apiClient = {
     return data;
   },
 
-  async deleteRadiusUsers(usernames: string[], tenantId: string, token?: string) {
-    if (USE_MOCKS) {
-      await sleep(170);
-      return { deleted: deleteMockRadiusUsers(usernames) };
-    }
-    const { data } = await api.delete("/radius/users", {
-      data: { usernames },
-      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
-    });
-    return data;
-  },
-
   async reconnectRadiusSession(username: string, tenantId: string, token?: string): Promise<RadiusSession> {
     if (USE_MOCKS) {
       await sleep(150);
@@ -715,18 +706,6 @@ export const apiClient = {
     return data;
   },
 
-  async deleteServicePlans(names: string[], tenantId: string, token?: string) {
-    if (USE_MOCKS) {
-      await sleep(170);
-      return { deleted: deleteMockServicePlans(names) };
-    }
-    const { data } = await api.delete("/settings/services", {
-      data: { names },
-      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
-    });
-    return data;
-  },
-
   async getNasEntries(tenantId: string, token?: string): Promise<NasEntry[]> {
     if (USE_MOCKS) {
       await sleep(180);
@@ -760,18 +739,6 @@ export const apiClient = {
     return data;
   },
 
-  async deleteNasEntries(ids: string[], tenantId: string, token?: string) {
-    if (USE_MOCKS) {
-      await sleep(170);
-      return { deleted: deleteMockNasEntries(ids) };
-    }
-    const { data } = await api.delete("/settings/nas", {
-      data: { ids },
-      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
-    });
-    return data;
-  },
-
   async getZones(tenantId: string, token?: string): Promise<Zone[]> {
     if (USE_MOCKS) {
       await sleep(180);
@@ -794,18 +761,6 @@ export const apiClient = {
     return data;
   },
 
-  async deleteZones(ids: string[], tenantId: string, token?: string) {
-    if (USE_MOCKS) {
-      await sleep(170);
-      return { deleted: deleteMockZones(ids) };
-    }
-    const { data } = await api.delete("/settings/zones", {
-      data: { ids },
-      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
-    });
-    return data;
-  },
-
   async getPermissionRoles(tenantId: string, token?: string): Promise<PermissionRole[]> {
     if (USE_MOCKS) {
       await sleep(160);
@@ -817,87 +772,25 @@ export const apiClient = {
     return data;
   },
 
-  async deletePermissionRoles(ids: string[], tenantId: string, token?: string) {
-    if (USE_MOCKS) {
-      await sleep(160);
-      return { deleted: deleteMockPermissionRoles(ids) };
-    }
-    const { data } = await api.delete("/settings/permissions", {
-      data: { ids },
-      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
-    });
-    return data;
-  },
-
-  async updatePermissionRole(
-    id: string,
+  async savePermissionMemberAccess(
     payload: {
-      privilegeModel?: "Role Based" | "Approval Based" | "Hybrid";
-      description?: string;
-      permissions?: Partial<PermissionRole["permissions"]>;
+      member: {
+        id?: string;
+        userId?: string;
+        fullName: string;
+        email: string;
+        mapRole: "admin" | "engineer" | "viewer";
+        canDelete: boolean;
+      };
     },
     tenantId: string,
     token?: string,
-  ): Promise<PermissionRole> {
+  ): Promise<PermissionRole[]> {
     if (USE_MOCKS) {
-      await sleep(160);
-      return updateMockPermissionRole(id, payload);
+      await sleep(150);
+      return upsertMockPermissionMemberAccess(payload);
     }
-    const { data } = await api.patch<PermissionRole>(`/settings/permissions/${encodeURIComponent(id)}`, payload, {
-      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
-    });
-    return data;
-  },
-
-  async createPrivilegeAccount(
-    payload: { fullName: string; email: string; role: "admin" | "support" | "noc"; permissionProfileId: string },
-    tenantId: string,
-    token?: string,
-  ) {
-    if (USE_MOCKS) {
-      await sleep(160);
-      return addMockPrivilegeAccount(payload);
-    }
-    const { data } = await api.post("/settings/permissions/accounts", payload, {
-      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
-    });
-    return data;
-  },
-
-  async updatePrivilegeAccount(
-    id: string,
-    payload: { permissionProfileId: string },
-    tenantId: string,
-    token?: string,
-  ) {
-    if (USE_MOCKS) {
-      await sleep(160);
-      return updateMockPrivilegeAccount(id, payload);
-    }
-    const { data } = await api.patch(`/settings/permissions/accounts/${encodeURIComponent(id)}`, payload, {
-      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
-    });
-    return data;
-  },
-
-  async deletePrivilegeAccount(id: string, tenantId: string, token?: string) {
-    if (USE_MOCKS) {
-      await sleep(160);
-      return deleteMockPrivilegeAccount(id);
-    }
-    const { data } = await api.delete(`/settings/permissions/accounts/${encodeURIComponent(id)}`, {
-      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
-    });
-    return data;
-  },
-
-  async deletePrivilegeAccounts(ids: string[], tenantId: string, token?: string) {
-    if (USE_MOCKS) {
-      await sleep(160);
-      return { deleted: deleteMockPrivilegeAccounts(ids) };
-    }
-    const { data } = await api.delete("/settings/permissions/accounts", {
-      data: { ids },
+    const { data } = await api.put<PermissionRole[]>("/settings/permissions", payload, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;
@@ -909,40 +802,6 @@ export const apiClient = {
       return mockSettingsLogs;
     }
     const { data } = await api.get<SettingsLog[]>("/settings/logs", {
-      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
-    });
-    return data;
-  },
-
-  async getNotificationSettings(tenantId: string, token?: string): Promise<NotificationSettings> {
-    if (USE_MOCKS) {
-      await sleep(120);
-      return getMockNotificationSettings();
-    }
-    const { data } = await api.get<NotificationSettings>("/settings/notifications", {
-      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
-    });
-    return data;
-  },
-
-  async updateNotificationSettings(payload: NotificationSettings, tenantId: string, token?: string): Promise<NotificationSettings> {
-    if (USE_MOCKS) {
-      await sleep(120);
-      return updateMockNotificationSettings(payload);
-    }
-    const { data } = await api.put<NotificationSettings>("/settings/notifications", payload, {
-      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
-    });
-    return data;
-  },
-
-  async deleteSettingsLogs(ids: string[], tenantId: string, token?: string) {
-    if (USE_MOCKS) {
-      await sleep(160);
-      return { deleted: deleteMockSettingsLogs(ids) };
-    }
-    const { data } = await api.delete("/settings/logs", {
-      data: { ids },
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;
@@ -974,6 +833,16 @@ export const apiClient = {
     });
   },
 
+  async activateCustomer(customerId: string, tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(140);
+      return activateMockCustomer(customerId);
+    }
+    return api.post(`/customers/${customerId}/activate`, undefined, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+  },
+
   async getFaults(tenantId: string, token?: string): Promise<Fault[]> {
     if (USE_MOCKS) {
       await sleep(220);
@@ -995,6 +864,169 @@ export const apiClient = {
       return addMockFault(payload);
     }
     const { data } = await api.post<Fault>("/faults", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async customerPortalLogin(payload: { username: string; password: string }) {
+    if (USE_MOCKS) {
+      await sleep(200);
+      return portalLogin(payload.username, payload.password);
+    }
+    const { data } = await api.post<{ token: string; customer_id: string }>("/customer-portal/login", payload);
+    return { token: data.token, customerId: data.customer_id };
+  },
+
+  async getCustomerPortalProfile(customerId: string, token?: string): Promise<CustomerPortalProfile> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return getPortalProfile(customerId);
+    }
+    const { data } = await api.get<CustomerPortalProfile>(`/customer-portal/${customerId}/profile`, {
+      headers: authHeaders(token),
+    });
+    return data;
+  },
+
+  async getCustomerPortalPlans(): Promise<CustomerPlan[]> {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return getPortalPlans();
+    }
+    const { data } = await api.get<CustomerPlan[]>("/customer-portal/plans");
+    return data;
+  },
+
+  async getCustomerPortalTickets(customerId: string, token?: string): Promise<CustomerTicket[]> {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return getPortalTickets(customerId);
+    }
+    const { data } = await api.get<CustomerTicket[]>(`/customer-portal/${customerId}/tickets`, {
+      headers: authHeaders(token),
+    });
+    return data;
+  },
+
+  async createCustomerPortalTicket(
+    customerId: string,
+    payload: { subject: string; description: string; category: CustomerTicketCategory },
+    token?: string,
+  ): Promise<CustomerTicket> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return addPortalTicket(customerId, payload);
+    }
+    const { data } = await api.post<CustomerTicket>(`/customer-portal/${customerId}/tickets`, payload, {
+      headers: authHeaders(token),
+    });
+    return data;
+  },
+
+  async updateCustomerPortalTicket(
+    customerId: string,
+    payload: { ticketId: string; status: CustomerTicket["status"]; note?: string },
+    token?: string,
+  ): Promise<CustomerTicket> {
+    if (USE_MOCKS) {
+      await sleep(160);
+      const updated = updatePortalTicketStatus(customerId, payload);
+      if (!updated) throw new Error("Ticket not found.");
+      return updated;
+    }
+    const { data } = await api.patch<CustomerTicket>(
+      `/customer-portal/${customerId}/tickets/${payload.ticketId}`,
+      payload,
+      { headers: authHeaders(token) },
+    );
+    return data;
+  },
+
+  async getCustomerPortalNotifications(customerId: string, token?: string): Promise<CustomerNotification[]> {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return getPortalNotifications(customerId);
+    }
+    const { data } = await api.get<CustomerNotification[]>(`/customer-portal/${customerId}/notifications`, {
+      headers: authHeaders(token),
+    });
+    return data;
+  },
+
+  async getCustomerPortalPayments(customerId: string, token?: string): Promise<CustomerPayment[]> {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return getPortalPayments(customerId);
+    }
+    const { data } = await api.get<CustomerPayment[]>(`/customer-portal/${customerId}/payments`, {
+      headers: authHeaders(token),
+    });
+    return data;
+  },
+
+  async createCustomerPortalPayment(
+    customerId: string,
+    payload: { planId: string; method: CustomerPayment["method"] },
+    token?: string,
+  ): Promise<CustomerPayment> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return createPortalPayment(customerId, payload);
+    }
+    const { data } = await api.post<CustomerPayment>(`/customer-portal/${customerId}/payments`, payload, {
+      headers: authHeaders(token),
+    });
+    return data;
+  },
+
+  async upgradeCustomerPortalPlan(
+    customerId: string,
+    payload: { planId: string },
+    token?: string,
+  ): Promise<CustomerPortalProfile> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return upgradePortalPlan(customerId, payload.planId);
+    }
+    const { data } = await api.post<CustomerPortalProfile>(`/customer-portal/${customerId}/upgrade`, payload, {
+      headers: authHeaders(token),
+    });
+    return data;
+  },
+
+  async getCustomerPortalUsage(customerId: string, token?: string): Promise<UsageSnapshot[]> {
+    if (USE_MOCKS) {
+      await sleep(140);
+      return getPortalUsage(customerId);
+    }
+    const { data } = await api.get<UsageSnapshot[]>(`/customer-portal/${customerId}/usage`, {
+      headers: authHeaders(token),
+    });
+    return data;
+  },
+
+  async bulkImportCustomers(
+    payload: Array<{ name: string; phone: string; pppoe_username: string; plan: string }>,
+    tenantId: string,
+    token?: string,
+  ) {
+    if (USE_MOCKS) {
+      await sleep(240);
+      return bulkImportCustomers(payload);
+    }
+    const { data } = await api.post(`/customers/import`, payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async ingestOnuTelemetry(payload: OnuTelemetryPayload, tenantId: string, token?: string): Promise<Customer> {
+    if (USE_MOCKS) {
+      await sleep(220);
+      return ingestOnuTelemetry(payload);
+    }
+    const { data } = await api.post<Customer>("/network/onu-telemetry", payload, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;
