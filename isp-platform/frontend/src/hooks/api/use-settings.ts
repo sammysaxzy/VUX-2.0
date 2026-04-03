@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { NasEntry, ServicePlan, Zone } from "@/types";
+import type { MemberRole, NasEntry, PermissionFlags, PermissionRole, ServicePlan, Zone } from "@/types";
 import { apiClient } from "@/lib/api/client";
 import { useAppStore, useTenantId } from "@/store/app-store";
 
@@ -101,6 +101,37 @@ export function usePermissionRoles() {
     queryKey: ["settings-permissions", tenantId],
     queryFn: () => apiClient.getPermissionRoles(tenantId, token),
     enabled: Boolean(tenantId),
+  });
+}
+
+export function useUpdatePermissionRole() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { id: string; payload: { privilegeModel: string; permissionFlags: PermissionFlags } }) =>
+      apiClient.updatePermissionRole(payload, tenantId, token),
+    onSuccess: () => {
+      toast.success("Permission profile updated.");
+      queryClient.invalidateQueries({ queryKey: ["settings-permissions", tenantId] });
+    },
+    onError: () => toast.error("Unable to update permission profile."),
+  });
+}
+
+export function useCreatePrivilegeAccount() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { fullName: string; email: string; role: MemberRole; permissionProfileId: string }) =>
+      apiClient.createPrivilegeAccount(payload, tenantId, token),
+    onSuccess: (member) => {
+      toast.success("Member created.");
+      queryClient.invalidateQueries({ queryKey: ["settings-permissions", tenantId] });
+      return member;
+    },
+    onError: () => toast.error("Unable to create member."),
   });
 }
 

@@ -17,6 +17,7 @@ import type {
   KpiSnapshot,
   NasEntry,
   NetworkNode,
+  PermissionFlags,
   PermissionRole,
   RadiusBulkImportResult,
   RadiusSession,
@@ -43,10 +44,13 @@ import {
   bulkImportCustomers,
   buildKpis,
   createMockMstConnection,
+  createMockPrivilegeAccount,
   createPortalPayment,
   deleteMockCable,
   disconnectMockRadiusSession,
   extendMockRadiusUser,
+  deleteMockCustomer,
+  deleteMockRadiusUsers,
   deleteMockClosure,
   deleteMockNode,
   getPortalNotifications,
@@ -81,10 +85,13 @@ import {
   upsertMockPermissionMemberAccess,
   syncMockRadiusUser,
   updateMockNasEntry,
+  updateMockFault,
+  updateMockPermissionRole,
   updateMockMstSplitterType,
   upgradePortalPlan,
   upsertMockClosureSplice,
   upsertCustomer,
+  deleteMockFault,
 } from "@/lib/api/mock-data";
 import { hydrateCableRoute } from "@/lib/fibre-routing";
 import { randomId } from "@/lib/utils";
@@ -118,7 +125,7 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-const USE_MOCKS = (import.meta.env.VITE_USE_MOCKS ?? "true") === "true";
+export const USE_MOCKS = (import.meta.env.VITE_USE_MOCKS ?? "true") === "true";
 
 function tenantHeaders(tenantId?: string) {
   if (!tenantId) return {};
@@ -265,6 +272,17 @@ export const apiClient = {
       method,
       url: endpoint,
       data: customer,
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async deleteCustomer(customerId: string, tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(200);
+      return deleteMockCustomer(customerId);
+    }
+    const { data } = await api.delete(`/customers/${customerId}`, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;
@@ -585,6 +603,20 @@ export const apiClient = {
     return data;
   },
 
+  async deleteRadiusUsers(usernames: string[], tenantId: string, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return deleteMockRadiusUsers(usernames);
+    }
+    const { data } = await api.request({
+      method: "delete",
+      url: "/radius/users",
+      data: { usernames },
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
   async bulkImportRadiusUsers(payload: RadiusBulkImportPayload[], tenantId: string, token?: string): Promise<RadiusBulkImportResult> {
     if (USE_MOCKS) {
       await sleep(350);
@@ -772,6 +804,42 @@ export const apiClient = {
     return data;
   },
 
+  async updatePermissionRole(
+    payload: { id: string; payload: { privilegeModel: string; permissionFlags: PermissionFlags } },
+    tenantId: string,
+    token?: string,
+  ) {
+    if (USE_MOCKS) {
+      await sleep(150);
+      return updateMockPermissionRole({
+        id: payload.id,
+        privilegeModel: payload.payload.privilegeModel,
+        permissionFlags: payload.payload.permissionFlags,
+      });
+    }
+    const { data } = await api.patch<PermissionRole>(
+      `/settings/permissions/${payload.id}`,
+      payload.payload,
+      { headers: { ...tenantHeaders(tenantId), ...authHeaders(token) } },
+    );
+    return data;
+  },
+
+  async createPrivilegeAccount(
+    payload: { fullName: string; email: string; role: "admin" | "support" | "noc"; permissionProfileId: string },
+    tenantId: string,
+    token?: string,
+  ) {
+    if (USE_MOCKS) {
+      await sleep(150);
+      return createMockPrivilegeAccount(payload);
+    }
+    const { data } = await api.post(`/settings/permissions/members`, payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
   async savePermissionMemberAccess(
     payload: {
       member: {
@@ -864,6 +932,32 @@ export const apiClient = {
       return addMockFault(payload);
     }
     const { data } = await api.post<Fault>("/faults", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async updateFault(
+    payload: { faultId: string; update: Omit<Fault, "id" | "tenantId" | "createdAt"> },
+    tenantId: string,
+    token?: string,
+  ): Promise<Fault> {
+    if (USE_MOCKS) {
+      await sleep(220);
+      return updateMockFault(payload);
+    }
+    const { data } = await api.patch<Fault>(`/faults/${payload.faultId}`, payload.update, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async deleteFault(payload: { faultId: string }, tenantId: string, token?: string): Promise<{ id: string }> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return deleteMockFault(payload);
+    }
+    const { data } = await api.delete<{ id: string }>(`/faults/${payload.faultId}`, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;

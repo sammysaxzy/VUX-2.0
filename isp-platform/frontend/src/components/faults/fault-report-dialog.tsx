@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import type { Fault, FibreCable, NetworkNode } from "@/types";
@@ -15,6 +16,7 @@ const schema = z.object({
   title: z.string().min(3),
   description: z.string().min(6),
   severity: z.enum(["minor", "major", "critical"]),
+  status: z.enum(["open", "investigating", "resolved"]),
   lat: z.coerce.number().min(-90).max(90),
   lng: z.coerce.number().min(-180).max(180),
   affectedNodeId: z.string().optional(),
@@ -30,15 +32,18 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   onSubmit: (payload: Omit<Fault, "id" | "tenantId" | "createdAt">) => void;
   submitting?: boolean;
+  mode?: "create" | "edit";
+  initialFault?: Fault;
 };
 
-export function FaultReportDialog({ open, nodes, cables, onOpenChange, onSubmit, submitting }: Props) {
+export function FaultReportDialog({ open, nodes, cables, onOpenChange, onSubmit, submitting, mode = "create", initialFault }: Props) {
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       title: "",
       description: "",
       severity: "major",
+      status: "open",
       lat: 6.444,
       lng: 3.482,
       affectedNodeId: "",
@@ -46,12 +51,39 @@ export function FaultReportDialog({ open, nodes, cables, onOpenChange, onSubmit,
     },
   });
 
+  useEffect(() => {
+    if (!open) return;
+    if (initialFault) {
+      form.reset({
+        title: initialFault.title,
+        description: initialFault.description,
+        severity: initialFault.severity,
+        status: initialFault.status,
+        lat: initialFault.location.lat,
+        lng: initialFault.location.lng,
+        affectedNodeId: initialFault.affectedNodeId ?? "",
+        affectedCableId: initialFault.affectedCableId ?? "",
+      });
+      return;
+    }
+    form.reset({
+      title: "",
+      description: "",
+      severity: "major",
+      status: "open",
+      lat: 6.444,
+      lng: 3.482,
+      affectedNodeId: "",
+      affectedCableId: "",
+    });
+  }, [form, initialFault, open]);
+
   const save = form.handleSubmit((values) => {
     onSubmit({
       title: values.title,
       description: values.description,
       severity: values.severity,
-      status: "open",
+      status: values.status,
       location: { lat: values.lat, lng: values.lng },
       affectedNodeId: values.affectedNodeId || undefined,
       affectedCableId: values.affectedCableId || undefined,
@@ -64,8 +96,8 @@ export function FaultReportDialog({ open, nodes, cables, onOpenChange, onSubmit,
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Report Network Fault"
-      description="Mark location, add impact notes, and broadcast to NOC in real-time."
+      title={mode === "edit" ? "Edit Fault" : "Report Network Fault"}
+      description={mode === "edit" ? "Update severity, status, and impact details." : "Mark location, add impact notes, and broadcast to NOC in real-time."}
     >
       <form className="space-y-4" onSubmit={save}>
         <div>
@@ -83,6 +115,14 @@ export function FaultReportDialog({ open, nodes, cables, onOpenChange, onSubmit,
               <option value="minor">Minor</option>
               <option value="major">Major</option>
               <option value="critical">Critical</option>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="status">Status</Label>
+            <Select id="status" {...form.register("status")}>
+              <option value="open">Open</option>
+              <option value="investigating">Investigating</option>
+              <option value="resolved">Resolved</option>
             </Select>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -122,7 +162,7 @@ export function FaultReportDialog({ open, nodes, cables, onOpenChange, onSubmit,
         </div>
         <div className="flex justify-end">
           <Button type="submit" disabled={submitting}>
-            {submitting ? "Submitting..." : "Submit Fault"}
+            {submitting ? "Saving..." : mode === "edit" ? "Save Changes" : "Submit Fault"}
           </Button>
         </div>
       </form>

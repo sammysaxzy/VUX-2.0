@@ -5,7 +5,7 @@ import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { getConfigurationItem } from "@/components/settings/configuration-items";
 import { useCreatePrivilegeAccount, usePermissionRoles, useUpdatePermissionRole } from "@/hooks/api/use-settings";
-import { flattenPermissionMembers, hasPermission, canManagePermissions } from "@/lib/permissions";
+import { EMPTY_PERMISSIONS, flattenPermissionMembers, hasPermission, canManagePermissions } from "@/lib/permissions";
 import { useAppStore } from "@/store/app-store";
 import { useAdminStore } from "@/store/admin-store";
 import { SettingsLayout } from "@/components/settings/settings-layout";
@@ -101,7 +101,9 @@ export function ConfigDetailPage() {
     setRoleModels(
       Object.fromEntries(roles.map((role) => [role.id, (role.privilegeModel ?? "Role Based") as PrivilegeModel])),
     );
-    setProfilePermissions(Object.fromEntries(roles.map((role) => [role.id, role.permissions])));
+    setProfilePermissions(
+      Object.fromEntries(roles.map((role) => [role.id, role.permissionFlags ?? EMPTY_PERMISSIONS])),
+    );
       setAccountForm((current) => ({
         ...current,
         permissionProfileId: current.permissionProfileId || roles[0]?.id || "",
@@ -192,7 +194,7 @@ export function ConfigDetailPage() {
                                 id: role.id,
                                 payload: {
                                   privilegeModel: roleModels[role.id] ?? role.privilegeModel ?? "Role Based",
-                                  permissions: profilePermissions[role.id] ?? role.permissions,
+                                  permissionFlags: profilePermissions[role.id] ?? role.permissionFlags ?? EMPTY_PERMISSIONS,
                                 },
                               })
                             }
@@ -210,13 +212,13 @@ export function ConfigDetailPage() {
                                 <p className="mt-1 text-xs text-muted-foreground">{field.helper}</p>
                               </div>
                               <Switch
-                                checked={Boolean((profilePermissions[role.id] ?? role.permissions)[field.key])}
+                                checked={Boolean((profilePermissions[role.id] ?? role.permissionFlags ?? EMPTY_PERMISSIONS)[field.key])}
                                 disabled={!canEditPermissions}
                                 onCheckedChange={(checked) =>
                                   setProfilePermissions((current) => ({
                                     ...current,
                                     [role.id]: {
-                                      ...(current[role.id] ?? role.permissions),
+                                      ...(current[role.id] ?? role.permissionFlags ?? EMPTY_PERMISSIONS),
                                       [field.key]: checked,
                                     },
                                   }))
@@ -232,7 +234,7 @@ export function ConfigDetailPage() {
                           <div className="space-y-1">
                             {(role.members ?? []).map((member) => (
                               <p key={member.id} className="text-sm">
-                                {member.fullName} <span className="text-muted-foreground">({member.role} | {member.email})</span>
+                                {member.fullName} <span className="text-muted-foreground">({member.role ?? "member"} | {member.email})</span>
                               </p>
                             ))}
                           </div>

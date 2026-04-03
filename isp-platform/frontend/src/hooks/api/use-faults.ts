@@ -31,3 +31,34 @@ export function useReportFault() {
     onError: () => toast.error("Failed to report fault."),
   });
 }
+
+export function useUpdateFault() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { faultId: string; update: Omit<Fault, "id" | "tenantId" | "createdAt"> }) =>
+      apiClient.updateFault(payload, tenantId, token),
+    onSuccess: () => {
+      toast.success("Fault updated.");
+      queryClient.invalidateQueries({ queryKey: ["faults", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", tenantId] });
+    },
+    onError: () => toast.error("Failed to update fault."),
+  });
+}
+
+export function useDeleteFault() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { faultId: string }) => apiClient.deleteFault(payload, tenantId, token),
+    onSuccess: () => {
+      toast.success("Fault deleted.");
+      queryClient.invalidateQueries({ queryKey: ["faults", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", tenantId] });
+    },
+    onError: () => toast.error("Failed to delete fault."),
+  });
+}

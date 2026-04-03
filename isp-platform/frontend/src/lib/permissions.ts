@@ -1,4 +1,4 @@
-import type { PermissionFlags, PermissionKey, PermissionRole, PrivilegeMember, Role, User } from "@/types";
+import type { MemberRole, PermissionFlags, PermissionKey, PermissionRole, PrivilegeMember, Role, User } from "@/types";
 
 export const EMPTY_PERMISSIONS: PermissionFlags = {
   radius_access: false,
@@ -86,12 +86,19 @@ export function deriveSimulationRoleFromPermissions(permissions: PermissionFlags
   return "support";
 }
 
+function toMemberRole(role: Role): MemberRole {
+  if (role === "admin" || role === "super_admin" || role === "tenant_admin" || role === "isp_admin") return "admin";
+  if (role === "noc" || role === "noc_engineer" || role === "noc_viewer") return "noc";
+  return "support";
+}
+
 export function flattenPermissionMembers(permissionRoles: PermissionRole[]) {
   return permissionRoles.flatMap((permissionRole) =>
     (permissionRole.members ?? []).map((member) => ({
       ...member,
       profileName: permissionRole.name,
-      permissions: permissionRole.permissions,
+      permissions: permissionRole.permissionFlags ?? EMPTY_PERMISSIONS,
+      role: member.role ?? toMemberRole(deriveSimulationRoleFromPermissions(permissionRole.permissionFlags ?? EMPTY_PERMISSIONS)),
     })),
   );
 }
@@ -102,7 +109,7 @@ export function buildUserFromPermissionMember(
   tenantId: string,
   previousUser?: User,
 ): User {
-  const resolvedPermissions = permissionRole.permissions;
+  const resolvedPermissions = permissionRole.permissionFlags ?? EMPTY_PERMISSIONS;
   const role = deriveSimulationRoleFromPermissions(resolvedPermissions);
   return {
     id: member.id,

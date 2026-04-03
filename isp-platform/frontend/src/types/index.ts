@@ -1,10 +1,30 @@
-export type Role = "super_admin" | "tenant_admin" | "noc_engineer" | "field_engineer";
+export type Role =
+  | "super_admin"
+  | "tenant_admin"
+  | "isp_admin"
+  | "admin"
+  | "support"
+  | "noc"
+  | "noc_viewer"
+  | "noc_engineer"
+  | "field_engineer";
 export type NodeType = "olt" | "odf" | "cabinet" | "mst" | "pole" | "closure" | "customer";
 export type SessionStatus = "online" | "offline";
 export type FaultSeverity = "minor" | "major" | "critical";
 export type AccountStatus = "active" | "suspended";
 export type SplitterType = "1/2" | "1/4" | "1/8" | "1/16";
 export type MapAccessRole = "admin" | "engineer" | "viewer";
+export type MemberRole = "admin" | "support" | "noc";
+export type PrivilegeModel = "Role Based" | "Approval Based" | "Hybrid";
+export type PermissionKey =
+  | "radius_access"
+  | "disconnect_user"
+  | "create_pppoe"
+  | "view_customers"
+  | "delete_customer"
+  | "billing_access"
+  | "settings_access";
+export type PermissionFlags = Record<PermissionKey, boolean>;
 export type MapPermission =
   | "add"
   | "edit"
@@ -26,6 +46,9 @@ export interface User {
   fullName: string;
   role: Role;
   tenantId: string;
+  permissionProfileId?: string;
+  permissions?: PermissionFlags;
+  delete_customer?: boolean;
 }
 
 export interface AuthResponse {
@@ -248,6 +271,8 @@ export interface PermissionRole {
   memberCount: number;
   mapRole?: MapAccessRole;
   permissions?: MapPermission[];
+  permissionFlags?: PermissionFlags;
+  privilegeModel?: PrivilegeModel;
   canGrantPermissions?: boolean;
   members?: PermissionMember[];
 }
@@ -259,6 +284,18 @@ export interface PermissionMember {
   email: string;
   mapRole: MapAccessRole;
   canDelete: boolean;
+  role?: MemberRole;
+  permissionProfileId?: string;
+}
+
+export interface PrivilegeMember {
+  id: string;
+  fullName: string;
+  email: string;
+  role: MemberRole;
+  permissionProfileId?: string;
+  profileName?: string;
+  permissions?: PermissionFlags;
 }
 
 export interface SettingsLog {

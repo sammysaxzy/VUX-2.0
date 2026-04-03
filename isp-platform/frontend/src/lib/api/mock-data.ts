@@ -17,6 +17,7 @@ import type {
   KpiSnapshot,
   NasEntry,
   NetworkNode,
+  PermissionFlags,
   PermissionMember,
   PermissionRole,
   RadiusBulkImportResult,
@@ -70,6 +71,8 @@ const mapPermissionMembers: PermissionMember[] = [
     email: mockUser.email,
     mapRole: "admin",
     canDelete: true,
+    role: "admin",
+    permissionProfileId: "role-1",
   },
   {
     id: "perm-member-2",
@@ -78,6 +81,8 @@ const mapPermissionMembers: PermissionMember[] = [
     email: "field@westlink.io",
     mapRole: "engineer",
     canDelete: false,
+    role: "noc",
+    permissionProfileId: "role-2",
   },
   {
     id: "perm-member-3",
@@ -86,8 +91,20 @@ const mapPermissionMembers: PermissionMember[] = [
     email: "audit@westlink.io",
     mapRole: "viewer",
     canDelete: false,
+    role: "support",
+    permissionProfileId: "role-3",
   },
 ];
+
+const defaultPermissionFlags: PermissionFlags = {
+  radius_access: true,
+  disconnect_user: true,
+  create_pppoe: true,
+  view_customers: true,
+  delete_customer: false,
+  billing_access: false,
+  settings_access: true,
+};
 
 function buildPermissionRoles(members: PermissionMember[]): PermissionRole[] {
   const grouped = {
@@ -105,6 +122,8 @@ function buildPermissionRoles(members: PermissionMember[]): PermissionRole[] {
       memberCount: grouped.admin.length,
       mapRole: "admin",
       permissions: ["add", "edit", "delete", "assign_client", "reroute_fibre", "manage_permissions"],
+      permissionFlags: { ...defaultPermissionFlags, delete_customer: true, billing_access: true, settings_access: true },
+      privilegeModel: "Role Based",
       canGrantPermissions: true,
       members: grouped.admin,
     },
@@ -116,6 +135,8 @@ function buildPermissionRoles(members: PermissionMember[]): PermissionRole[] {
       memberCount: grouped.engineer.length,
       mapRole: "engineer",
       permissions: ["add", "edit", "assign_client", "reroute_fibre"],
+      permissionFlags: { ...defaultPermissionFlags, delete_customer: false, billing_access: false, settings_access: false },
+      privilegeModel: "Role Based",
       canGrantPermissions: false,
       members: grouped.engineer,
     },
@@ -127,6 +148,8 @@ function buildPermissionRoles(members: PermissionMember[]): PermissionRole[] {
       memberCount: grouped.viewer.length,
       mapRole: "viewer",
       permissions: [],
+      permissionFlags: { ...defaultPermissionFlags, radius_access: false, create_pppoe: false, disconnect_user: false, settings_access: false },
+      privilegeModel: "Role Based",
       canGrantPermissions: false,
       members: grouped.viewer,
     },
@@ -564,7 +587,7 @@ export const mockFaults: Fault[] = [
   },
 ];
 
-export const mockSessions: RadiusSession[] = [
+export let mockSessions: RadiusSession[] = [
   {
     id: "sess-1",
     customerId: "cust-1001",
@@ -603,7 +626,7 @@ export const mockServicePlans: ServicePlan[] = [
   { name: "Core 50/50", speed: "50M/50M", price: "₦18,900", rateLimit: "50M/50M", description: "Enterprise burst-ready" },
 ];
 
-export const mockRadiusUsers: RadiusUser[] = [
+export let mockRadiusUsers: RadiusUser[] = [
   {
     username: "adebayo_hub",
     status: "active",
@@ -695,6 +718,46 @@ export function upsertMockPermissionMemberAccess(payload: {
 
   mockPermissionRoles = buildPermissionRoles(nextMembers);
   return mockPermissionRoles;
+}
+
+export function updateMockPermissionRole(payload: { id: string; privilegeModel: string; permissionFlags: PermissionFlags }) {
+  mockPermissionRoles = mockPermissionRoles.map((role) =>
+    role.id !== payload.id
+      ? role
+      : {
+          ...role,
+          privilegeModel: payload.privilegeModel as PermissionRole["privilegeModel"],
+          permissionFlags: payload.permissionFlags,
+        },
+  );
+  return mockPermissionRoles.find((role) => role.id === payload.id);
+}
+
+export function createMockPrivilegeAccount(payload: {
+  fullName: string;
+  email: string;
+  role: "admin" | "support" | "noc";
+  permissionProfileId: string;
+}) {
+  const targetRole = mockPermissionRoles.find((role) => role.id === payload.permissionProfileId);
+  if (!targetRole) throw new Error("Permission profile not found");
+  const newMember: PermissionMember = {
+    id: randomId("perm-member"),
+    fullName: payload.fullName.trim(),
+    email: payload.email.trim().toLowerCase(),
+    mapRole: targetRole.mapRole ?? "viewer",
+    canDelete: false,
+    role: payload.role,
+    permissionProfileId: payload.permissionProfileId,
+  };
+  const nextMembers = [
+    ...(targetRole.members ?? []).filter((member) => member.email.toLowerCase() !== newMember.email),
+    newMember,
+  ];
+  mockPermissionRoles = mockPermissionRoles.map((role) =>
+    role.id !== targetRole.id ? role : { ...role, members: nextMembers, memberCount: nextMembers.length },
+  );
+  return newMember;
 }
 
 export const mockSettingsLogs: SettingsLog[] = [
@@ -845,6 +908,14 @@ export function activateMockRadiusUser(username: string) {
   return user;
 }
 
+export function deleteMockRadiusUsers(usernames: string[]) {
+  const usernameSet = new Set(usernames);
+  const removed = mockRadiusUsers.filter((entry) => usernameSet.has(entry.username));
+  mockRadiusUsers = mockRadiusUsers.filter((entry) => !usernameSet.has(entry.username));
+  mockSessions = mockSessions.filter((entry) => !usernameSet.has(entry.username));
+  return removed;
+}
+
 export function syncMockRadiusUser(username: string) {
   const user = mockRadiusUsers.find((entry) => entry.username === username);
   if (!user) throw new Error("User not found");
@@ -968,6 +1039,33 @@ export function addMockFault(fault: Omit<Fault, "id" | "createdAt" | "tenantId">
     createdAt: new Date().toISOString(),
   });
   return newFault;
+}
+
+export function updateMockFault(payload: { faultId: string; update: Omit<Fault, "id" | "tenantId" | "createdAt"> }) {
+  const index = mockFaults.findIndex((fault) => fault.id === payload.faultId);
+  if (index === -1) throw new Error("Fault not found");
+  const current = mockFaults[index];
+  const next: Fault = {
+    ...current,
+    ...payload.update,
+  };
+  mockFaults[index] = next;
+  mockAlerts.unshift({
+    id: randomId("alert"),
+    title: "Fault Updated",
+    description: payload.update.description,
+    severity: payload.update.severity,
+    acknowledged: false,
+    createdAt: new Date().toISOString(),
+  });
+  return next;
+}
+
+export function deleteMockFault(payload: { faultId: string }) {
+  const index = mockFaults.findIndex((fault) => fault.id === payload.faultId);
+  if (index === -1) throw new Error("Fault not found");
+  const [removed] = mockFaults.splice(index, 1);
+  return { id: removed.id };
 }
 
 export function upsertCustomer(customer: Customer) {
@@ -1527,11 +1625,25 @@ export function activateMockCustomer(customerId: string) {
   return customer;
 }
 
+export function deleteMockCustomer(customerId: string) {
+  const index = mockCustomers.findIndex((entry) => entry.id === customerId);
+  if (index < 0) throw new Error("Customer not found.");
+  const [removed] = mockCustomers.splice(index, 1);
+  const nodeIndex = mockNodes.findIndex((node) => node.type === "customer" && node.id === customerId);
+  if (nodeIndex >= 0) mockNodes.splice(nodeIndex, 1);
+  releaseCustomerCoreAssignments(customerId);
+  return removed;
+}
+
 export function ingestOnuTelemetry(payload: OnuTelemetryPayload) {
   const existing = mockCustomers.find((entry) => entry.onuSerial === payload.serial_number);
   const nextCustomer = buildCustomerFromTelemetry(payload, existing, mockBranding.tenantId);
   upsertCustomer(nextCustomer);
   return nextCustomer;
+}
+
+export function simulateMockBackendTick() {
+  return { changed: false, faultRaised: false };
 }
 
 type PortalCredential = {
