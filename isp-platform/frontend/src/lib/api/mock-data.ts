@@ -1226,14 +1226,6 @@ export function deleteMockPrivilegeAccounts(memberIds: string[]) {
   return deleted;
 }
 
-export function deleteMockSettingsLogs(ids: string[]) {
-  const idSet = new Set(ids);
-  const deleted = mockSettingsLogs.filter((log) => idSet.has(log.id)).length;
-  mockSettingsLogs = mockSettingsLogs.filter((log) => !idSet.has(log.id));
-  persistMockCollections();
-  return deleted;
-}
-
 export function buildKpis(): KpiSnapshot {
   const activeCustomers = mockCustomers.filter((c) => c.accountStatus === "active").length;
   const offlineCustomers = mockCustomers.filter((c) => !c.online).length;

@@ -11,7 +11,6 @@ import {
   useDeletePrivilegeAccounts,
   useDeleteNasEntries,
   useDeleteServicePlans,
-  useDeleteSettingsLogs,
   useDeleteZones,
   useNasEntries,
   usePermissionRoles,
@@ -30,13 +29,14 @@ import { Label } from "@/components/ui/label";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatRelativeDate } from "@/lib/utils";
+import { createCsvContent, downloadCsvFile } from "@/features/import-export/utils";
+import { formatDateOnly, formatRelativeDate } from "@/lib/utils";
 
 const blankNasForm = { name: "", ipAddress: "", sharedSecret: "" };
 const blankZoneForm = { name: "", nasId: "", description: "" };
 const blankServiceForm: ServicePlan = { name: "", speed: "", price: "", rateLimit: "", description: "" };
 
-type SettingsDeleteTarget = "nas" | "zones" | "services" | "logs" | "members";
+type SettingsDeleteTarget = "nas" | "zones" | "services" | "members";
 
 function toggleSelection(values: string[], id: string) {
   return values.includes(id) ? values.filter((entry) => entry !== id) : [...values, id];
@@ -61,9 +61,14 @@ export function SettingsPage() {
   const [selectedNasIds, setSelectedNasIds] = useState<string[]>([]);
   const [selectedZoneIds, setSelectedZoneIds] = useState<string[]>([]);
   const [selectedServiceNames, setSelectedServiceNames] = useState<string[]>([]);
-  const [selectedLogIds, setSelectedLogIds] = useState<string[]>([]);
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<SettingsDeleteTarget | null>(null);
+  const [logSearch, setLogSearch] = useState("");
+  const [logActorFilter, setLogActorFilter] = useState("all");
+  const [logActionFilter, setLogActionFilter] = useState("all");
+  const [logDateFrom, setLogDateFrom] = useState("");
+  const [logDateTo, setLogDateTo] = useState("");
+  const [showArchivedLogs, setShowArchivedLogs] = useState(false);
 
   const nasQuery = useNasEntries();
   const createNasMutation = useCreateNasEntry();
@@ -78,7 +83,6 @@ export function SettingsPage() {
   const createServiceMutation = useCreateServicePlan();
   const deleteServicesMutation = useDeleteServicePlans();
   const logsQuery = useSettingsLogs();
-  const deleteLogsMutation = useDeleteSettingsLogs();
   const canAccessSettings = hasPermission(user, "settings_access");
   const canEditPermissions = canManagePermissions(user);
   const members = useAdminStore((state) => state.members);
@@ -110,6 +114,7 @@ export function SettingsPage() {
   const zoneCount = zonesQuery.data?.length ?? 0;
   const serviceCount = servicesQuery.data?.length ?? 0;
   const logCount = logsQuery.data?.length ?? 0;
+  const retentionDays = 90;
 
   const activeSummary = useMemo(() => {
     if (activeTab === "nas") return `${nasCount} NAS devices`;
@@ -171,14 +176,51 @@ export function SettingsPage() {
   const nasIds = useMemo(() => nasQuery.data?.map((entry) => entry.id) ?? [], [nasQuery.data]);
   const zoneIds = useMemo(() => zonesQuery.data?.map((zone) => zone.id) ?? [], [zonesQuery.data]);
   const serviceNames = useMemo(() => servicesQuery.data?.map((plan) => plan.name) ?? [], [servicesQuery.data]);
-  const logIds = useMemo(() => logsQuery.data?.map((log) => log.id) ?? [], [logsQuery.data]);
+  const logActors = useMemo(() => {
+    const actors = new Set((logsQuery.data ?? []).map((log) => log.actor));
+    return Array.from(actors).sort((left, right) => left.localeCompare(right));
+  }, [logsQuery.data]);
+  const logActions = useMemo(() => {
+    const actions = new Set((logsQuery.data ?? []).map((log) => log.type));
+    return Array.from(actions).sort((left, right) => left.localeCompare(right));
+  }, [logsQuery.data]);
+  const logsWithRetentionState = useMemo(() => {
+    const retentionCutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+    return (logsQuery.data ?? []).map((log) => ({
+      ...log,
+      archived: new Date(log.createdAt).getTime() < retentionCutoff,
+    }));
+  }, [logsQuery.data]);
+  const filteredLogs = useMemo(() => {
+    const normalizedSearch = logSearch.trim().toLowerCase();
+    const dateFrom = logDateFrom ? new Date(`${logDateFrom}T00:00:00`).getTime() : null;
+    const dateTo = logDateTo ? new Date(`${logDateTo}T23:59:59.999`).getTime() : null;
+
+    return logsWithRetentionState.filter((log) => {
+      if (!showArchivedLogs && log.archived) return false;
+      if (showArchivedLogs && !log.archived) return false;
+      if (logActorFilter !== "all" && log.actor !== logActorFilter) return false;
+      if (logActionFilter !== "all" && log.type !== logActionFilter) return false;
+
+      const createdAt = new Date(log.createdAt).getTime();
+      if (dateFrom !== null && createdAt < dateFrom) return false;
+      if (dateTo !== null && createdAt > dateTo) return false;
+
+      if (!normalizedSearch) return true;
+      const searchHaystack = `${log.type} ${log.actor} ${log.description}`.toLowerCase();
+      return searchHaystack.includes(normalizedSearch);
+    });
+  }, [logActionFilter, logActorFilter, logDateFrom, logDateTo, logSearch, logsWithRetentionState, showArchivedLogs]);
+  const archivedLogCount = useMemo(
+    () => logsWithRetentionState.filter((log) => log.archived).length,
+    [logsWithRetentionState],
+  );
 
   useEffect(() => {
     setSelectedNasIds((current) => current.filter((id) => nasIds.includes(id)));
     setSelectedZoneIds((current) => current.filter((id) => zoneIds.includes(id)));
     setSelectedServiceNames((current) => current.filter((name) => serviceNames.includes(name)));
-    setSelectedLogIds((current) => current.filter((id) => logIds.includes(id)));
-  }, [logIds, nasIds, serviceNames, zoneIds]);
+  }, [nasIds, serviceNames, zoneIds]);
 
   useEffect(() => {
     setMembers(flattenPermissionMembers(permissionsQuery.data ?? []));
@@ -214,8 +256,6 @@ export function SettingsPage() {
       ? selectedZoneIds.length
       : deleteTarget === "services"
       ? selectedServiceNames.length
-      : deleteTarget === "logs"
-      ? selectedLogIds.length
       : deleteTarget === "members"
       ? selectedMemberIds.length
       : 0;
@@ -248,15 +288,6 @@ export function SettingsPage() {
       });
       return;
     }
-    if (deleteTarget === "logs" && selectedLogIds.length > 0) {
-      deleteLogsMutation.mutate(selectedLogIds, {
-        onSuccess: () => {
-          setSelectedLogIds([]);
-          setDeleteTarget(null);
-        },
-      });
-      return;
-    }
     if (deleteTarget === "members" && selectedMemberIds.length > 0) {
       deletePrivilegeAccountsMutation.mutate(selectedMemberIds, {
         onSuccess: () => {
@@ -265,6 +296,21 @@ export function SettingsPage() {
         },
       });
     }
+  };
+
+  const exportLogs = () => {
+    const rows = filteredLogs.map((log) => ({
+      id: log.id,
+      action: log.type,
+      actor: log.actor,
+      description: log.description,
+      created_at: log.createdAt,
+      date: formatDateOnly(log.createdAt),
+      archived: log.archived ? "yes" : "no",
+    }));
+    const csv = createCsvContent(["id", "action", "actor", "description", "created_at", "date", "archived"], rows);
+    const mode = showArchivedLogs ? "archived" : "active";
+    downloadCsvFile(`audit-logs-${mode}.csv`, csv);
   };
 
   return (
@@ -595,55 +641,124 @@ export function SettingsPage() {
         (logsQuery.isLoading || !logsQuery.data ? (
           <PageSkeleton />
         ) : (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Logs</CardTitle>
-                <CardDescription>Authentication, disconnect, and sync events across shared service operations.</CardDescription>
-              </div>
-              <Button type="button" variant="danger" disabled={selectedLogIds.length === 0} onClick={() => setDeleteTarget("logs")}>
-                Delete
-              </Button>
-            </CardHeader>
-            <CardContent className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">
-                      <input
-                        type="checkbox"
-                        checked={logIds.length > 0 && logIds.every((id) => selectedLogIds.includes(id))}
-                        onChange={() => setSelectedLogIds((current) => toggleSelectAll(current, logIds))}
-                        aria-label="Select all logs"
-                      />
-                    </TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Actor</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Time</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {logsQuery.data.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell>
-                        <input
-                          type="checkbox"
-                          checked={selectedLogIds.includes(log.id)}
-                          onChange={() => setSelectedLogIds((current) => toggleSelection(current, log.id))}
-                          aria-label={`Select log ${log.id}`}
-                        />
-                      </TableCell>
-                      <TableCell className="capitalize">{log.type}</TableCell>
-                      <TableCell>{log.actor}</TableCell>
-                      <TableCell>{log.description}</TableCell>
-                      <TableCell>{formatRelativeDate(log.createdAt)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <div className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-2">
+                  <div>
+                    <CardTitle>Logs</CardTitle>
+                    <CardDescription>Append-only audit trail for authentication, disconnect, and sync activity.</CardDescription>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    <Badge variant="outline">Append-only</Badge>
+                    <Badge variant="outline">No inline editing</Badge>
+                    <Badge variant="outline">No deletion from UI</Badge>
+                    <Badge variant={showArchivedLogs ? "info" : "outline"}>
+                      {showArchivedLogs ? `${archivedLogCount} archived logs` : `${Math.max(logCount - archivedLogCount, 0)} active logs`}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button type="button" variant={showArchivedLogs ? "outline" : "secondary"} onClick={() => setShowArchivedLogs(false)}>
+                    Active Logs
+                  </Button>
+                  <Button type="button" variant={showArchivedLogs ? "secondary" : "outline"} onClick={() => setShowArchivedLogs(true)}>
+                    Archive
+                  </Button>
+                  <Button type="button" onClick={exportLogs} disabled={filteredLogs.length === 0}>
+                    Export CSV
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                  <div className="space-y-1 xl:col-span-2">
+                    <Label htmlFor="log-search">Search logs</Label>
+                    <Input
+                      id="log-search"
+                      value={logSearch}
+                      onChange={(event) => setLogSearch(event.target.value)}
+                      placeholder="Search actor, action, or description"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="log-actor-filter">User</Label>
+                    <Select id="log-actor-filter" value={logActorFilter} onChange={(event) => setLogActorFilter(event.target.value)}>
+                      <option value="all">All users</option>
+                      {logActors.map((actor) => (
+                        <option key={actor} value={actor}>
+                          {actor}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="log-action-filter">Action</Label>
+                    <Select id="log-action-filter" value={logActionFilter} onChange={(event) => setLogActionFilter(event.target.value)}>
+                      <option value="all">All actions</option>
+                      {logActions.map((action) => (
+                        <option key={action} value={action}>
+                          {action}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="log-date-from">Date from</Label>
+                    <Input id="log-date-from" type="date" value={logDateFrom} onChange={(event) => setLogDateFrom(event.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="log-date-to">Date to</Label>
+                    <Input id="log-date-to" type="date" value={logDateTo} onChange={(event) => setLogDateTo(event.target.value)} />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 px-4 py-3 text-sm">
+                  <span className="text-muted-foreground">
+                    {filteredLogs.length} {showArchivedLogs ? "archived" : "active"} audit event{filteredLogs.length === 1 ? "" : "s"} shown
+                  </span>
+                  <span className="text-muted-foreground">
+                    Retention policy: {retentionDays} days in active view, then moved to archive
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Action</TableHead>
+                        <TableHead>User</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Time</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredLogs.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
+                            No audit events match the current filters.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredLogs.map((log) => (
+                          <TableRow key={log.id}>
+                            <TableCell className="capitalize">{log.type}</TableCell>
+                            <TableCell>{log.actor}</TableCell>
+                            <TableCell>{log.description}</TableCell>
+                            <TableCell>
+                              <Badge variant={log.archived ? "outline" : "info"}>{log.archived ? "Archived" : "Active"}</Badge>
+                            </TableCell>
+                            <TableCell>{formatRelativeDate(log.createdAt)}</TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         ))}
 
       <Dialog
@@ -666,7 +781,6 @@ export function SettingsPage() {
                 deleteNasMutation.isPending ||
                 deleteZonesMutation.isPending ||
                 deleteServicesMutation.isPending ||
-                deleteLogsMutation.isPending ||
                 deletePrivilegeAccountsMutation.isPending
               }
               onClick={confirmDelete}
@@ -674,7 +788,6 @@ export function SettingsPage() {
               {deleteNasMutation.isPending ||
               deleteZonesMutation.isPending ||
               deleteServicesMutation.isPending ||
-              deleteLogsMutation.isPending ||
               deletePrivilegeAccountsMutation.isPending
                 ? "Deleting..."
                 : "Confirm Delete"}

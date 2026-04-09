@@ -46,7 +46,6 @@ import {
   deleteMockPermissionRoles,
   deleteMockRadiusUsers,
   deleteMockServicePlans,
-  deleteMockSettingsLogs,
   deleteMockZones,
   disconnectMockRadiusSession,
   extendMockRadiusUser,
@@ -982,18 +981,6 @@ export const apiClient = {
       return updateMockNotificationSettings(payload);
     }
     const { data } = await api.put<NotificationSettings>("/settings/notifications", payload, {
-      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
-    });
-    return data;
-  },
-
-  async deleteSettingsLogs(ids: string[], tenantId: string, token?: string) {
-    if (USE_MOCKS) {
-      await sleep(160);
-      return { deleted: deleteMockSettingsLogs(ids) };
-    }
-    const { data } = await api.delete("/settings/logs", {
-      data: { ids },
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;

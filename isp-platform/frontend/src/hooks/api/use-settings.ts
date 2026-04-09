@@ -276,16 +276,3 @@ export function useDeleteServicePlans() {
   });
 }
 
-export function useDeleteSettingsLogs() {
-  const tenantId = useTenantId();
-  const token = useAppStore((state) => state.token);
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (ids: string[]) => apiClient.deleteSettingsLogs(ids, tenantId, token),
-    onSuccess: (_, ids) => {
-      toast.success(`${ids.length} log entr${ids.length === 1 ? "y" : "ies"} deleted.`);
-      queryClient.invalidateQueries({ queryKey: ["settings-logs", tenantId] });
-    },
-    onError: () => toast.error("Unable to delete log entries."),
-  });
-}
