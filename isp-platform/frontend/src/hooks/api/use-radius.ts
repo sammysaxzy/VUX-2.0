@@ -64,13 +64,10 @@ export function useCreateRadiusUser() {
     mutationFn: (payload: {
       username: string;
       password: string;
+      customerId: string;
       plan: string;
       zoneId: string;
-      customerType: "individual" | "corporate";
       expirationDate: string;
-      staticIp?: string;
-      priority?: "high" | "medium" | "low";
-      slaProfile?: string;
     }) => apiClient.createRadiusUser(payload, tenantId, token),
     onSuccess: () => {
       toast.success("PPPoE user created.");

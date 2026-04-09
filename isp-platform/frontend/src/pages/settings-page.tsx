@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { canManagePermissions, flattenPermissionMembers, hasPermission } from "@/lib/permissions";
+import { canManagePermissions, flattenPermissionMembers, hasPermission, isProtectedPrivilegeMember } from "@/lib/permissions";
 import { useAppStore } from "@/store/app-store";
 import { useAdminStore } from "@/store/admin-store";
 import type { MemberRole, NasEntry, ServicePlan, SettingsTab } from "@/types";
@@ -28,6 +28,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
+import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatRelativeDate } from "@/lib/utils";
 
@@ -82,6 +83,7 @@ export function SettingsPage() {
   const canEditPermissions = canManagePermissions(user);
   const members = useAdminStore((state) => state.members);
   const setMembers = useAdminStore((state) => state.setMembers);
+  const permissionRoles = permissionsQuery.data ?? [];
 
   if (!canAccessSettings) {
     return (
@@ -187,11 +189,16 @@ export function SettingsPage() {
   }, [members]);
 
   const toggleSelectMember = (id: string) => {
+    const member = members.find((entry) => entry.id === id);
+    if (!member || isProtectedPrivilegeMember(member, permissionRoles)) return;
     setSelectedMemberIds((current) => (current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]));
   };
 
   const toggleSelectAllMembers = () => {
-    setSelectedMemberIds((current) => (current.length === members.length ? [] : members.map((member) => member.id)));
+    const selectableMemberIds = members
+      .filter((member) => !isProtectedPrivilegeMember(member, permissionRoles))
+      .map((member) => member.id);
+    setSelectedMemberIds((current) => (selectableMemberIds.length > 0 && selectableMemberIds.every((id) => current.includes(id)) ? [] : selectableMemberIds));
   };
 
   const roleBadgeVariant: Record<MemberRole, "danger" | "info" | "success"> = {
@@ -453,7 +460,7 @@ export function SettingsPage() {
                         <TableHead className="w-10">
                           <input
                             type="checkbox"
-                            checked={members.length > 0 && selectedMemberIds.length === members.length}
+                            checked={members.filter((member) => !isProtectedPrivilegeMember(member, permissionRoles)).length > 0 && members.filter((member) => !isProtectedPrivilegeMember(member, permissionRoles)).every((member) => selectedMemberIds.includes(member.id))}
                             onChange={toggleSelectAllMembers}
                             aria-label="Select all members"
                           />
@@ -464,12 +471,15 @@ export function SettingsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {members.map((member) => (
+                      {members.map((member) => {
+                        const isProtectedMember = isProtectedPrivilegeMember(member, permissionRoles);
+                        return (
                         <TableRow key={member.id}>
                           <TableCell>
                             <input
                               type="checkbox"
                               checked={selectedMemberIds.includes(member.id)}
+                              disabled={isProtectedMember}
                               onChange={() => toggleSelectMember(member.id)}
                               aria-label={`Select ${member.fullName}`}
                             />
@@ -477,10 +487,13 @@ export function SettingsPage() {
                           <TableCell>{member.fullName}</TableCell>
                           <TableCell>{member.email}</TableCell>
                           <TableCell>
-                            <Badge variant={roleBadgeVariant[member.role]}>{member.role}</Badge>
+                            <div className="flex items-center gap-2">
+                              <Badge variant={roleBadgeVariant[member.role]}>{member.role}</Badge>
+                              {isProtectedMember ? <Badge variant="outline">Protected</Badge> : null}
+                            </div>
                           </TableCell>
                         </TableRow>
-                      ))}
+                      )})}
                     </TableBody>
                   </Table>
                 )}

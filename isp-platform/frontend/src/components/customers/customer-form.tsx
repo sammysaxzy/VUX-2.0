@@ -19,6 +19,7 @@ import { FibreViewer } from "@/components/fibre/fibre-viewer";
 
 const schema = z.object({
   name: z.string().min(3, "Name is required"),
+  customerType: z.enum(["individual", "corporate"]),
   email: z.string().email(),
   phone: z.string().min(7),
   address: z.string().min(5),
@@ -27,12 +28,8 @@ const schema = z.object({
   mstId: z.string().optional(),
   splitterPort: z.coerce.number().optional(),
   fibreCoreId: z.string().optional(),
-  onuSerial: z.string().min(5),
-  oltName: z.string().min(3),
-  ponPort: z.string().min(3),
   rxSignal: z.coerce.number(),
   txSignal: z.coerce.number(),
-  accountStatus: z.enum(["active", "suspended"]),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -42,19 +39,21 @@ type Props = {
   nodes: NetworkNode[];
   cables: FibreCable[];
   tenantId: string;
+  linkedPppoeCount?: number;
   onSubmit: (payload: Customer) => void;
   onDelete?: (customerId: string) => void;
   submitting?: boolean;
   deleting?: boolean;
 };
 
-export function CustomerForm({ initial, nodes, cables, tenantId, onSubmit, onDelete, submitting, deleting }: Props) {
+export function CustomerForm({ initial, nodes, cables, tenantId, linkedPppoeCount = 0, onSubmit, onDelete, submitting, deleting }: Props) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const user = useAppStore((state) => state.user);
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       name: initial?.name ?? "",
+      customerType: initial?.customerType ?? "individual",
       email: initial?.email ?? "",
       phone: initial?.phone ?? "",
       address: initial?.address ?? "",
@@ -63,12 +62,8 @@ export function CustomerForm({ initial, nodes, cables, tenantId, onSubmit, onDel
       mstId: initial?.mstId ?? "",
       splitterPort: initial?.splitterPort,
       fibreCoreId: initial?.fibreCoreId,
-      onuSerial: initial?.onuSerial ?? "",
-      oltName: initial?.oltName ?? "OLT HQ Core",
-      ponPort: initial?.ponPort ?? "",
       rxSignal: initial?.rxSignal ?? -20,
       txSignal: initial?.txSignal ?? 2,
-      accountStatus: initial?.accountStatus ?? "active",
     },
   });
 
@@ -85,6 +80,7 @@ export function CustomerForm({ initial, nodes, cables, tenantId, onSubmit, onDel
       id: initial?.id ?? randomId("cust"),
       tenantId,
       name: values.name,
+      customerType: values.customerType,
       email: values.email,
       phone: values.phone,
       address: values.address,
@@ -92,12 +88,12 @@ export function CustomerForm({ initial, nodes, cables, tenantId, onSubmit, onDel
       mstId: values.mstId,
       splitterPort: values.splitterPort,
       fibreCoreId: values.fibreCoreId,
-      onuSerial: values.onuSerial,
-      oltName: values.oltName,
-      ponPort: values.ponPort,
+      onuSerial: initial?.onuSerial ?? "",
+      oltName: initial?.oltName ?? "",
+      ponPort: initial?.ponPort ?? "",
       rxSignal: values.rxSignal,
       txSignal: values.txSignal,
-      accountStatus: values.accountStatus,
+      accountStatus: initial?.accountStatus ?? "active",
       online: initial?.online ?? false,
     });
   });
@@ -114,19 +110,19 @@ export function CustomerForm({ initial, nodes, cables, tenantId, onSubmit, onDel
             ) : null}
           </div>
           <div>
+            <Label htmlFor="customerType">Customer Type</Label>
+            <Select id="customerType" {...form.register("customerType" as const)}>
+              <option value="individual">Individual</option>
+              <option value="corporate">Corporate</option>
+            </Select>
+          </div>
+          <div>
             <Label htmlFor="email">Email</Label>
             <Input id="email" type="email" {...form.register("email")} />
           </div>
           <div>
             <Label htmlFor="phone">Phone</Label>
             <Input id="phone" {...form.register("phone")} />
-          </div>
-          <div>
-            <Label htmlFor="accountStatus">Account Status</Label>
-            <Select id="accountStatus" {...form.register("accountStatus")}>
-              <option value="active">Active</option>
-              <option value="suspended">Suspended</option>
-            </Select>
           </div>
         </div>
 
@@ -160,14 +156,6 @@ export function CustomerForm({ initial, nodes, cables, tenantId, onSubmit, onDel
                 ))}
             </Select>
           </div>
-          <div>
-            <Label htmlFor="onuSerial">ONU Serial</Label>
-            <Input id="onuSerial" {...form.register("onuSerial")} />
-          </div>
-          <div>
-            <Label htmlFor="ponPort">OLT/PON Port</Label>
-            <Input id="ponPort" {...form.register("ponPort")} placeholder="1/3/7" />
-          </div>
         </div>
 
         {selectedMst?.splitterPorts ? (
@@ -185,10 +173,6 @@ export function CustomerForm({ initial, nodes, cables, tenantId, onSubmit, onDel
         />
 
         <div className="grid gap-4 md:grid-cols-3">
-          <div>
-            <Label htmlFor="oltName">OLT</Label>
-            <Input id="oltName" {...form.register("oltName")} />
-          </div>
           <div>
             <Label htmlFor="rxSignal">RX (dBm)</Label>
             <Input id="rxSignal" type="number" step="any" {...form.register("rxSignal")} />
@@ -218,6 +202,12 @@ export function CustomerForm({ initial, nodes, cables, tenantId, onSubmit, onDel
         description="Are you sure you want to delete this customer? This action cannot be undone."
         className="max-w-md"
       >
+        {linkedPppoeCount > 0 ? (
+          <p className="mb-4 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
+            Warning: this customer has {linkedPppoeCount} linked PPPoE account{linkedPppoeCount === 1 ? "" : "s"}.
+            PPPoE records are separate and will not be deleted automatically.
+          </p>
+        ) : null}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" disabled={deleting} onClick={() => setDeleteDialogOpen(false)}>
             Cancel

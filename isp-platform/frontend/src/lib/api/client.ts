@@ -14,6 +14,8 @@ import type {
   PermissionRole,
   RadiusBulkImportResult,
   RadiusSession,
+  RadiusSessionDetails,
+  RadiusTrafficPoint,
   RadiusUser,
   ServicePlan,
   SettingsLog,
@@ -48,6 +50,8 @@ import {
   deleteMockZones,
   disconnectMockRadiusSession,
   extendMockRadiusUser,
+  getMockRadiusSessionDetails,
+  getMockRadiusSessionTraffic,
   getMockNotificationSettings,
   mockActivities,
   mockAlerts,
@@ -78,6 +82,7 @@ import {
   upsertMockClosureSplice,
   upsertCustomer,
 } from "@/lib/api/mock-data";
+import { buildUserFromPermissionMember } from "@/lib/permissions";
 import { randomId } from "@/lib/utils";
 import {
   CUSTOMER_EXPORT_SCHEMA,
@@ -123,6 +128,26 @@ function authHeaders(token?: string) {
 
 const sleep = (ms = 350) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function resolveMockLoginUser(email: string, tenantId: string): User {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  if (mockUser.email.trim().toLowerCase() === normalizedEmail) {
+    return { ...mockUser, email: email.trim(), tenantId };
+  }
+
+  for (const permissionRole of mockPermissionRoles) {
+    const matchedMember = (permissionRole.members ?? []).find(
+      (member) => member.email.trim().toLowerCase() === normalizedEmail,
+    );
+
+    if (matchedMember) {
+      return buildUserFromPermissionMember(matchedMember, permissionRole, tenantId);
+    }
+  }
+
+  throw new Error("Mock user not found");
+}
+
 type DashboardPayload = {
   kpis: KpiSnapshot;
   alerts: AlertItem[];
@@ -133,9 +158,10 @@ export const apiClient = {
   async login(email: string, password: string, tenantId: string): Promise<AuthResponse> {
     if (USE_MOCKS) {
       await sleep();
+      const resolvedUser = resolveMockLoginUser(email, tenantId);
       return {
         token: `mock-token-${password.length}`,
-        user: { ...mockUser, email, tenantId },
+        user: resolvedUser,
         branding: { ...mockBranding, tenantId },
       };
     }
@@ -561,13 +587,10 @@ export const apiClient = {
     payload: {
       username: string;
       password: string;
+      customerId: string;
       plan: string;
       zoneId: string;
-      customerType: "individual" | "corporate";
       expirationDate: string;
-      staticIp?: string;
-      priority?: "high" | "medium" | "low";
-      slaProfile?: string;
     },
     tenantId: string,
     token?: string,
@@ -647,6 +670,34 @@ export const apiClient = {
     }
     const { data } = await api.post<RadiusSession>(`/radius/sessions/${encodeURIComponent(username)}/reconnect`, undefined, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getRadiusSessionDetails(username: string, tenantId: string, token?: string): Promise<RadiusSessionDetails> {
+    if (USE_MOCKS) {
+      await sleep(120);
+      return getMockRadiusSessionDetails(username);
+    }
+    const { data } = await api.get<RadiusSessionDetails>(`/api/radius/session/${encodeURIComponent(username)}`, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getRadiusSessionTraffic(
+    username: string,
+    tenantId: string,
+    token?: string,
+    minutes = 10,
+  ): Promise<RadiusTrafficPoint[]> {
+    if (USE_MOCKS) {
+      await sleep(120);
+      return getMockRadiusSessionTraffic(username, minutes);
+    }
+    const { data } = await api.get<RadiusTrafficPoint[]>(`/api/radius/session/${encodeURIComponent(username)}/traffic`, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+      params: { minutes },
     });
     return data;
   },

@@ -20,6 +20,9 @@ const FULL_PERMISSIONS: PermissionFlags = {
   settings_access: true,
 };
 
+const PROTECTED_PERMISSION_ROLE_IDS = new Set(["role-1"]);
+const PROTECTED_PERMISSION_ROLE_NAMES = new Set(["super admin"]);
+
 const ROLE_FALLBACK_PERMISSIONS: Record<Role, PermissionFlags> = {
   super_admin: FULL_PERMISSIONS,
   tenant_admin: FULL_PERMISSIONS,
@@ -96,6 +99,19 @@ export function flattenPermissionMembers(permissionRoles: PermissionRole[]) {
   );
 }
 
+export function isProtectedPermissionRole(role?: Pick<PermissionRole, "id" | "name">) {
+  if (!role) return false;
+  return PROTECTED_PERMISSION_ROLE_IDS.has(role.id) || PROTECTED_PERMISSION_ROLE_NAMES.has(role.name.trim().toLowerCase());
+}
+
+export function isProtectedPrivilegeMember(
+  member: Pick<PrivilegeMember, "permissionProfileId">,
+  permissionRoles: PermissionRole[],
+) {
+  const assignedRole = permissionRoles.find((role) => role.id === member.permissionProfileId);
+  return isProtectedPermissionRole(assignedRole);
+}
+
 export function buildUserFromPermissionMember(
   member: PrivilegeMember,
   permissionRole: PermissionRole,
@@ -135,5 +151,6 @@ export function isAdminRole(role?: Role) {
 }
 
 export function canManagePermissions(user?: User) {
-  return Boolean(user && isAdminRole(user.role));
+  if (!user) return false;
+  return isAdminRole(user.role) || resolveUserPermissions(user).settings_access === true;
 }

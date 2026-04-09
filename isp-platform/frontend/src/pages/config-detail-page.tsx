@@ -5,10 +5,11 @@ import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { getConfigurationItem } from "@/components/settings/configuration-items";
 import { useCreatePrivilegeAccount, usePermissionRoles, useUpdatePermissionRole } from "@/hooks/api/use-settings";
-import { flattenPermissionMembers, hasPermission, canManagePermissions } from "@/lib/permissions";
+import { flattenPermissionMembers, hasPermission, canManagePermissions, isProtectedPermissionRole } from "@/lib/permissions";
 import { useAppStore } from "@/store/app-store";
 import { useAdminStore } from "@/store/admin-store";
 import { SettingsLayout } from "@/components/settings/settings-layout";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -160,7 +161,10 @@ export function ConfigDetailPage() {
                     <div key={role.id} className="rounded-xl border border-border/70 p-4">
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div className="space-y-1">
-                          <p className="font-medium">{role.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{role.name}</p>
+                            {isProtectedPermissionRole(role) ? <Badge variant="outline">Protected</Badge> : null}
+                          </div>
                           <p className="text-sm text-muted-foreground">{role.description}</p>
                           <p className="text-xs text-muted-foreground">
                             Scope: {role.scope} | Members: {role.members?.length ?? role.memberCount}

@@ -10,6 +10,7 @@ import { formatDateOnly, formatRelativeDate } from "@/lib/utils";
 type Props = {
   sessions: RadiusSession[];
   onSync: (username: string) => void;
+  onSelect: (username: string) => void;
   busySync?: string;
   canSync?: boolean;
 };
@@ -17,6 +18,7 @@ type Props = {
 export function RadiusSessionTable({
   sessions,
   onSync,
+  onSelect,
   busySync,
   canSync = true,
 }: Props) {
@@ -42,7 +44,7 @@ export function RadiusSessionTable({
           </TableHeader>
           <TableBody>
             {sessions.map((session) => (
-              <TableRow key={session.id}>
+              <TableRow key={session.id} className="cursor-pointer" onClick={() => onSelect(session.username)}>
                 <TableCell>
                   <p className="font-medium">{session.username}</p>
                 </TableCell>
@@ -60,7 +62,10 @@ export function RadiusSessionTable({
                       size="sm"
                       variant="outline"
                       disabled={!canSync || session.accountExists === false || busySync === session.username}
-                      onClick={() => onSync(session.username)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSync(session.username);
+                      }}
                       title={session.accountExists === false ? "User missing from authentication store" : undefined}
                     >
                       Sync

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
+import { useRadiusUsers } from "@/hooks/api/use-radius";
 import { hasPermission } from "@/lib/permissions";
 import type { Customer } from "@/types";
 import { useCustomers, useDeleteCustomer, useExportCustomers, useSaveCustomer } from "@/hooks/api/use-customers";
@@ -19,6 +20,7 @@ export function CustomersPage() {
   const tenantId = useTenantId();
   const user = useAppStore((state) => state.user);
   const { data: customers, isLoading: customerLoading } = useCustomers();
+  const { data: radiusUsers, isLoading: radiusUsersLoading } = useRadiusUsers();
   const { data: nodes, isLoading: nodesLoading } = useNetworkNodes();
   const { data: cables, isLoading: cablesLoading } = useFibreCables();
   const saveCustomer = useSaveCustomer();
@@ -48,9 +50,11 @@ export function CustomersPage() {
     };
   }, [customers]);
 
-  if (customerLoading || nodesLoading || cablesLoading || !nodes || !cables || !customers) {
+  if (customerLoading || radiusUsersLoading || nodesLoading || cablesLoading || !nodes || !cables || !customers || !radiusUsers) {
     return <PageSkeleton />;
   }
+
+  const linkedPppoeCount = activeCustomer ? radiusUsers.filter((user) => user.customerId === activeCustomer.id).length : 0;
 
   const handleExportCustomers = async () => {
     const blob = await exportCustomersMutation.mutateAsync();
@@ -127,6 +131,7 @@ export function CustomersPage() {
           tenantId={tenantId}
           nodes={nodes}
           cables={cables}
+          linkedPppoeCount={linkedPppoeCount}
           submitting={saveCustomer.isPending}
           deleting={canDeleteCustomer ? deleteCustomer.isPending : false}
           onSubmit={(payload) => {

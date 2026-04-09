@@ -29,7 +29,7 @@ export function CustomerProfilePage() {
             Back to Customers
           </Button>
         </Link>
-        <Badge variant={customer.accountStatus === "active" ? "success" : "warning"}>{customer.accountStatus}</Badge>
+        <Badge variant="outline">{customer.customerType}</Badge>
       </div>
 
       <Card>
@@ -40,6 +40,9 @@ export function CustomerProfilePage() {
           <div className="space-y-2 text-sm">
             <p>
               <span className="text-muted-foreground">Customer ID:</span> {customer.id}
+            </p>
+            <p>
+              <span className="text-muted-foreground">Customer Type:</span> {customer.customerType}
             </p>
             <p>
               <span className="text-muted-foreground">Address:</span> {customer.address}

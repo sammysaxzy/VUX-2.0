@@ -54,7 +54,7 @@ export function mapRadiusUsersToExportRows(users: RadiusUser[]) {
     nasid: user.nasId,
     enableuser: user.status === "active",
     name: "",
-    customerid: "",
+    customerid: user.customerId,
     company: "",
     email: "",
     phone: "",

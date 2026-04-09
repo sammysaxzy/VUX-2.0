@@ -145,6 +145,24 @@ export interface RadiusSession {
   accountExists?: boolean;
 }
 
+export interface RadiusSessionDetails {
+  username: string;
+  customerId?: string;
+  ipAddress: string;
+  nas: string;
+  startTime: string;
+  duration: string;
+  uploadBytes: number;
+  downloadBytes: number;
+  status: SessionStatus;
+}
+
+export interface RadiusTrafficPoint {
+  time: string;
+  upload: number;
+  download: number;
+}
+
 export type RadiusUserStatus = "active" | "inactive";
 export type CustomerType = "individual" | "corporate";
 export type PriorityLevel = "high" | "medium" | "low";
@@ -152,6 +170,7 @@ export type MemberRole = "admin" | "support" | "noc";
 
 export interface RadiusUser {
   username: string;
+  customerId: string;
   status: RadiusUserStatus;
   plan: string;
   customerType: CustomerType;
@@ -262,6 +281,7 @@ export interface Customer {
   id: string;
   tenantId: string;
   name: string;
+  customerType: CustomerType;
   email: string;
   phone: string;
   address: string;

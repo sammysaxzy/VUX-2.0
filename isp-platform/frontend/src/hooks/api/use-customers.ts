@@ -52,7 +52,7 @@ export function useDeleteCustomer() {
       queryClient.invalidateQueries({ queryKey: ["customers", tenantId] });
       queryClient.invalidateQueries({ queryKey: ["dashboard", tenantId] });
     },
-    onError: () => toast.error("Unable to delete customer."),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Unable to delete customer."),
   });
 }
 

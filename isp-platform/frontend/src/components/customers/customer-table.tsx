@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { Customer } from "@/types";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CustomerContactCells } from "@/components/customers/customer-contact-cells";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -42,9 +42,9 @@ export function CustomerTable({ customers, onSelect }: Props) {
             <TableHeader>
               <TableRow>
                 <TableHead>Customer</TableHead>
-                <TableHead>MST / Port</TableHead>
-                <TableHead>Signal</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Address</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -55,18 +55,7 @@ export function CustomerTable({ customers, onSelect }: Props) {
                     <p className="font-medium">{customer.name}</p>
                     <p className="text-xs text-muted-foreground">{customer.id}</p>
                   </TableCell>
-                  <TableCell>
-                    {customer.mstId ?? "-"} / {customer.splitterPort ?? "-"}
-                  </TableCell>
-                  <TableCell>
-                    <p>RX {customer.rxSignal} dBm</p>
-                    <p className="text-xs text-muted-foreground">TX {customer.txSignal} dBm</p>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={customer.online ? "success" : "warning"}>
-                      {customer.online ? "Online" : "Offline"}
-                    </Badge>
-                  </TableCell>
+                  <CustomerContactCells customer={customer} />
                   <TableCell className="text-right">
                     <Link to={`/customers/${customer.id}`}>
                       <Button size="sm" variant="outline">

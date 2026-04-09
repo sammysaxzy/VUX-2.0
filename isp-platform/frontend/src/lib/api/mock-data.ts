@@ -1,4 +1,5 @@
 import { FIBRE_CORE_PALETTE } from "@/constants/fibre";
+import { isProtectedPermissionRole } from "@/lib/permissions";
 import type {
   AlertItem,
   ClosureBox,
@@ -17,6 +18,8 @@ import type {
   PrivilegeModel,
   RadiusBulkImportResult,
   RadiusSession,
+  RadiusSessionDetails,
+  RadiusTrafficPoint,
   RadiusUser,
   ServicePlan,
   SettingsLog,
@@ -305,6 +308,7 @@ export const mockCustomers: Customer[] = [
     id: "cust-1001",
     tenantId: mockBranding.tenantId,
     name: "Adebayo Tech Hub",
+    customerType: "corporate",
     email: "ops@adebayotech.ng",
     phone: "+234 803 200 1122",
     address: "6 Admiralty Way, Lekki",
@@ -324,6 +328,7 @@ export const mockCustomers: Customer[] = [
     id: "cust-1002",
     tenantId: mockBranding.tenantId,
     name: "Marina View Offices",
+    customerType: "corporate",
     email: "it@marinaview.ng",
     phone: "+234 805 900 3388",
     address: "11 Prince Yesufu Abiodun, Oniru",
@@ -343,6 +348,7 @@ export const mockCustomers: Customer[] = [
     id: "cust-1003",
     tenantId: mockBranding.tenantId,
     name: "Korede Residential",
+    customerType: "individual",
     email: "korede@example.com",
     phone: "+234 808 611 0556",
     address: "Block C24, Ikate Elegushi",
@@ -471,6 +477,7 @@ export let mockServicePlans: ServicePlan[] = [
 export let mockRadiusUsers: RadiusUser[] = [
   {
     username: "adebayo_hub",
+    customerId: "cust-1001",
     status: "active",
     plan: "Core 10/10",
     customerType: "individual",
@@ -485,6 +492,7 @@ export let mockRadiusUsers: RadiusUser[] = [
   },
   {
     username: "marina_it",
+    customerId: "cust-1002",
     status: "inactive",
     plan: "Core 20/20",
     customerType: "corporate",
@@ -500,6 +508,7 @@ export let mockRadiusUsers: RadiusUser[] = [
   },
   {
     username: "korede_res",
+    customerId: "cust-1003",
     status: "inactive",
     plan: "Core 10/10",
     customerType: "individual",
@@ -655,6 +664,42 @@ function formatDurationFromStart(startedAt: string) {
   return `${hours}:${minutes}:${seconds}`;
 }
 
+function parseDurationToSeconds(value?: string) {
+  if (!value) return 0;
+  const [hours = "0", minutes = "0", seconds = "0"] = value.split(":");
+  return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds);
+}
+
+function estimateTotalBytes(session: RadiusSession) {
+  const usageGiB = parseUsageInGiB(session.dataUsage);
+  return Math.max(0, usageGiB * 1024 * 1024 * 1024);
+}
+
+function buildTrafficSeed(session: RadiusSession) {
+  return session.username.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+}
+
+function buildSessionTrafficPoints(session: RadiusSession, minutes = 10): RadiusTrafficPoint[] {
+  const pointCount = Math.max(1, Math.min(minutes, 30));
+  const endAt = session.status === "online" ? Date.now() : new Date(session.lastUpdated ?? session.startedAt).getTime();
+  const seed = buildTrafficSeed(session);
+  const offlineScale = session.status === "offline" ? 0.35 : 1;
+
+  return Array.from({ length: pointCount }, (_, index) => {
+    const pointTime = endAt - (pointCount - index - 1) * 60_000;
+    const waveA = Math.sin((seed + index * 3) / 5);
+    const waveB = Math.cos((seed + index * 2) / 7);
+    const download = Math.max(0.2, (4.5 + waveA * 2.8 + index * 0.12) * offlineScale);
+    const upload = Math.max(0.1, (1.3 + waveB * 0.9 + index * 0.05) * offlineScale);
+
+    return {
+      time: new Date(pointTime).toISOString(),
+      upload: Number(upload.toFixed(2)),
+      download: Number(download.toFixed(2)),
+    };
+  });
+}
+
 export function isReminderPending(expirationDate: string, reminderDays = mockNotificationSettings.reminderDays, nowValue = Date.now()) {
   const expiry = new Date(expirationDate).getTime();
   const diff = expiry - nowValue;
@@ -769,17 +814,18 @@ hydrateMockCollections();
 export function addMockRadiusUser(payload: {
   username: string;
   password: string;
+  customerId: string;
   plan: string;
   zoneId: string;
-  customerType: "individual" | "corporate";
   expirationDate: string;
-  staticIp?: string;
-  priority?: "high" | "medium" | "low";
-  slaProfile?: string;
 }) {
   const exists = mockRadiusUsers.some((entry) => entry.username === payload.username);
   if (exists) {
     throw new Error("User already exists");
+  }
+  const customer = mockCustomers.find((entry) => entry.id === payload.customerId);
+  if (!customer) {
+    throw new Error("Customer not found");
   }
   const zone = mockZones.find((entry) => entry.id === payload.zoneId);
   if (!zone) {
@@ -788,26 +834,24 @@ export function addMockRadiusUser(payload: {
   const nas = mockNasEntries.find((entry) => entry.id === zone.nasId);
   const newUser: RadiusUser = {
     username: payload.username,
+    customerId: payload.customerId,
     status: "inactive",
     plan: payload.plan,
-    customerType: payload.customerType,
+    customerType: customer.customerType,
     zoneId: zone.id,
     zone: zone.name,
     nasId: zone.nasId,
     nas: nas?.name ?? zone.nasName,
     expirationDate: payload.expirationDate,
-    staticIp: payload.staticIp,
-    priority: payload.priority,
-    slaProfile: payload.slaProfile,
     exists: true,
     lastSeen: new Date().toISOString(),
   };
   mockRadiusUsers.unshift(newUser);
   mockSessions.unshift({
     id: randomId("sess"),
-    customerId: randomId("cust"),
+    customerId: payload.customerId,
     username: payload.username,
-    ipAddress: payload.staticIp ?? "Pending",
+    ipAddress: "Pending",
     startedAt: new Date().toISOString(),
     status: "offline",
     dataUsage: "0 GiB",
@@ -851,8 +895,12 @@ export function bulkImportMockRadiusUsers(
   payloads.forEach((payload) => {
     const nas = mockNasEntries.find((entry) => entry.id === payload.nas_id);
     const zone = mockZones.find((entry) => entry.nasId === payload.nas_id) ?? mockZones[0];
+    const customer = payload.customer_id ? mockCustomers.find((entry) => entry.id === payload.customer_id) : undefined;
     if (!nas || !zone) {
       throw new Error("NAS or zone not found");
+    }
+    if (payload.customer_id && !customer) {
+      throw new Error("Customer not found");
     }
     if (mockRadiusUsers.some((entry) => entry.username === payload.username)) {
       throw new Error("Duplicate username");
@@ -860,9 +908,10 @@ export function bulkImportMockRadiusUsers(
 
     const importedUser: RadiusUser = {
       username: payload.username,
+      customerId: payload.customer_id ?? randomId("cust"),
       status: payload.enabled ? "active" : "inactive",
       plan: payload.service_id ?? "Imported",
-      customerType: "individual",
+      customerType: customer?.customerType ?? "individual",
       zoneId: zone.id,
       zone: zone.name,
       nasId: nas.id,
@@ -876,7 +925,7 @@ export function bulkImportMockRadiusUsers(
     mockRadiusUsers.unshift(importedUser);
     mockSessions.unshift({
       id: randomId("sess"),
-      customerId: payload.customer_id ?? randomId("cust"),
+      customerId: importedUser.customerId,
       username: payload.username,
       ipAddress: payload.static_ip ?? "Pending",
       startedAt: new Date().toISOString(),
@@ -938,6 +987,34 @@ export function reconnectMockRadiusSession(username: string) {
   });
   persistMockCollections();
   return session;
+}
+
+export function getMockRadiusSessionDetails(username: string): RadiusSessionDetails {
+  const session = mockSessions.find((entry) => entry.username === username);
+  if (!session) throw new Error("Session not found");
+
+  const user = mockRadiusUsers.find((entry) => entry.username === username);
+  const totalBytes = estimateTotalBytes(session);
+  const downloadBytes = Math.round(totalBytes * 0.82);
+  const uploadBytes = Math.round(totalBytes * 0.18);
+
+  return {
+    username: session.username,
+    customerId: session.customerId,
+    ipAddress: session.ipAddress,
+    nas: user?.nas ?? "Unknown NAS",
+    startTime: session.startedAt,
+    duration: session.duration ?? formatDurationFromStart(session.startedAt),
+    uploadBytes,
+    downloadBytes,
+    status: session.status,
+  };
+}
+
+export function getMockRadiusSessionTraffic(username: string, minutes = 10): RadiusTrafficPoint[] {
+  const session = mockSessions.find((entry) => entry.username === username);
+  if (!session) throw new Error("Session not found");
+  return buildSessionTrafficPoints(session, minutes);
 }
 
 export function disconnectMockRadiusSession(username: string) {
@@ -1043,6 +1120,10 @@ export function deleteMockRadiusUsers(usernames: string[]) {
 }
 
 export function deleteMockPermissionRoles(ids: string[]) {
+  const protectedRole = mockPermissionRoles.find((role) => ids.includes(role.id) && isProtectedPermissionRole(role));
+  if (protectedRole) {
+    throw new Error("Super Admin permission profile cannot be deleted");
+  }
   const idSet = new Set(ids);
   const deleted = mockPermissionRoles.filter((role) => idSet.has(role.id)).length;
   mockPermissionRoles = mockPermissionRoles.filter((role) => !idSet.has(role.id));
@@ -1117,6 +1198,9 @@ export function updateMockPrivilegeAccount(memberId: string, payload: { permissi
 export function deleteMockPrivilegeAccount(memberId: string) {
   const role = mockPermissionRoles.find((entry) => entry.members?.some((member) => member.id === memberId));
   if (!role) throw new Error("Privilege member not found");
+  if (isProtectedPermissionRole(role)) {
+    throw new Error("Members assigned to the Super Admin profile cannot be deleted");
+  }
   const deleted = role.members?.find((member) => member.id === memberId);
   role.members = (role.members ?? []).filter((member) => member.id !== memberId);
   role.memberCount = role.members.length;
@@ -1126,6 +1210,10 @@ export function deleteMockPrivilegeAccount(memberId: string) {
 
 export function deleteMockPrivilegeAccounts(memberIds: string[]) {
   const idSet = new Set(memberIds);
+  const protectedRole = mockPermissionRoles.find((role) => isProtectedPermissionRole(role) && (role.members ?? []).some((member) => idSet.has(member.id)));
+  if (protectedRole) {
+    throw new Error("Members assigned to the Super Admin profile cannot be deleted");
+  }
   let deleted = 0;
   mockPermissionRoles.forEach((role) => {
     const currentMembers = role.members ?? [];
@@ -1188,6 +1276,12 @@ export function deleteMockCustomer(customerId: string) {
   const customerIndex = mockCustomers.findIndex((entry) => entry.id === customerId);
   if (customerIndex < 0) {
     throw new Error("Customer not found.");
+  }
+  const linkedRadiusUsers = mockRadiusUsers.filter((entry) => entry.customerId === customerId);
+  if (linkedRadiusUsers.length > 0) {
+    throw new Error(
+      `Customer has ${linkedRadiusUsers.length} linked PPPoE account${linkedRadiusUsers.length === 1 ? "" : "s"}. Remove or reassign the PPPoE link first.`,
+    );
   }
 
   mockNodes.forEach((node) => {
