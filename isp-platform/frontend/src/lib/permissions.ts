@@ -8,6 +8,8 @@ export const EMPTY_PERMISSIONS: PermissionFlags = {
   delete_customer: false,
   billing_access: false,
   settings_access: false,
+  inventory_access: false,
+  finance_access: false,
 };
 
 const FULL_PERMISSIONS: PermissionFlags = {
@@ -18,6 +20,8 @@ const FULL_PERMISSIONS: PermissionFlags = {
   delete_customer: true,
   billing_access: true,
   settings_access: true,
+  inventory_access: true,
+  finance_access: true,
 };
 
 const ROLE_FALLBACK_PERMISSIONS: Record<Role, PermissionFlags> = {
@@ -32,6 +36,8 @@ const ROLE_FALLBACK_PERMISSIONS: Record<Role, PermissionFlags> = {
     delete_customer: false,
     billing_access: false,
     settings_access: false,
+    inventory_access: false,
+    finance_access: false,
   },
   noc_viewer: {
     radius_access: true,
@@ -41,6 +47,8 @@ const ROLE_FALLBACK_PERMISSIONS: Record<Role, PermissionFlags> = {
     delete_customer: false,
     billing_access: false,
     settings_access: false,
+    inventory_access: false,
+    finance_access: false,
   },
   field_engineer: {
     radius_access: false,
@@ -50,6 +58,30 @@ const ROLE_FALLBACK_PERMISSIONS: Record<Role, PermissionFlags> = {
     delete_customer: false,
     billing_access: false,
     settings_access: false,
+    inventory_access: true,
+    finance_access: false,
+  },
+  accountant: {
+    radius_access: false,
+    disconnect_user: false,
+    create_pppoe: false,
+    view_customers: true,
+    delete_customer: false,
+    billing_access: true,
+    settings_access: false,
+    inventory_access: false,
+    finance_access: true,
+  },
+  store_manager: {
+    radius_access: false,
+    disconnect_user: false,
+    create_pppoe: false,
+    view_customers: true,
+    delete_customer: false,
+    billing_access: false,
+    settings_access: false,
+    inventory_access: true,
+    finance_access: false,
   },
   admin: FULL_PERMISSIONS,
   support: {
@@ -60,6 +92,8 @@ const ROLE_FALLBACK_PERMISSIONS: Record<Role, PermissionFlags> = {
     delete_customer: false,
     billing_access: true,
     settings_access: false,
+    inventory_access: false,
+    finance_access: true,
   },
   noc: {
     radius_access: true,
@@ -69,6 +103,8 @@ const ROLE_FALLBACK_PERMISSIONS: Record<Role, PermissionFlags> = {
     delete_customer: false,
     billing_access: false,
     settings_access: false,
+    inventory_access: false,
+    finance_access: false,
   },
 };
 
@@ -77,8 +113,14 @@ export function getRolePermissions(role: Role): PermissionFlags {
 }
 
 export function deriveSimulationRoleFromPermissions(permissions: PermissionFlags): Role {
-  if (permissions.settings_access || permissions.delete_customer || permissions.billing_access) {
+  if (permissions.settings_access || permissions.delete_customer) {
     return "admin";
+  }
+  if (permissions.finance_access || permissions.billing_access) {
+    return "accountant";
+  }
+  if (permissions.inventory_access) {
+    return "store_manager";
   }
   if (permissions.radius_access || permissions.create_pppoe || permissions.disconnect_user) {
     return "noc";

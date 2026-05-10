@@ -1,4 +1,4 @@
-import { Activity, Cable, ServerCrash, Users } from "lucide-react";
+import { Activity, Cable, Coins, ServerCrash, TriangleAlert, Users, Wallet } from "lucide-react";
 import type { KpiSnapshot } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { numberWithCommas } from "@/lib/utils";
@@ -12,11 +12,14 @@ const items = [
   { key: "offlineCustomers", title: "Offline Customers", icon: ServerCrash, description: "Currently unreachable endpoints" },
   { key: "totalOlts", title: "Total OLTs", icon: Cable, description: "Optical line terminals in tenant network" },
   { key: "activeRadiusSessions", title: "Active Sessions", icon: Activity, description: "Live authenticated PPPoE sessions" },
+  { key: "inventoryValue", title: "Inventory Value", icon: Coins, description: "Current stock value at cost price" },
+  { key: "netProfit", title: "Net Profit", icon: Wallet, description: "Income minus expenses for the current ledger" },
+  { key: "lowStockItems", title: "Low Stock", icon: TriangleAlert, description: "Items that need immediate replenishment" },
 ] as const;
 
 export function KpiCards({ kpis }: Props) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-7">
       {items.map((item) => {
         const Icon = item.icon;
         const value = kpis[item.key];

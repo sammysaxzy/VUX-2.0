@@ -10,8 +10,11 @@ from ..models import (
     Client,
     ClientStatus,
     DeviceStatus,
+    FinanceEntryType,
     FibreCore,
     FibreRoute,
+    FinancialTransaction,
+    InventoryItem,
     MSTBox,
     NetworkDevice,
     PaymentStatus,
@@ -93,7 +96,32 @@ async def get_dashboard_stats(
     else:
         average_utilization = 0.0
 
+    total_income_result = await db.execute(
+        select(func.coalesce(func.sum(FinancialTransaction.amount), 0)).where(
+            FinancialTransaction.entry_type == FinanceEntryType.INCOME
+        )
+    )
+    total_expenses_result = await db.execute(
+        select(func.coalesce(func.sum(FinancialTransaction.amount), 0)).where(
+            FinancialTransaction.entry_type == FinanceEntryType.EXPENSE
+        )
+    )
+    inventory_value_result = await db.execute(
+        select(func.coalesce(func.sum(InventoryItem.quantity_in_stock * InventoryItem.unit_cost), 0)).where(
+            InventoryItem.is_active == True
+        )
+    )
+    low_stock_items_result = await db.execute(
+        select(func.count(InventoryItem.id)).where(
+            InventoryItem.is_active == True,
+            InventoryItem.quantity_in_stock <= InventoryItem.minimum_stock_level,
+        )
+    )
+
     total_fibre_km = Decimal((total_fibre.scalar() or 0) / 1000)
+    total_income = Decimal(total_income_result.scalar() or 0)
+    total_expenses = Decimal(total_expenses_result.scalar() or 0)
+    inventory_value = Decimal(inventory_value_result.scalar() or 0)
     
     return DashboardStats(
         total_clients=total_clients.scalar() or 0,
@@ -108,6 +136,11 @@ async def get_dashboard_stats(
         open_tickets=open_tickets.scalar() or 0,
         active_users=active_users.scalar() or 0,
         average_utilization=average_utilization,
+        total_income=total_income,
+        total_expenses=total_expenses,
+        net_profit=total_income - total_expenses,
+        inventory_value=inventory_value,
+        low_stock_items=low_stock_items_result.scalar() or 0,
         client_status_distribution=client_status_distribution,
         recent_activities=[ActivityLogSchema.model_validate(a) for a in recent_activities]
     )

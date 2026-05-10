@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.config import settings
 from .core.database import init_db
-from .api import clients, mst, fibre, map, auth, activity, dashboard, seed, network, billing, tickets
+from .api import clients, mst, fibre, map, auth, activity, dashboard, seed, network, billing, tickets, inventory, finance
 from .websocket.routes import websocket_router
 
 app = FastAPI(
@@ -34,6 +34,8 @@ app.include_router(seed.router, prefix="/api")
 app.include_router(network.router, prefix="/api")
 app.include_router(billing.router, prefix="/api")
 app.include_router(tickets.router, prefix="/api")
+app.include_router(inventory.router, prefix="/api")
+app.include_router(finance.router, prefix="/api")
 
 # WebSocket router
 app.include_router(websocket_router)

@@ -34,5 +34,7 @@ async def get_db():
 
 async def init_db():
     """Initialize database tables"""
+    if settings.SKIP_DB_INIT:
+        return
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

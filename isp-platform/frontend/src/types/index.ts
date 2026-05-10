@@ -7,7 +7,9 @@ export type Role =
   | "noc"
   | "noc_viewer"
   | "noc_engineer"
-  | "field_engineer";
+  | "field_engineer"
+  | "accountant"
+  | "store_manager";
 export type NodeType = "olt" | "odf" | "cabinet" | "mst" | "pole" | "closure" | "customer";
 export type SessionStatus = "online" | "offline";
 export type FaultSeverity = "minor" | "major" | "critical";
@@ -23,7 +25,9 @@ export type PermissionKey =
   | "view_customers"
   | "delete_customer"
   | "billing_access"
-  | "settings_access";
+  | "settings_access"
+  | "inventory_access"
+  | "finance_access";
 export type PermissionFlags = Record<PermissionKey, boolean>;
 export type MapPermission =
   | "add"
@@ -62,6 +66,11 @@ export interface KpiSnapshot {
   offlineCustomers: number;
   totalOlts: number;
   activeRadiusSessions: number;
+  inventoryValue?: number;
+  totalIncome?: number;
+  totalExpenses?: number;
+  netProfit?: number;
+  lowStockItems?: number;
 }
 
 export interface AlertItem {
@@ -500,4 +509,199 @@ export interface MstConnectionDraft {
 
 export interface CustomersQuery {
   search?: string;
+}
+
+export type InventoryCategory =
+  | "cable"
+  | "device"
+  | "accessory"
+  | "voucher"
+  | "bundle"
+  | "infrastructure"
+  | "tool"
+  | "other";
+
+export type StockMovementType = "purchase" | "usage" | "sale" | "transfer" | "adjustment" | "return";
+export type StockLocationType = "store" | "field" | "customer_site" | "map_location";
+export type FinanceEntryType = "income" | "expense";
+export type ReferenceType =
+  | "inventory_purchase"
+  | "inventory_usage"
+  | "customer_installation"
+  | "subscription"
+  | "device_sale"
+  | "salary"
+  | "maintenance"
+  | "logistics"
+  | "other";
+
+export interface Supplier {
+  id: number;
+  name: string;
+  contact_person?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface InventoryItem {
+  id: number;
+  sku: string;
+  name: string;
+  category: InventoryCategory;
+  description?: string;
+  unit_of_measure: string;
+  quantity_in_stock: number;
+  unit_cost: number;
+  selling_price?: number;
+  minimum_stock_level: number;
+  supplier_id?: number;
+  core_type?: number;
+  length_meters?: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface InventoryMovement {
+  id: number;
+  item_id: number;
+  movement_type: StockMovementType;
+  quantity: number;
+  unit_cost: number;
+  total_cost: number;
+  source_location?: StockLocationType;
+  destination_location?: StockLocationType;
+  notes?: string;
+  reference_type: ReferenceType;
+  reference_id?: string;
+  job_reference?: string;
+  used_by_user_id?: number;
+  client_id?: number;
+  mst_id?: number;
+  fibre_route_id?: number;
+  latitude?: number;
+  longitude?: number;
+  created_at: string;
+}
+
+export interface InventorySummary {
+  total_items: number;
+  low_stock_items: number;
+  total_stock_units: number;
+  inventory_value: number;
+  recent_movements: InventoryMovement[];
+  most_used_items: Array<{ item_id: number; name: string; quantity_used: string }>;
+  pending_approvals: number;
+}
+
+export interface FinancialTransaction {
+  id: number;
+  transaction_code: string;
+  entry_type: FinanceEntryType;
+  category: string;
+  amount: number;
+  description: string;
+  reference_type: ReferenceType;
+  reference_id?: string;
+  inventory_item_id?: number;
+  inventory_movement_id?: number;
+  client_id?: number;
+  payment_id?: number;
+  created_by_user_id?: number;
+  transaction_date: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface FinanceSummary {
+  total_income: number;
+  total_expenses: number;
+  net_profit: number;
+  cash_flow: number;
+  inventory_value: number;
+  transaction_count: number;
+  recent_transactions: FinancialTransaction[];
+  expenses_today: number;
+  expenses_this_week: number;
+  expenses_this_month: number;
+}
+
+export type WorkOrderType = "installation" | "maintenance" | "repair" | "upgrade" | "survey";
+export type WorkOrderStatus = "draft" | "scheduled" | "in_progress" | "completed" | "cancelled";
+export type InventoryDeductionMode = "automatic" | "manual_approval";
+export type ApprovalStatus = "not_required" | "pending" | "approved" | "rejected";
+
+export interface InventoryPurchaseLine {
+  id: number;
+  item_id: number;
+  quantity: number;
+  unit_cost: number;
+  total_cost: number;
+  movement_id?: number;
+  notes?: string;
+}
+
+export interface InventoryPurchase {
+  id: number;
+  purchase_code: string;
+  supplier_id?: number;
+  purchase_date: string;
+  total_cost: number;
+  notes?: string;
+  created_by_user_id?: number;
+  created_at?: string;
+  updated_at?: string;
+  lines: InventoryPurchaseLine[];
+}
+
+export interface WorkOrderMaterial {
+  id: number;
+  item_id: number;
+  quantity_planned: number;
+  quantity_used: number;
+  unit_cost: number;
+  total_cost: number;
+  serial_number?: string;
+  mac_address?: string;
+  cable_length_used?: number;
+  notes?: string;
+  inventory_movement_id?: number;
+}
+
+export interface WorkOrder {
+  id: number;
+  work_order_code: string;
+  work_type: WorkOrderType;
+  status: WorkOrderStatus;
+  inventory_deduction_mode: InventoryDeductionMode;
+  approval_status: ApprovalStatus;
+  title: string;
+  description?: string;
+  customer_name?: string;
+  service_address?: string;
+  client_id?: number;
+  mst_id?: number;
+  fibre_route_id?: number;
+  assigned_engineer_user_id?: number;
+  approved_by_user_id?: number;
+  onu_serial?: string;
+  onu_mac?: string;
+  router_mac?: string;
+  installation_fee: number;
+  latitude?: number;
+  longitude?: number;
+  map_reference?: string;
+  notes?: string;
+  photos: string[];
+  scheduled_at?: string;
+  completed_at?: string;
+  approved_at?: string;
+  created_by_user_id?: number;
+  created_at?: string;
+  updated_at?: string;
+  materials: WorkOrderMaterial[];
 }

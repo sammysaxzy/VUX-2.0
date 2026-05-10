@@ -13,6 +13,8 @@ import { MapPage } from "@/pages/map-page";
 import { CustomersPage } from "@/pages/customers-page";
 import { CustomerProfilePage } from "@/pages/customer-profile-page";
 import { InfrastructurePage } from "@/pages/infrastructure-page";
+import { InventoryPage } from "@/pages/inventory-page";
+import { FinancePage } from "@/pages/finance-page";
 import { FaultsPage } from "@/pages/faults-page";
 
 const ConfigurationMenuPage = lazy(() =>
@@ -66,6 +68,8 @@ export default function App() {
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customers/:id" element={<CustomerProfilePage />} />
         <Route path="infrastructure" element={<InfrastructurePage />} />
+        <Route path="inventory" element={<InventoryPage />} />
+        <Route path="finance" element={<FinancePage />} />
         <Route path="faults" element={<FaultsPage />} />
         <Route path="field" element={<FieldPage />} />
         <Route path="radius" element={<RadiusPage />} />

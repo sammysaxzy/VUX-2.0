@@ -103,6 +103,78 @@ class TicketPriority(str, enum.Enum):
     CRITICAL = "critical"
 
 
+class InventoryCategory(str, enum.Enum):
+    CABLE = "cable"
+    DEVICE = "device"
+    ACCESSORY = "accessory"
+    VOUCHER = "voucher"
+    BUNDLE = "bundle"
+    INFRASTRUCTURE = "infrastructure"
+    TOOL = "tool"
+    OTHER = "other"
+
+
+class StockMovementType(str, enum.Enum):
+    PURCHASE = "purchase"
+    USAGE = "usage"
+    SALE = "sale"
+    TRANSFER = "transfer"
+    ADJUSTMENT = "adjustment"
+    RETURN = "return"
+
+
+class StockLocationType(str, enum.Enum):
+    STORE = "store"
+    FIELD = "field"
+    CUSTOMER_SITE = "customer_site"
+    MAP_LOCATION = "map_location"
+
+
+class FinanceEntryType(str, enum.Enum):
+    INCOME = "income"
+    EXPENSE = "expense"
+
+
+class ReferenceType(str, enum.Enum):
+    INVENTORY_PURCHASE = "inventory_purchase"
+    INVENTORY_USAGE = "inventory_usage"
+    CUSTOMER_INSTALLATION = "customer_installation"
+    SUBSCRIPTION = "subscription"
+    DEVICE_SALE = "device_sale"
+    SALARY = "salary"
+    MAINTENANCE = "maintenance"
+    LOGISTICS = "logistics"
+    OTHER = "other"
+
+
+class WorkOrderType(str, enum.Enum):
+    INSTALLATION = "installation"
+    MAINTENANCE = "maintenance"
+    REPAIR = "repair"
+    UPGRADE = "upgrade"
+    SURVEY = "survey"
+
+
+class WorkOrderStatus(str, enum.Enum):
+    DRAFT = "draft"
+    SCHEDULED = "scheduled"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class InventoryDeductionMode(str, enum.Enum):
+    AUTOMATIC = "automatic"
+    MANUAL_APPROVAL = "manual_approval"
+
+
+class ApprovalStatus(str, enum.Enum):
+    NOT_REQUIRED = "not_required"
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class User(Base):
     __tablename__ = "users"
     
@@ -150,6 +222,8 @@ class Client(Base):
     pon_port = Column(String(50))
     onu_serial = Column(String(100))
     onu_mac = Column(String(50))
+    router_mac = Column(String(50))
+    installed_equipment = Column(JSON, default=list)
     
     # Optical Power
     rx_power = Column(Numeric(6, 2))
@@ -488,6 +562,216 @@ class Ticket(Base):
 
     client = relationship("Client")
     assigned_to = relationship("User", foreign_keys=[assigned_to_user_id])
+
+
+class Supplier(Base):
+    __tablename__ = "suppliers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), unique=True, nullable=False, index=True)
+    contact_person = Column(String(255))
+    phone = Column(String(50))
+    email = Column(String(255))
+    address = Column(Text)
+    notes = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    inventory_items = relationship("InventoryItem", back_populates="supplier")
+    purchases = relationship("InventoryPurchase", back_populates="supplier")
+
+
+class InventoryItem(Base):
+    __tablename__ = "inventory_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sku = Column(String(100), unique=True, index=True, nullable=False)
+    name = Column(String(255), nullable=False, index=True)
+    category = Column(SQLEnum(InventoryCategory), default=InventoryCategory.OTHER, nullable=False)
+    description = Column(Text)
+    unit_of_measure = Column(String(50), default="unit")
+    quantity_in_stock = Column(Numeric(12, 2), default=0, nullable=False)
+    unit_cost = Column(Numeric(12, 2), default=0, nullable=False)
+    selling_price = Column(Numeric(12, 2), default=0)
+    minimum_stock_level = Column(Numeric(12, 2), default=0, nullable=False)
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
+    core_type = Column(Integer, nullable=True)
+    length_meters = Column(Numeric(12, 2), nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    supplier = relationship("Supplier", back_populates="inventory_items")
+    movements = relationship("InventoryMovement", back_populates="item")
+
+
+class InventoryMovement(Base):
+    __tablename__ = "inventory_movements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=False)
+    movement_type = Column(SQLEnum(StockMovementType), nullable=False)
+    quantity = Column(Numeric(12, 2), nullable=False)
+    unit_cost = Column(Numeric(12, 2), default=0, nullable=False)
+    total_cost = Column(Numeric(12, 2), default=0, nullable=False)
+    source_location = Column(SQLEnum(StockLocationType), nullable=True)
+    destination_location = Column(SQLEnum(StockLocationType), nullable=True)
+    notes = Column(Text)
+    reference_type = Column(SQLEnum(ReferenceType), default=ReferenceType.OTHER, nullable=False)
+    reference_id = Column(String(100), nullable=True)
+    job_reference = Column(String(100), nullable=True)
+    used_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
+    mst_id = Column(Integer, ForeignKey("mst_boxes.id"), nullable=True)
+    fibre_route_id = Column(Integer, ForeignKey("fibre_routes.id"), nullable=True)
+    latitude = Column(Numeric(10, 8), nullable=True)
+    longitude = Column(Numeric(11, 8), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    item = relationship("InventoryItem", back_populates="movements")
+    used_by = relationship("User", foreign_keys=[used_by_user_id])
+    client = relationship("Client")
+    mst = relationship("MSTBox")
+    fibre_route = relationship("FibreRoute")
+    financial_transactions = relationship("FinancialTransaction", back_populates="inventory_movement")
+
+
+class FinancialTransaction(Base):
+    __tablename__ = "financial_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    transaction_code = Column(String(100), unique=True, index=True, nullable=False)
+    entry_type = Column(SQLEnum(FinanceEntryType), nullable=False)
+    category = Column(String(100), nullable=False, index=True)
+    amount = Column(Numeric(12, 2), nullable=False)
+    description = Column(Text, nullable=False)
+    reference_type = Column(SQLEnum(ReferenceType), default=ReferenceType.OTHER, nullable=False)
+    reference_id = Column(String(100), nullable=True)
+    inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)
+    inventory_movement_id = Column(Integer, ForeignKey("inventory_movements.id"), nullable=True)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
+    payment_id = Column(Integer, ForeignKey("billing_payments.id"), nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
+    work_order_id = Column(Integer, ForeignKey("work_orders.id"), nullable=True)
+    purchase_id = Column(Integer, ForeignKey("inventory_purchases.id"), nullable=True)
+    transaction_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    inventory_item = relationship("InventoryItem")
+    inventory_movement = relationship("InventoryMovement", back_populates="financial_transactions")
+    client = relationship("Client")
+    payment = relationship("BillingPayment")
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
+    supplier = relationship("Supplier")
+    work_order = relationship("WorkOrder", back_populates="financial_transactions")
+    purchase = relationship("InventoryPurchase", back_populates="financial_transactions")
+
+
+class InventoryPurchase(Base):
+    __tablename__ = "inventory_purchases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    purchase_code = Column(String(100), unique=True, index=True, nullable=False)
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
+    purchase_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    total_cost = Column(Numeric(12, 2), default=0, nullable=False)
+    notes = Column(Text)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    supplier = relationship("Supplier", back_populates="purchases")
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
+    lines = relationship("InventoryPurchaseLine", back_populates="purchase", cascade="all, delete-orphan")
+    financial_transactions = relationship("FinancialTransaction", back_populates="purchase")
+
+
+class InventoryPurchaseLine(Base):
+    __tablename__ = "inventory_purchase_lines"
+
+    id = Column(Integer, primary_key=True, index=True)
+    purchase_id = Column(Integer, ForeignKey("inventory_purchases.id"), nullable=False)
+    item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=False)
+    quantity = Column(Numeric(12, 2), nullable=False)
+    unit_cost = Column(Numeric(12, 2), nullable=False)
+    total_cost = Column(Numeric(12, 2), default=0, nullable=False)
+    movement_id = Column(Integer, ForeignKey("inventory_movements.id"), nullable=True)
+    notes = Column(Text)
+
+    purchase = relationship("InventoryPurchase", back_populates="lines")
+    item = relationship("InventoryItem")
+    movement = relationship("InventoryMovement")
+
+
+class WorkOrder(Base):
+    __tablename__ = "work_orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    work_order_code = Column(String(100), unique=True, index=True, nullable=False)
+    work_type = Column(SQLEnum(WorkOrderType), default=WorkOrderType.INSTALLATION, nullable=False)
+    status = Column(SQLEnum(WorkOrderStatus), default=WorkOrderStatus.DRAFT, nullable=False)
+    inventory_deduction_mode = Column(
+        SQLEnum(InventoryDeductionMode),
+        default=InventoryDeductionMode.AUTOMATIC,
+        nullable=False,
+    )
+    approval_status = Column(SQLEnum(ApprovalStatus), default=ApprovalStatus.NOT_REQUIRED, nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    customer_name = Column(String(255))
+    service_address = Column(Text)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
+    mst_id = Column(Integer, ForeignKey("mst_boxes.id"), nullable=True)
+    fibre_route_id = Column(Integer, ForeignKey("fibre_routes.id"), nullable=True)
+    assigned_engineer_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    approved_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    onu_serial = Column(String(100))
+    onu_mac = Column(String(50))
+    router_mac = Column(String(50))
+    installation_fee = Column(Numeric(12, 2), default=0, nullable=False)
+    latitude = Column(Numeric(10, 8), nullable=True)
+    longitude = Column(Numeric(11, 8), nullable=True)
+    map_reference = Column(String(100))
+    notes = Column(Text)
+    photos = Column(JSON, default=list)
+    scheduled_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    client = relationship("Client")
+    mst = relationship("MSTBox")
+    fibre_route = relationship("FibreRoute")
+    assigned_engineer = relationship("User", foreign_keys=[assigned_engineer_user_id])
+    approved_by = relationship("User", foreign_keys=[approved_by_user_id])
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
+    materials = relationship("WorkOrderMaterial", back_populates="work_order", cascade="all, delete-orphan")
+    financial_transactions = relationship("FinancialTransaction", back_populates="work_order")
+
+
+class WorkOrderMaterial(Base):
+    __tablename__ = "work_order_materials"
+
+    id = Column(Integer, primary_key=True, index=True)
+    work_order_id = Column(Integer, ForeignKey("work_orders.id"), nullable=False)
+    item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=False)
+    quantity_planned = Column(Numeric(12, 2), default=0, nullable=False)
+    quantity_used = Column(Numeric(12, 2), default=0, nullable=False)
+    unit_cost = Column(Numeric(12, 2), default=0, nullable=False)
+    total_cost = Column(Numeric(12, 2), default=0, nullable=False)
+    serial_number = Column(String(100))
+    mac_address = Column(String(50))
+    cable_length_used = Column(Numeric(12, 2), nullable=True)
+    notes = Column(Text)
+    inventory_movement_id = Column(Integer, ForeignKey("inventory_movements.id"), nullable=True)
+
+    work_order = relationship("WorkOrder", back_populates="materials")
+    item = relationship("InventoryItem")
+    inventory_movement = relationship("InventoryMovement")
 
 
 # Standard Fiber Color Codes

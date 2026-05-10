@@ -12,8 +12,14 @@ import type {
   CustomerTicketCategory,
   OnuTelemetryPayload,
   EngineerActivity,
+  FinanceSummary,
   Fault,
+  FinancialTransaction,
   FibreCable,
+  InventoryItem,
+  InventoryMovement,
+  InventorySummary,
+  InventoryPurchase,
   KpiSnapshot,
   NasEntry,
   NetworkNode,
@@ -23,11 +29,15 @@ import type {
   RadiusSession,
   RadiusUser,
   ServicePlan,
+  StockLocationType,
+  StockMovementType,
   SettingsLog,
+  Supplier,
   TenantBranding,
   User,
   Zone,
   UsageSnapshot,
+  WorkOrder,
 } from "@/types";
 import {
   addMockNasEntry,
@@ -139,6 +149,13 @@ function authHeaders(token?: string) {
 
 const sleep = (ms = 350) => new Promise((resolve) => setTimeout(resolve, ms));
 
+let mockInventorySuppliers: Supplier[] = [
+  { id: 1, name: "Main FTTH Supplier", contact_person: "Procurement Desk", phone: "08000000000" },
+];
+let mockInventoryItems: InventoryItem[] = [];
+let mockInventoryMovements: InventoryMovement[] = [];
+let mockFinanceTransactions: FinancialTransaction[] = [];
+
 type DashboardPayload = {
   kpis: KpiSnapshot;
   alerts: AlertItem[];
@@ -199,40 +216,56 @@ export const apiClient = {
     if (USE_MOCKS) {
       await sleep(300);
       return {
-        kpis: buildKpis(),
+        kpis: {
+          ...buildKpis(),
+          inventoryValue: 0,
+          totalIncome: 0,
+          totalExpenses: 0,
+          netProfit: 0,
+          lowStockItems: 0,
+        },
         alerts: mockAlerts,
         activities: mockActivities,
       };
     }
-    const [customersRes, nodesRes, sessionsRes, faultsRes, activityRes] = await Promise.all([
-      api.get<Customer[]>("/customers", { headers: { ...tenantHeaders(tenantId), ...authHeaders(token) } }),
-      api.get<NetworkNode[]>("/network/nodes", { headers: { ...tenantHeaders(tenantId), ...authHeaders(token) } }),
-      api.get<RadiusSession[]>("/radius/sessions", { headers: { ...tenantHeaders(tenantId), ...authHeaders(token) } }),
-      api.get<Fault[]>("/faults", { headers: { ...tenantHeaders(tenantId), ...authHeaders(token) } }),
-      api.get<EngineerActivity[]>("/splicing", { headers: { ...tenantHeaders(tenantId), ...authHeaders(token) } }),
+    const [statsRes, alertsRes] = await Promise.all([
+      api.get("/api/dashboard/stats", { headers: { ...tenantHeaders(tenantId), ...authHeaders(token) } }),
+      api.get("/api/dashboard/alerts", { headers: { ...tenantHeaders(tenantId), ...authHeaders(token) } }),
     ]);
 
-    const customers = customersRes.data;
-    const nodes = nodesRes.data;
-    const sessions = sessionsRes.data;
-    const faults = faultsRes.data;
-    const kpis: KpiSnapshot = {
-      activeCustomers: customers.filter((c) => c.accountStatus === "active").length,
-      offlineCustomers: customers.filter((c) => !c.online).length,
-      totalOlts: nodes.filter((n) => n.type === "olt").length,
-      activeRadiusSessions: sessions.filter((s) => s.status === "online").length,
-    };
+    const stats = statsRes.data;
     return {
-      kpis,
-      alerts: faults.slice(0, 8).map((fault) => ({
-        id: fault.id,
-        title: fault.title,
-        description: fault.description,
-        severity: fault.severity,
-        createdAt: fault.createdAt,
+      kpis: {
+        activeCustomers: stats.active_clients ?? 0,
+        offlineCustomers: stats.suspended_clients ?? 0,
+        totalOlts: stats.total_mst_boxes ?? 0,
+        activeRadiusSessions: stats.active_users ?? 0,
+        inventoryValue: Number(stats.inventory_value ?? 0),
+        totalIncome: Number(stats.total_income ?? 0),
+        totalExpenses: Number(stats.total_expenses ?? 0),
+        netProfit: Number(stats.net_profit ?? 0),
+        lowStockItems: stats.low_stock_items ?? 0,
+      },
+      alerts: (alertsRes.data.alerts ?? []).map((alert: Record<string, unknown>, index: number) => ({
+        id: String(alert.client_id ?? alert.mst_id ?? alert.core_id ?? index),
+        title: String(alert.type ?? "alert"),
+        description: String(alert.message ?? ""),
+        severity:
+          alert.severity === "error" ? "critical" : alert.severity === "warning" ? "major" : ("minor" as AlertItem["severity"]),
+        createdAt: new Date().toISOString(),
         acknowledged: false,
       })),
-      activities: activityRes.data,
+      activities: (stats.recent_activities ?? []).map((activity: Record<string, unknown>) => ({
+        id: String(activity.id),
+        type: "installation",
+        engineerName: `User ${activity.user_id ?? "system"}`,
+        timestamp: String(activity.created_at ?? new Date().toISOString()),
+        location: {
+          lat: Number(activity.latitude ?? 0),
+          lng: Number(activity.longitude ?? 0),
+        },
+        note: String(activity.action_description ?? ""),
+      })),
     };
   },
 
@@ -1121,6 +1154,389 @@ export const apiClient = {
       return ingestOnuTelemetry(payload);
     }
     const { data } = await api.post<Customer>("/network/onu-telemetry", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getInventorySummary(tenantId: string, token?: string): Promise<InventorySummary> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return {
+        total_items: mockInventoryItems.length,
+        low_stock_items: mockInventoryItems.filter((item) => item.quantity_in_stock <= item.minimum_stock_level).length,
+        total_stock_units: mockInventoryItems.reduce((sum, item) => sum + item.quantity_in_stock, 0),
+        inventory_value: mockInventoryItems.reduce((sum, item) => sum + item.quantity_in_stock * item.unit_cost, 0),
+        recent_movements: mockInventoryMovements.slice(0, 10),
+        most_used_items: [],
+        pending_approvals: 0,
+      };
+    }
+    const { data } = await api.get<InventorySummary>("/api/inventory/summary", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getInventoryItems(tenantId: string, token?: string, search?: string, lowStockOnly?: boolean): Promise<InventoryItem[]> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return mockInventoryItems.filter((item) => {
+        const matchesSearch = !search || item.name.toLowerCase().includes(search.toLowerCase()) || item.sku.toLowerCase().includes(search.toLowerCase());
+        const matchesStock = !lowStockOnly || item.quantity_in_stock <= item.minimum_stock_level;
+        return matchesSearch && matchesStock;
+      });
+    }
+    const { data } = await api.get<InventoryItem[]>("/api/inventory/items", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+      params: { search, low_stock_only: lowStockOnly || undefined },
+    });
+    return data;
+  },
+
+  async getInventoryMovements(tenantId: string, token?: string): Promise<InventoryMovement[]> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return mockInventoryMovements;
+    }
+    const { data } = await api.get<InventoryMovement[]>("/api/inventory/movements", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async createInventoryItem(
+    payload: Omit<InventoryItem, "id" | "is_active" | "created_at" | "updated_at">,
+    tenantId: string,
+    token?: string,
+  ): Promise<InventoryItem> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      const item: InventoryItem = { ...payload, id: Date.now(), is_active: true };
+      mockInventoryItems = [item, ...mockInventoryItems];
+      return item;
+    }
+    const { data } = await api.post<InventoryItem>("/api/inventory/items", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async createInventoryMovement(
+    payload: {
+      item_id: number;
+      movement_type: StockMovementType;
+      quantity: number;
+      unit_cost: number;
+      source_location?: StockLocationType;
+      destination_location?: StockLocationType;
+      notes?: string;
+      reference_type: FinancialTransaction["reference_type"];
+      reference_id?: string;
+      job_reference?: string;
+      client_id?: number;
+      mst_id?: number;
+      fibre_route_id?: number;
+    },
+    tenantId: string,
+    token?: string,
+  ): Promise<InventoryMovement> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      const item = mockInventoryItems.find((entry) => entry.id === payload.item_id);
+      if (!item) throw new Error("Inventory item not found");
+      if (payload.movement_type === "purchase" || payload.movement_type === "return" || payload.movement_type === "adjustment") {
+        item.quantity_in_stock += payload.quantity;
+      } else if (payload.movement_type === "usage" || payload.movement_type === "sale") {
+        item.quantity_in_stock -= payload.quantity;
+      }
+      const movement: InventoryMovement = {
+        id: Date.now(),
+        created_at: new Date().toISOString(),
+        total_cost: payload.quantity * payload.unit_cost,
+        used_by_user_id: undefined,
+        latitude: undefined,
+        longitude: undefined,
+        ...payload,
+      };
+      mockInventoryMovements = [movement, ...mockInventoryMovements];
+      return movement;
+    }
+    const { data } = await api.post<InventoryMovement>("/api/inventory/movements", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getSuppliers(tenantId: string, token?: string): Promise<Supplier[]> {
+    if (USE_MOCKS) {
+      await sleep(150);
+      return mockInventorySuppliers;
+    }
+    const { data } = await api.get<Supplier[]>("/api/inventory/suppliers", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getInventoryPurchases(tenantId: string, token?: string): Promise<InventoryPurchase[]> {
+    if (USE_MOCKS) {
+      await sleep(150);
+      return [];
+    }
+    const { data } = await api.get<InventoryPurchase[]>("/api/inventory/purchases", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async createInventoryPurchase(
+    payload: {
+      supplier_id?: number;
+      purchase_date?: string;
+      notes?: string;
+      reference_id?: string;
+      lines: Array<{ item_id: number; quantity: number; unit_cost: number; notes?: string }>;
+    },
+    tenantId: string,
+    token?: string,
+  ): Promise<InventoryPurchase> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      const total_cost = payload.lines.reduce((sum, line) => sum + line.quantity * line.unit_cost, 0);
+      const purchase: InventoryPurchase = {
+        id: Date.now(),
+        purchase_code: `PUR-${Date.now()}`,
+        supplier_id: payload.supplier_id,
+        purchase_date: payload.purchase_date ?? new Date().toISOString(),
+        total_cost,
+        notes: payload.notes,
+        created_at: new Date().toISOString(),
+        lines: payload.lines.map((line, index) => ({
+          id: Date.now() + index,
+          item_id: line.item_id,
+          quantity: line.quantity,
+          unit_cost: line.unit_cost,
+          total_cost: line.quantity * line.unit_cost,
+          notes: line.notes,
+        })),
+      };
+      return purchase;
+    }
+    const { data } = await api.post<InventoryPurchase>("/api/inventory/purchases", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getWorkOrders(tenantId: string, token?: string): Promise<WorkOrder[]> {
+    if (USE_MOCKS) {
+      await sleep(150);
+      return [];
+    }
+    const { data } = await api.get<WorkOrder[]>("/api/inventory/work-orders", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async createWorkOrder(
+    payload: {
+      work_type: WorkOrder["work_type"];
+      inventory_deduction_mode: WorkOrder["inventory_deduction_mode"];
+      title: string;
+      description?: string;
+      customer_name?: string;
+      service_address?: string;
+      client_id?: number;
+      mst_id?: number;
+      fibre_route_id?: number;
+      assigned_engineer_user_id?: number;
+      onu_serial?: string;
+      onu_mac?: string;
+      router_mac?: string;
+      installation_fee?: number;
+      latitude?: number;
+      longitude?: number;
+      map_reference?: string;
+      notes?: string;
+      photos?: string[];
+      scheduled_at?: string;
+      materials: Array<{
+        item_id: number;
+        quantity_planned: number;
+        quantity_used?: number;
+        unit_cost?: number;
+        serial_number?: string;
+        mac_address?: string;
+        cable_length_used?: number;
+        notes?: string;
+      }>;
+    },
+    tenantId: string,
+    token?: string,
+  ): Promise<WorkOrder> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return {
+        id: Date.now(),
+        work_order_code: `WO-${Date.now()}`,
+        work_type: payload.work_type,
+        status: payload.scheduled_at ? "scheduled" : "draft",
+        inventory_deduction_mode: payload.inventory_deduction_mode,
+        approval_status: payload.inventory_deduction_mode === "automatic" ? "not_required" : "pending",
+        title: payload.title,
+        description: payload.description,
+        customer_name: payload.customer_name,
+        service_address: payload.service_address,
+        client_id: payload.client_id,
+        mst_id: payload.mst_id,
+        fibre_route_id: payload.fibre_route_id,
+        assigned_engineer_user_id: payload.assigned_engineer_user_id,
+        onu_serial: payload.onu_serial,
+        onu_mac: payload.onu_mac,
+        router_mac: payload.router_mac,
+        installation_fee: payload.installation_fee ?? 0,
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+        map_reference: payload.map_reference,
+        notes: payload.notes,
+        photos: payload.photos ?? [],
+        scheduled_at: payload.scheduled_at,
+        created_at: new Date().toISOString(),
+        materials: payload.materials.map((material, index) => ({
+          id: Date.now() + index,
+          item_id: material.item_id,
+          quantity_planned: material.quantity_planned,
+          quantity_used: material.quantity_used ?? material.quantity_planned,
+          unit_cost: material.unit_cost ?? 0,
+          total_cost: (material.quantity_used ?? material.quantity_planned) * (material.unit_cost ?? 0),
+          serial_number: material.serial_number,
+          mac_address: material.mac_address,
+          cable_length_used: material.cable_length_used,
+          notes: material.notes,
+        })),
+      };
+    }
+    const { data } = await api.post<WorkOrder>("/api/inventory/work-orders", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async completeWorkOrder(
+    workOrderId: number,
+    payload: {
+      notes?: string;
+      photos?: string[];
+      onu_serial?: string;
+      onu_mac?: string;
+      router_mac?: string;
+      latitude?: number;
+      longitude?: number;
+      materials: Array<{
+        item_id: number;
+        quantity_planned: number;
+        quantity_used?: number;
+        unit_cost?: number;
+        serial_number?: string;
+        mac_address?: string;
+        cable_length_used?: number;
+        notes?: string;
+      }>;
+    },
+    tenantId: string,
+    token?: string,
+  ): Promise<WorkOrder> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      throw new Error("Mock completion is not implemented yet.");
+    }
+    const { data } = await api.post<WorkOrder>(`/api/inventory/work-orders/${workOrderId}/complete`, payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async approveWorkOrderUsage(workOrderId: number, approval_notes: string | undefined, tenantId: string, token?: string): Promise<WorkOrder> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      throw new Error("Mock approval is not implemented yet.");
+    }
+    const { data } = await api.post<WorkOrder>(
+      `/api/inventory/work-orders/${workOrderId}/approve-usage`,
+      { approval_notes },
+      { headers: { ...tenantHeaders(tenantId), ...authHeaders(token) } },
+    );
+    return data;
+  },
+
+  async getFinanceSummary(tenantId: string, token?: string): Promise<FinanceSummary> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      const total_income = mockFinanceTransactions
+        .filter((entry) => entry.entry_type === "income")
+        .reduce((sum, entry) => sum + entry.amount, 0);
+      const total_expenses = mockFinanceTransactions
+        .filter((entry) => entry.entry_type === "expense")
+        .reduce((sum, entry) => sum + entry.amount, 0);
+      return {
+        total_income,
+        total_expenses,
+        net_profit: total_income - total_expenses,
+        cash_flow: total_income - total_expenses,
+        inventory_value: mockInventoryItems.reduce((sum, item) => sum + item.quantity_in_stock * item.unit_cost, 0),
+        transaction_count: mockFinanceTransactions.length,
+        recent_transactions: mockFinanceTransactions.slice(0, 10),
+        expenses_today: 0,
+        expenses_this_week: 0,
+        expenses_this_month: 0,
+      };
+    }
+    const { data } = await api.get<FinanceSummary>("/api/finance/summary", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getFinancialTransactions(tenantId: string, token?: string): Promise<FinancialTransaction[]> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return mockFinanceTransactions;
+    }
+    const { data } = await api.get<FinancialTransaction[]>("/api/finance/transactions", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async createFinancialTransaction(
+    payload: Omit<FinancialTransaction, "id" | "transaction_code" | "created_by_user_id" | "created_at" | "updated_at">,
+    tenantId: string,
+    token?: string,
+  ): Promise<FinancialTransaction> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      const transaction: FinancialTransaction = {
+        ...payload,
+        id: Date.now(),
+        transaction_code: `TXN-${Date.now()}`,
+      };
+      mockFinanceTransactions = [transaction, ...mockFinanceTransactions];
+      return transaction;
+    }
+    const { data } = await api.post<FinancialTransaction>("/api/finance/transactions", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async syncBillingIncome(tenantId: string, token?: string): Promise<{ created: number }> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return { created: 0 };
+    }
+    const { data } = await api.post<{ created: number }>("/api/finance/sync/billing-payments", undefined, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;

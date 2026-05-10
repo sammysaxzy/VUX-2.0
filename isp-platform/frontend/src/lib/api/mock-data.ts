@@ -59,8 +59,19 @@ export const mockUser: User = {
   id: "u-001",
   email: "noc@westlink.io",
   fullName: "NOC Supervisor",
-  role: "noc_engineer",
+  role: "tenant_admin",
   tenantId: mockBranding.tenantId,
+  permissions: {
+    radius_access: true,
+    disconnect_user: true,
+    create_pppoe: true,
+    view_customers: true,
+    delete_customer: true,
+    billing_access: true,
+    settings_access: true,
+    inventory_access: true,
+    finance_access: true,
+  },
 };
 
 const mapPermissionMembers: PermissionMember[] = [
@@ -104,6 +115,8 @@ const defaultPermissionFlags: PermissionFlags = {
   delete_customer: false,
   billing_access: false,
   settings_access: true,
+  inventory_access: false,
+  finance_access: false,
 };
 
 function buildPermissionRoles(members: PermissionMember[]): PermissionRole[] {
