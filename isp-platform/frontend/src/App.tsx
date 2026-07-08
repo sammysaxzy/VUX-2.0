@@ -20,6 +20,8 @@ import { LeadsPage } from "@/pages/leads-page";
 import { AiNocPage } from "@/pages/ai-noc-page";
 import { CustomerPortalLoginPage } from "@/pages/customer-portal-login-page";
 import { CustomerPortalPage } from "@/pages/customer-portal-page";
+import { SystemHealthPage } from "@/pages/system-health-page";
+import { OnboardingPage } from "@/pages/onboarding-page";
 
 const ConfigurationMenuPage = lazy(() =>
   import("@/pages/configuration-menu-page").then((module) => ({ default: module.ConfigurationMenuPage })),
@@ -79,7 +81,9 @@ export default function App() {
         <Route path="leads" element={<LeadsPage />} />
         <Route path="faults" element={<FaultsPage />} />
         <Route path="field" element={<FieldPage />} />
+        <Route path="onboarding" element={<OnboardingPage />} />
         <Route path="ai-noc" element={<AiNocPage />} />
+        <Route path="system-health" element={<SystemHealthPage />} />
         <Route path="radius" element={<RadiusPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route

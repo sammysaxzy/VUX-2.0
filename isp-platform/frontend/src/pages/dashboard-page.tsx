@@ -3,6 +3,7 @@ import { useDashboardData } from "@/hooks/api/use-dashboard";
 import { useFinanceSummary } from "@/hooks/api/use-finance";
 import { useInventorySummary, useWorkOrders } from "@/hooks/api/use-inventory";
 import { useFaults } from "@/hooks/api/use-faults";
+import { useEnterpriseSlaReports, useNocAlerts, useSystemHealth, useUsageAnalytics } from "@/hooks/api/use-operations";
 import { getRoleLabel } from "@/lib/isp";
 import { formatCurrency, titleCase } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
@@ -19,6 +20,10 @@ export function DashboardPage() {
   const inventorySummary = useInventorySummary();
   const workOrders = useWorkOrders();
   const faults = useFaults();
+  const slaReports = useEnterpriseSlaReports();
+  const nocAlerts = useNocAlerts();
+  const usageAnalytics = useUsageAnalytics();
+  const systemHealth = useSystemHealth();
   const branding = useAppStore((state) => state.branding);
   const currentUser = useAppStore((state) => state.user);
   const realtimeKpis = useAppStore((state) => state.realtimeKpis);
@@ -45,6 +50,7 @@ export function DashboardPage() {
   const activity = [...realtimeActivity, ...data.activities];
   const pendingWorkOrders = (workOrders.data ?? []).filter((entry) => entry.status !== "completed").slice(0, 4);
   const activeFaults = (faults.data ?? []).filter((fault) => fault.status !== "resolved");
+  const breachedSla = (slaReports.data ?? []).filter((report) => report.breachStatus === "breached").length;
 
   return (
     <div className="space-y-5 animate-fade-up">
@@ -93,7 +99,7 @@ export function DashboardPage() {
               Open faults: <span className="font-semibold">{activeFaults.length}</span>
             </p>
             <p className="rounded-2xl border border-border/70 p-3">
-              Realtime alerts: <span className="font-semibold">{alerts.length}</span>
+              Realtime alerts: <span className="font-semibold">{alerts.length + (nocAlerts.data?.length ?? 0)}</span>
             </p>
             <p className="rounded-2xl border border-border/70 p-3">
               Customer risk posture:
@@ -139,6 +145,29 @@ export function DashboardPage() {
         </Card>
       </div>
 
+      <div className="grid gap-4 xl:grid-cols-4">
+        <DashboardFactCard
+          title="SLA Breaches"
+          value={`${breachedSla}`}
+          note="Enterprise and dedicated customers outside target uptime."
+        />
+        <DashboardFactCard
+          title="Peak Usage"
+          value={`${usageAnalytics.data?.peakUsageMbps ?? 0} Mbps`}
+          note={`Peak window ${usageAnalytics.data?.peakHourWindow ?? "pending analytics"}`}
+        />
+        <DashboardFactCard
+          title="Critical NOC Alerts"
+          value={`${(nocAlerts.data ?? []).filter((item) => item.severity === "critical").length}`}
+          note="Weak optical power, latency, packet loss, and device events."
+        />
+        <DashboardFactCard
+          title="System Health"
+          value={titleCase(systemHealth.data?.serverStatus ?? "unknown")}
+          note={`Failed jobs: ${systemHealth.data?.failedJobs ?? 0} | Queue: ${systemHealth.data?.queueStatus ?? "unknown"}`}
+        />
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -153,6 +182,20 @@ export function DashboardPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function DashboardFactCard({ title, value, note }: { title: string; value: string; note: string }) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-2xl font-semibold">{value}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{note}</p>
+      </CardContent>
+    </Card>
   );
 }
 

@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Router, Signal, Ticket, Wallet } from "lucide-react";
+import { ArrowLeft, FileText, Router, ShieldCheck, Signal, Ticket, Wallet } from "lucide-react";
 import { buildCustomerServiceLabel, formatPlanAndFee, getCustomerPaymentStatus } from "@/lib/isp";
 import { formatCurrency, formatDateOrDash, formatDateTimeOrDash, titleCase } from "@/lib/utils";
 import { useCustomer } from "@/hooks/api/use-customers";
@@ -173,6 +173,80 @@ export function CustomerProfilePage() {
               </div>
             ))}
             {!(customer.installationRecords ?? []).length ? <p className="text-sm text-muted-foreground">No installation records captured yet.</p> : null}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              KYC / Verification
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <p>ID Type: {customer.kyc?.idType?.replace(/_/g, " ") ?? "Pending"}</p>
+            <p>ID Number: {customer.kyc?.idNumber ?? "Pending"}</p>
+            <p>Address proof: {customer.kyc?.addressProof ?? "Pending"}</p>
+            <p>Customer photo: {customer.kyc?.customerPhoto ?? "Pending"}</p>
+            <Badge variant={customer.kyc?.verificationStatus === "verified" ? "success" : customer.kyc?.verificationStatus === "rejected" ? "danger" : "warning"}>
+              {titleCase(customer.kyc?.verificationStatus ?? "pending")}
+            </Badge>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>SLA & Uptime</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2 text-sm">
+            <div className="rounded-2xl border border-border/70 p-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Profile</p>
+              <p className="mt-1 font-medium">{titleCase(customer.slaMetrics?.profile ?? "standard")}</p>
+            </div>
+            <div className="rounded-2xl border border-border/70 p-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Uptime</p>
+              <p className="mt-1 font-medium">{customer.slaMetrics?.currentUptime ?? "-"}</p>
+            </div>
+            <div className="rounded-2xl border border-border/70 p-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Downtime</p>
+              <p className="mt-1 font-medium">{customer.slaMetrics?.downtimeMinutes ?? 0} mins</p>
+            </div>
+            <div className="rounded-2xl border border-border/70 p-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Response / Resolution</p>
+              <p className="mt-1 font-medium">{customer.slaMetrics?.averageResponseMinutes ?? 0} / {customer.slaMetrics?.averageResolutionMinutes ?? 0} mins</p>
+            </div>
+            <div className="rounded-2xl border border-border/70 p-3 md:col-span-2">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">SLA Breach Risk</p>
+              <Badge variant={customer.slaMetrics?.breachRisk === "critical" ? "danger" : customer.slaMetrics?.breachRisk === "warning" ? "warning" : "success"}>
+                {titleCase(customer.slaMetrics?.breachRisk ?? "normal")}
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-primary" />
+              Documents & Agreements
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(customer.documents ?? []).map((document) => (
+              <div key={document.id} className="rounded-2xl border border-border/70 p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{document.name}</p>
+                  <Badge variant={document.status === "available" ? "success" : document.status === "expired" ? "danger" : "warning"}>
+                    {document.status.replace(/_/g, " ")}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-muted-foreground">{document.type.replace(/_/g, " ")}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{formatDateTimeOrDash(document.uploadedAt)}</p>
+              </div>
+            ))}
+            {!(customer.documents ?? []).length ? <p className="text-sm text-muted-foreground">No documents captured yet.</p> : null}
           </CardContent>
         </Card>
       </div>

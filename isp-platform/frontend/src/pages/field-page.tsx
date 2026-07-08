@@ -101,6 +101,35 @@ export function FieldPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Mobile / Field-Friendly View</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {(workOrders.data ?? []).slice(0, 6).map((workOrder) => (
+            <div key={workOrder.id} className="rounded-2xl border border-border/70 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-medium">{workOrder.title}</p>
+                <Badge variant={getWorkOrderStatusTone(workOrder)}>{titleCase(workOrder.status)}</Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">{workOrder.customer_name ?? "Internal job"}</p>
+              <p className="text-sm text-muted-foreground">{workOrder.service_address ?? "Field location pending"}</p>
+              <div className="mt-3 grid gap-2 text-sm">
+                <p>Assigned technician: {workOrder.assigned_engineer_user_id ? `User ${workOrder.assigned_engineer_user_id}` : "Pending assignment"}</p>
+                <p>Materials: {workOrder.materials.length} lines</p>
+                <p>Photos: {(workOrder.photos ?? []).length} uploaded</p>
+                <p>Notes: {workOrder.notes ? "Available" : "Pending update"}</p>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Badge variant="outline">Update status</Badge>
+                <Badge variant="outline">Upload photos</Badge>
+                <Badge variant="outline">Mark complete</Badge>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }

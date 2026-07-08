@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateLead, useLeads, useServiceAreas } from "@/hooks/api/use-business";
+import { useResellerAgents } from "@/hooks/api/use-operations";
 import { randomId } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 import type { Lead } from "@/types";
@@ -36,6 +37,7 @@ export function LeadsPage() {
   const leadsQuery = useLeads();
   const areasQuery = useServiceAreas();
   const createLeadMutation = useCreateLead();
+  const resellerAgents = useResellerAgents();
   const [search, setSearch] = useState("");
   const [leadForm, setLeadForm] = useState<Lead>({ ...blankLead, tenantId });
 
@@ -213,6 +215,32 @@ export function LeadsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Reseller / Marketer / Agent Management</CardTitle>
+          <CardDescription>Track referrals, assigned leads, converted customers, commissions, and payout status.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {(resellerAgents.data ?? []).map((agent) => (
+            <div key={agent.id} className="rounded-2xl border border-border/70 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-medium">{agent.fullName}</p>
+                <Badge variant={agent.payoutStatus === "paid" ? "success" : agent.payoutStatus === "processing" ? "warning" : "outline"}>
+                  {agent.payoutStatus}
+                </Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">{agent.role}</p>
+              <div className="mt-3 grid gap-1 text-sm">
+                <p>Assigned leads: {agent.assignedLeads}</p>
+                <p>Referrals: {agent.referrals}</p>
+                <p>Converted customers: {agent.convertedCustomers}</p>
+                <p>Commission earned: NGN {agent.commissionEarned.toLocaleString()}</p>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -9,37 +9,51 @@ import type {
   CustomerPayment,
   CustomerPlan,
   CustomerPortalProfile,
+  CustomerDocument,
+  CustomerKycRecord,
+  CustomerSlaMetrics,
   CustomerTicket,
   CustomerTicketCategory,
+  EnterpriseSlaReport,
+  ExpenseSummaryLine,
   OnuTelemetryPayload,
   EngineerActivity,
   FinanceSummary,
   Fault,
   FinancialTransaction,
   FibreCable,
+  BackupStatus,
   InventoryItem,
   InventoryMovement,
   InventorySummary,
   InventoryPurchase,
+  IntegrationService,
   KpiSnapshot,
   Lead,
   NasEntry,
+  NocAlert,
   NetworkNode,
   NotificationRule,
+  OnboardingChecklist,
   PermissionFlags,
   PermissionRole,
+  ProcurementRecord,
   RadiusBulkImportResult,
   RadiusSession,
   RadiusUser,
+  ResellerAgentRecord,
   ServiceArea,
   ServicePlan,
+  SiteManagementRecord,
   StockLocationType,
   StockMovementType,
   SettingsLog,
   Supplier,
+  SystemHealthSnapshot,
   TenantProfile,
   TenantBranding,
   User,
+  UsageAnalyticsSnapshot,
   Zone,
   UsageSnapshot,
   WorkOrder,
@@ -313,6 +327,336 @@ let mockNotificationRules: NotificationRule[] = [
 ];
 
 let mockAiNocResponses: AiNocResponse[] = [];
+
+const mockCustomerKycById: Record<string, CustomerKycRecord> = {
+  "cust-1001": {
+    idType: "national_id",
+    idNumber: "NIN-90118827361",
+    addressProof: "IKEDC utility bill",
+    customerPhoto: "On file",
+    verificationStatus: "verified",
+    verifiedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 12).toISOString(),
+  },
+  "cust-1002": {
+    idType: "drivers_license",
+    idNumber: "DL-ABJ-8821092",
+    addressProof: "Tenancy agreement",
+    customerPhoto: "On file",
+    verificationStatus: "pending",
+  },
+};
+
+const mockCustomerDocumentsById: Record<string, CustomerDocument[]> = {
+  "cust-1001": [
+    {
+      id: "doc-1",
+      name: "Business Service Agreement",
+      type: "service_agreement",
+      status: "available",
+      uploadedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 40).toISOString(),
+      reference: "AGR-2401-1001",
+    },
+    {
+      id: "doc-2",
+      name: "Installation Completion Form",
+      type: "installation_form",
+      status: "available",
+      uploadedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString(),
+    },
+  ],
+  "cust-1002": [
+    {
+      id: "doc-3",
+      name: "KYC Address Proof",
+      type: "kyc_document",
+      status: "available",
+      uploadedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 9).toISOString(),
+    },
+    {
+      id: "doc-4",
+      name: "Site Survey Form",
+      type: "site_survey",
+      status: "pending_signature",
+      uploadedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+    },
+  ],
+};
+
+const mockCustomerSlaById: Record<string, CustomerSlaMetrics> = {
+  "cust-1001": {
+    profile: "business",
+    uptimeTarget: "99.5%",
+    currentUptime: "99.82%",
+    downtimeMinutes: 52,
+    averageResponseMinutes: 18,
+    averageResolutionMinutes: 62,
+    breachCount: 0,
+    faultDurationMinutes: 52,
+    breachRisk: "normal",
+  },
+  "cust-1003": {
+    profile: "dedicated",
+    uptimeTarget: "99.9%",
+    currentUptime: "99.41%",
+    downtimeMinutes: 258,
+    averageResponseMinutes: 11,
+    averageResolutionMinutes: 74,
+    breachCount: 1,
+    faultDurationMinutes: 258,
+    breachRisk: "critical",
+  },
+};
+
+let mockSites: SiteManagementRecord[] = [
+  {
+    id: "site-1",
+    name: "Lekki POP Alpha",
+    type: "pop",
+    location: { lat: 6.437, lng: 3.472 },
+    serviceAreaName: "Lekki Phase 1",
+    powerStatus: "normal",
+    batteryStatus: "healthy",
+    inverterStatus: "healthy",
+    uplink: "10G Metro Ring A",
+    oltName: "OLT-Lekki-01",
+    routerName: "CCR-Core-01",
+    equipment: ["Huawei OLT", "MikroTik CCR", "48V DC plant", "Battery bank"],
+    maintenanceHistory: [
+      {
+        id: "maint-1",
+        title: "Quarterly battery inspection",
+        performedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 20).toISOString(),
+        engineer: "Kunle O.",
+        notes: "Battery bank healthy, inverter fan cleaned.",
+      },
+    ],
+  },
+  {
+    id: "site-2",
+    name: "Chevron Cabinet East",
+    type: "cabinet",
+    location: { lat: 6.451, lng: 3.503 },
+    serviceAreaName: "Chevron",
+    powerStatus: "warning",
+    batteryStatus: "degraded",
+    inverterStatus: "warning",
+    uplink: "1G Distribution Feed",
+    oltName: "OLT-Chevron-02",
+    equipment: ["Outdoor cabinet", "8-port MST uplink tray", "UPS"],
+    maintenanceHistory: [
+      {
+        id: "maint-2",
+        title: "Power-site alert response",
+        performedAt: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
+        engineer: "Sade A.",
+        notes: "Battery runtime reduced below threshold, replacement recommended.",
+      },
+    ],
+  },
+];
+
+let mockNocAlerts: NocAlert[] = [
+  {
+    id: "noc-1",
+    category: "optical",
+    severity: "critical",
+    title: "Weak optical power on distribution segment",
+    description: "RX levels dropped below threshold across customers downstream of Closure CL-17.",
+    source: "OLT-Lekki-01 / PON 3",
+    affectedCount: 14,
+    createdAt: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
+  },
+  {
+    id: "noc-2",
+    category: "latency",
+    severity: "warning",
+    title: "High latency on upstream path",
+    description: "Business customers experienced elevated latency during peak utilization window.",
+    source: "Metro Uplink A",
+    affectedCount: 8,
+    createdAt: new Date(Date.now() - 1000 * 60 * 80).toISOString(),
+  },
+  {
+    id: "noc-3",
+    category: "customer",
+    severity: "normal",
+    title: "Customers offline",
+    description: "Routine overnight offline set within expected limits.",
+    source: "Customer CPE monitoring",
+    affectedCount: 5,
+    createdAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
+  },
+];
+
+const mockUsageAnalytics: UsageAnalyticsSnapshot = {
+  totalCapacityMbps: 2500,
+  peakUsageMbps: 1830,
+  averageUsageMbps: 1285,
+  peakHourWindow: "19:00 - 22:00",
+  planUtilization: [
+    { planName: "20 Mbps Home", averageUsageMbps: 310, subscribers: 142 },
+    { planName: "Business 50 Mbps", averageUsageMbps: 420, subscribers: 36 },
+    { planName: "Dedicated 100 Mbps", averageUsageMbps: 610, subscribers: 8 },
+  ],
+  topUsers: [
+    { customerName: "Greenwood Estate HOA", usageGb: 921, planName: "Dedicated 100 Mbps" },
+    { customerName: "Favour Clinic", usageGb: 402, planName: "Business 25 Mbps" },
+    { customerName: "The Annex Workspace", usageGb: 387, planName: "Business 50 Mbps" },
+  ],
+  customerUsage: [
+    { customerId: "cust-1001", customerName: "The Annex Workspace", usageGb: 387, planName: "Business 50 Mbps" },
+    { customerId: "cust-1002", customerName: "Amina Bello", usageGb: 96, planName: "20 Mbps Home" },
+    { customerId: "cust-1003", customerName: "Greenwood Estate HOA", usageGb: 921, planName: "Dedicated 100 Mbps" },
+  ],
+};
+
+const mockSlaReports: EnterpriseSlaReport[] = [
+  {
+    id: "sla-1",
+    customerName: "Greenwood Estate HOA",
+    serviceWindow: "July 2026",
+    uptime: "99.41%",
+    downtimeMinutes: 258,
+    responseMinutes: 11,
+    resolutionMinutes: 74,
+    breachStatus: "breached",
+  },
+  {
+    id: "sla-2",
+    customerName: "The Annex Workspace",
+    serviceWindow: "July 2026",
+    uptime: "99.82%",
+    downtimeMinutes: 52,
+    responseMinutes: 18,
+    resolutionMinutes: 62,
+    breachStatus: "met",
+  },
+];
+
+let mockProcurementRecords: ProcurementRecord[] = [
+  {
+    id: "proc-1",
+    vendorName: "Metro Fiber Depot",
+    type: "purchase_order",
+    reference: "PO-2407-19",
+    itemSummary: "1x8 PLC splitters, drop cable, pigtails",
+    amount: 1245000,
+    deliveryStatus: "in_transit",
+    paymentStatus: "part_paid",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(),
+  },
+  {
+    id: "proc-2",
+    vendorName: "Main FTTH Supplier",
+    type: "quotation",
+    reference: "QTN-2407-44",
+    itemSummary: "Battery bank replacement for POP Alpha",
+    amount: 880000,
+    deliveryStatus: "pending",
+    paymentStatus: "pending",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 1).toISOString(),
+  },
+];
+
+const mockExpenseSummary: ExpenseSummaryLine[] = [
+  { category: "fuel", amount: 185000 },
+  { category: "contractors", amount: 620000 },
+  { category: "materials", amount: 920000 },
+  { category: "maintenance", amount: 210000 },
+  { category: "salaries", amount: 1750000 },
+  { category: "site_rent", amount: 340000 },
+  { category: "power", amount: 290000 },
+  { category: "upstream", amount: 2400000 },
+];
+
+const mockBackupStatus: BackupStatus = {
+  lastBackupAt: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
+  databaseStatus: "healthy",
+  retentionPolicy: "Daily snapshots retained for 30 days, weekly archives for 6 months.",
+  restoreReady: true,
+  securityNotes: [
+    "Backups should be encrypted at rest using provider-managed keys or KMS.",
+    "Restore actions should require privileged approval and audit logging.",
+  ],
+};
+
+const mockIntegrations: IntegrationService[] = [
+  {
+    id: "int-1",
+    name: "SmartOLT",
+    category: "network",
+    status: "pending",
+    envKeys: ["SMARTOLT_BASE_URL", "SMARTOLT_API_KEY"],
+    notes: "Use backend proxy for optical telemetry and alarm sync.",
+  },
+  {
+    id: "int-2",
+    name: "Paystack",
+    category: "billing",
+    status: "configured",
+    envKeys: ["PAYSTACK_SECRET_KEY", "PAYSTACK_PUBLIC_KEY", "PAYSTACK_WEBHOOK_SECRET"],
+    notes: "Webhook verification must remain server-side.",
+  },
+  {
+    id: "int-3",
+    name: "WhatsApp",
+    category: "communication",
+    status: "pending",
+    envKeys: ["WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID"],
+    notes: "Template approvals still required for production rollout.",
+  },
+  {
+    id: "int-4",
+    name: "OpenAI",
+    category: "ai",
+    status: "pending",
+    envKeys: ["OPENAI_API_KEY"],
+    notes: "Route prompts through backend guardrails and audit storage.",
+  },
+];
+
+const mockResellerAgents: ResellerAgentRecord[] = [
+  {
+    id: "agent-1",
+    fullName: "Tosin A.",
+    role: "marketer",
+    assignedLeads: 11,
+    convertedCustomers: 4,
+    commissionEarned: 145000,
+    payoutStatus: "processing",
+    referrals: 6,
+  },
+  {
+    id: "agent-2",
+    fullName: "PrimeNet Reseller Desk",
+    role: "reseller",
+    assignedLeads: 8,
+    convertedCustomers: 3,
+    commissionEarned: 280000,
+    payoutStatus: "pending",
+    referrals: 8,
+  },
+];
+
+const mockSystemHealth: SystemHealthSnapshot = {
+  serverStatus: "healthy",
+  databaseStatus: "healthy",
+  queueStatus: "warning",
+  apiStatus: "healthy",
+  failedJobs: 3,
+  backgroundTasks: 11,
+  lastCheckedAt: new Date().toISOString(),
+};
+
+const mockOnboardingChecklist: OnboardingChecklist[] = [
+  { id: "ob-1", title: "Company setup", description: "Branding, support contacts, billing identity, and tenant profile.", completed: true },
+  { id: "ob-2", title: "Service areas", description: "Create estates, streets, POPs, and coverage zones.", completed: true },
+  { id: "ob-3", title: "Internet plans", description: "Publish residential, business, and dedicated packages.", completed: true },
+  { id: "ob-4", title: "Users and roles", description: "Create admin, NOC, finance, support, and engineer accounts.", completed: false },
+  { id: "ob-5", title: "Payment settings", description: "Configure gateway env vars and billing defaults.", completed: false },
+  { id: "ob-6", title: "Map settings", description: "Select provider, API env vars, and asset import rules.", completed: false },
+  { id: "ob-7", title: "First customer import", description: "Import CRM data from CSV or Excel templates.", completed: false },
+];
 
 let mockInventorySuppliers: Supplier[] = [
   { id: 1, name: "Main FTTH Supplier", contact_person: "Procurement Desk", phone: "08000000000", email: "supply@westlink.ng" },
@@ -589,6 +933,35 @@ type DashboardPayload = {
   activities: EngineerActivity[];
 };
 
+function enrichCustomerRecord(customer: Customer): Customer {
+  return {
+    ...customer,
+    kyc:
+      customer.kyc ??
+      mockCustomerKycById[customer.id] ?? {
+        idType: "national_id",
+        idNumber: "Pending verification",
+        addressProof: "Pending upload",
+        customerPhoto: "Pending upload",
+        verificationStatus: "pending",
+      },
+    documents: customer.documents ?? mockCustomerDocumentsById[customer.id] ?? [],
+    slaMetrics:
+      customer.slaMetrics ??
+      mockCustomerSlaById[customer.id] ?? {
+        profile: customer.slaTier === "gold" ? "dedicated" : customer.slaTier === "silver" ? "business" : "standard",
+        uptimeTarget: customer.slaTier === "gold" ? "99.9%" : customer.slaTier === "silver" ? "99.5%" : "98.5%",
+        currentUptime: customer.online ? "99.72%" : "98.94%",
+        downtimeMinutes: customer.online ? 64 : 202,
+        averageResponseMinutes: 24,
+        averageResolutionMinutes: 91,
+        breachCount: customer.online ? 0 : 1,
+        faultDurationMinutes: customer.online ? 64 : 202,
+        breachRisk: customer.online ? "normal" : "warning",
+      },
+  };
+}
+
 function getTenantProfile(tenantId: string) {
   return mockTenantProfiles.find((profile) => profile.tenantId === tenantId) ?? {
     tenantId,
@@ -761,12 +1134,12 @@ export const apiClient = {
   async getCustomers(tenantId: string, token?: string): Promise<Customer[]> {
     if (USE_MOCKS) {
       await sleep(280);
-      return mockCustomers;
+      return mockCustomers.map(enrichCustomerRecord);
     }
     const { data } = await api.get<Customer[]>("/customers", {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
-    return data;
+    return data.map(enrichCustomerRecord);
   },
 
   async getCustomerById(id: string, tenantId: string, token?: string): Promise<Customer> {
@@ -774,12 +1147,12 @@ export const apiClient = {
       await sleep(230);
       const found = mockCustomers.find((customer) => customer.id === id);
       if (!found) throw new Error("Customer not found");
-      return found;
+      return enrichCustomerRecord(found);
     }
     const { data } = await api.get<Customer>(`/customers/${id}`, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
-    return data;
+    return enrichCustomerRecord(data);
   },
 
   async upsertCustomer(customer: Customer, tenantId: string, token?: string): Promise<Customer> {
@@ -1610,6 +1983,127 @@ export const apiClient = {
       return response;
     }
     const { data } = await api.post<AiNocResponse>("/ai/noc", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getSiteManagement(tenantId: string, token?: string): Promise<SiteManagementRecord[]> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return mockSites;
+    }
+    const { data } = await api.get<SiteManagementRecord[]>("/operations/sites", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getNocAlerts(tenantId: string, token?: string): Promise<NocAlert[]> {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return mockNocAlerts;
+    }
+    const { data } = await api.get<NocAlert[]>("/operations/noc-alerts", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getUsageAnalytics(tenantId: string, token?: string): Promise<UsageAnalyticsSnapshot> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return mockUsageAnalytics;
+    }
+    const { data } = await api.get<UsageAnalyticsSnapshot>("/operations/usage", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getEnterpriseSlaReports(tenantId: string, token?: string): Promise<EnterpriseSlaReport[]> {
+    if (USE_MOCKS) {
+      await sleep(150);
+      return mockSlaReports;
+    }
+    const { data } = await api.get<EnterpriseSlaReport[]>("/operations/sla-reports", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getProcurementRecords(tenantId: string, token?: string): Promise<ProcurementRecord[]> {
+    if (USE_MOCKS) {
+      await sleep(170);
+      return mockProcurementRecords;
+    }
+    const { data } = await api.get<ProcurementRecord[]>("/procurement/records", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getExpenseBreakdown(tenantId: string, token?: string): Promise<ExpenseSummaryLine[]> {
+    if (USE_MOCKS) {
+      await sleep(120);
+      return mockExpenseSummary;
+    }
+    const { data } = await api.get<ExpenseSummaryLine[]>("/finance/expense-breakdown", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getBackupStatus(tenantId: string, token?: string): Promise<BackupStatus> {
+    if (USE_MOCKS) {
+      await sleep(120);
+      return mockBackupStatus;
+    }
+    const { data } = await api.get<BackupStatus>("/system/backup-status", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getIntegrations(tenantId: string, token?: string): Promise<IntegrationService[]> {
+    if (USE_MOCKS) {
+      await sleep(120);
+      return mockIntegrations;
+    }
+    const { data } = await api.get<IntegrationService[]>("/system/integrations", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getResellerAgents(tenantId: string, token?: string): Promise<ResellerAgentRecord[]> {
+    if (USE_MOCKS) {
+      await sleep(120);
+      return mockResellerAgents;
+    }
+    const { data } = await api.get<ResellerAgentRecord[]>("/crm/agents", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getSystemHealth(tenantId: string, token?: string): Promise<SystemHealthSnapshot> {
+    if (USE_MOCKS) {
+      await sleep(120);
+      return mockSystemHealth;
+    }
+    const { data } = await api.get<SystemHealthSnapshot>("/system/health", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getOnboardingChecklist(tenantId: string, token?: string): Promise<OnboardingChecklist[]> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockOnboardingChecklist;
+    }
+    const { data } = await api.get<OnboardingChecklist[]>("/system/onboarding", {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;

@@ -432,6 +432,159 @@ export interface AiNocResponse {
   createdAt: string;
 }
 
+export interface CustomerKycRecord {
+  idType: "national_id" | "drivers_license" | "international_passport" | "voters_card";
+  idNumber: string;
+  addressProof: string;
+  customerPhoto: string;
+  verificationStatus: "pending" | "verified" | "rejected";
+  verifiedAt?: string;
+}
+
+export interface CustomerDocument {
+  id: string;
+  name: string;
+  type:
+    | "service_agreement"
+    | "kyc_document"
+    | "invoice"
+    | "receipt"
+    | "installation_form"
+    | "site_survey"
+    | "contractor_agreement";
+  status: "available" | "pending_signature" | "expired";
+  uploadedAt: string;
+  reference?: string;
+}
+
+export interface CustomerSlaMetrics {
+  profile: "standard" | "business" | "dedicated";
+  uptimeTarget: string;
+  currentUptime: string;
+  downtimeMinutes: number;
+  averageResponseMinutes: number;
+  averageResolutionMinutes: number;
+  breachCount: number;
+  faultDurationMinutes: number;
+  breachRisk: "normal" | "warning" | "critical";
+}
+
+export interface SiteManagementRecord {
+  id: string;
+  name: string;
+  type: "pop" | "base_station" | "cabinet" | "shelter" | "rack" | "power_site";
+  location: GeoPoint;
+  serviceAreaName: string;
+  powerStatus: "normal" | "warning" | "critical";
+  batteryStatus: "healthy" | "degraded" | "offline";
+  inverterStatus: "healthy" | "warning" | "fault";
+  uplink: string;
+  oltName?: string;
+  routerName?: string;
+  equipment: string[];
+  maintenanceHistory: Array<{
+    id: string;
+    title: string;
+    performedAt: string;
+    engineer: string;
+    notes: string;
+  }>;
+}
+
+export interface NocAlert {
+  id: string;
+  category: "customer" | "optical" | "latency" | "packet_loss" | "bandwidth" | "device";
+  severity: "normal" | "warning" | "critical";
+  title: string;
+  description: string;
+  source: string;
+  affectedCount?: number;
+  createdAt: string;
+}
+
+export interface UsageAnalyticsSnapshot {
+  totalCapacityMbps: number;
+  peakUsageMbps: number;
+  averageUsageMbps: number;
+  peakHourWindow: string;
+  planUtilization: Array<{ planName: string; averageUsageMbps: number; subscribers: number }>;
+  topUsers: Array<{ customerName: string; usageGb: number; planName: string }>;
+  customerUsage: Array<{ customerId: string; customerName: string; usageGb: number; planName: string }>;
+}
+
+export interface EnterpriseSlaReport {
+  id: string;
+  customerName: string;
+  serviceWindow: string;
+  uptime: string;
+  downtimeMinutes: number;
+  responseMinutes: number;
+  resolutionMinutes: number;
+  breachStatus: "met" | "at_risk" | "breached";
+}
+
+export interface ProcurementRecord {
+  id: string;
+  vendorName: string;
+  type: "quotation" | "purchase_order";
+  reference: string;
+  itemSummary: string;
+  amount: number;
+  deliveryStatus: "pending" | "in_transit" | "delivered";
+  paymentStatus: "pending" | "part_paid" | "paid";
+  createdAt: string;
+}
+
+export interface ExpenseSummaryLine {
+  category: "fuel" | "contractors" | "materials" | "maintenance" | "salaries" | "site_rent" | "power" | "upstream";
+  amount: number;
+}
+
+export interface BackupStatus {
+  lastBackupAt: string;
+  databaseStatus: "healthy" | "warning" | "critical";
+  retentionPolicy: string;
+  restoreReady: boolean;
+  securityNotes: string[];
+}
+
+export interface IntegrationService {
+  id: string;
+  name: string;
+  category: "billing" | "communication" | "mapping" | "ai" | "network" | "system";
+  status: "configured" | "pending" | "attention";
+  envKeys: string[];
+  notes: string;
+}
+
+export interface ResellerAgentRecord {
+  id: string;
+  fullName: string;
+  role: "reseller" | "marketer" | "agent";
+  assignedLeads: number;
+  convertedCustomers: number;
+  commissionEarned: number;
+  payoutStatus: "pending" | "processing" | "paid";
+  referrals: number;
+}
+
+export interface SystemHealthSnapshot {
+  serverStatus: "healthy" | "warning" | "critical";
+  databaseStatus: "healthy" | "warning" | "critical";
+  queueStatus: "healthy" | "warning" | "critical";
+  apiStatus: "healthy" | "warning" | "critical";
+  failedJobs: number;
+  backgroundTasks: number;
+  lastCheckedAt: string;
+}
+
+export interface OnboardingChecklist {
+  id: string;
+  title: string;
+  description: string;
+  completed: boolean;
+}
+
 export interface Customer {
   id: string;
   tenantId: string;
@@ -506,6 +659,9 @@ export interface Customer {
     materials: string[];
     notes?: string;
   }>;
+  kyc?: CustomerKycRecord;
+  documents?: CustomerDocument[];
+  slaMetrics?: CustomerSlaMetrics;
 }
 
 export type CustomerPortalStatus = "active" | "suspended";

@@ -8,8 +8,10 @@ import {
   Mail,
   MessageSquareText,
   ReceiptText,
+  RotateCcw,
   Settings2,
   ShieldCheck,
+  Waypoints,
   UserCog,
 } from "lucide-react";
 
@@ -24,7 +26,9 @@ export type ConfigurationSection =
   | "notification"
   | "auto-user"
   | "whatsapp"
-  | "ai";
+  | "ai"
+  | "backup"
+  | "integrations";
 
 export type ConfigurationItem = {
   slug: ConfigurationSection;
@@ -237,6 +241,42 @@ export const configurationItems: ConfigurationItem[] = [
           { type: "text", id: "ai-api-key-env", label: "API Key Env Var", placeholder: "OPENAI_API_KEY" },
           { type: "text", id: "ai-model", label: "Model", placeholder: "gpt-4.1-mini" },
           { type: "textarea", id: "ai-guardrails", label: "Operational Guardrails", placeholder: "Keep responses advisory, require human approval for destructive network changes, and log all operator prompts." },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "backup",
+    label: "Backup",
+    description: "Control backup schedules, retention, restore permissions, and security notes.",
+    icon: <RotateCcw className="h-5 w-5" />,
+    sections: [
+      {
+        title: "Backup & Restore Policy",
+        description: "Define how often data is backed up and which privileged users can trigger restores.",
+        fields: [
+          { type: "select", id: "backup-frequency", label: "Backup Frequency", options: ["Hourly", "Daily", "Weekly"] },
+          { type: "text", id: "backup-retention", label: "Retention Policy", placeholder: "30 daily, 24 weekly, 12 monthly" },
+          { type: "toggle", id: "backup-encryption", label: "Encrypt Backups", helper: "Encrypt backup archives at rest and in transit." },
+          { type: "textarea", id: "restore-notes", label: "Restore Notes", placeholder: "Document approval flow, RPO/RTO, and restore safety steps..." },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "integrations",
+    label: "Integrations",
+    description: "Register SmartOLT, maps, payments, messaging, AI, and other service connectors.",
+    icon: <Waypoints className="h-5 w-5" />,
+    sections: [
+      {
+        title: "Integration Registry",
+        description: "Keep all external providers API-ready with environment-variable references instead of hard-coded secrets.",
+        fields: [
+          { type: "text", id: "smartolt-env", label: "SmartOLT Key Env Var", placeholder: "SMARTOLT_API_KEY" },
+          { type: "text", id: "maps-env", label: "Maps Key Env Var", placeholder: "VITE_MAPBOX_ACCESS_TOKEN" },
+          { type: "text", id: "payments-env", label: "Payment Key Env Var", placeholder: "PAYSTACK_SECRET_KEY" },
+          { type: "textarea", id: "integration-notes", label: "Integration Notes", placeholder: "Webhook URLs, callbacks, approval notes, and rollout status..." },
         ],
       },
     ],

@@ -2,6 +2,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import { LineChart, RefreshCcw, Wallet } from "lucide-react";
 import { useCreateFinancialTransaction, useFinanceSummary, useFinancialTransactions, useSyncBillingIncome } from "@/hooks/api/use-finance";
 import { useCustomers } from "@/hooks/api/use-customers";
+import { useExpenseBreakdown, useProcurementRecords, useResellerAgents } from "@/hooks/api/use-operations";
 import { buildInvoiceFromCustomer, getInvoiceSummary } from "@/lib/isp";
 import { formatCurrency, formatDateOrDash, titleCase } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +32,9 @@ export function FinancePage() {
   const summary = useFinanceSummary();
   const transactions = useFinancialTransactions();
   const customers = useCustomers();
+  const expenseBreakdown = useExpenseBreakdown();
+  const procurementRecords = useProcurementRecords();
+  const resellerAgents = useResellerAgents();
   const createTransaction = useCreateFinancialTransaction();
   const syncBilling = useSyncBillingIncome();
   const [form, setForm] = useState({
@@ -231,6 +235,66 @@ export function FinancePage() {
             >
               Save Transaction
             </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr_0.9fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Expense Breakdown</CardTitle>
+            <CardDescription>Fuel, contractors, materials, maintenance, salaries, site rent, power, and upstream commitments.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(expenseBreakdown.data ?? []).map((line) => (
+              <div key={line.category} className="flex items-center justify-between rounded-2xl border border-border/70 p-3 text-sm">
+                <span className="capitalize">{line.category.replace(/_/g, " ")}</span>
+                <span className="font-medium">{formatCurrency(line.amount)}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Procurement & Vendors</CardTitle>
+            <CardDescription>Quotations, purchase orders, delivery status, and supplier payment posture.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(procurementRecords.data ?? []).map((record) => (
+              <div key={record.id} className="rounded-2xl border border-border/70 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{record.vendorName}</p>
+                  <Badge variant={record.paymentStatus === "paid" ? "success" : record.paymentStatus === "part_paid" ? "warning" : "outline"}>
+                    {record.paymentStatus.replace(/_/g, " ")}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">{record.reference} | {record.type.replace(/_/g, " ")}</p>
+                <p className="mt-1 text-sm">{record.itemSummary}</p>
+                <p className="mt-2 text-sm font-medium">{formatCurrency(record.amount)}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Reseller / Agent Payouts</CardTitle>
+            <CardDescription>Referral commissions, conversions, and payout status.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(resellerAgents.data ?? []).map((agent) => (
+              <div key={agent.id} className="rounded-2xl border border-border/70 p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{agent.fullName}</p>
+                  <Badge variant={agent.payoutStatus === "paid" ? "success" : agent.payoutStatus === "processing" ? "warning" : "outline"}>
+                    {agent.payoutStatus}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-muted-foreground">{agent.role} | {agent.convertedCustomers} converted customers</p>
+                <p className="mt-2 font-medium">{formatCurrency(agent.commissionEarned)}</p>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>
