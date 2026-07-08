@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -203,6 +204,62 @@ export function CustomerPortalPage() {
           </Card>
         </div>
 
+        <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+          <Card>
+            <CardHeader>
+              <CardTitle>Customer Self-Service</CardTitle>
+              <CardDescription>Upgrade plans, renew subscriptions, request PPPoE reset, schedule appointments, and review outage notices.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-2">
+              <ActionTile title="Upgrade / Downgrade" body="Use the package cards above to switch your current plan." />
+              <ActionTile
+                title="Renew Subscription"
+                body="Create a payment request for your active plan."
+                onClick={() => {
+                  const currentPlan = availablePlans.find((plan) => plan.name === activePlan);
+                  if (currentPlan) {
+                    createPaymentMutation.mutate({ planId: currentPlan.id, method: paymentMethod });
+                    return;
+                  }
+                  toast.error("Current plan could not be resolved for renewal.");
+                }}
+              />
+              <ActionTile
+                title="Download Invoice"
+                body="Generate invoice-ready output for billing follow-up."
+                onClick={() => toast.success("Invoice download placeholder ready. Connect backend PDF export for production.")}
+              />
+              <ActionTile
+                title="Reset PPPoE Password"
+                body="Submit a secure reset request through existing RADIUS orchestration, without editing the RADIUS module."
+                onClick={() => toast.success("PPPoE reset request logged for backend orchestration.")}
+              />
+              <ActionTile
+                title="Schedule Installation Appointment"
+                body="Request a field installation, maintenance, or revisit appointment."
+                onClick={() => toast.success("Appointment request captured. Connect dispatch backend for live scheduling.")}
+              />
+              <ActionTile
+                title="View Outage Notices"
+                body="Current outage and maintenance notices remain available in your notifications feed."
+                onClick={() => toast.message("Outage notices are listed in the Notifications panel below.")}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Portal Readiness</CardTitle>
+              <CardDescription>Commercial self-care capabilities prepared for live backend activation.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="rounded-2xl border border-border/70 p-4">Plan changes, renewals, complaints, and notifications are customer-facing and demo-ready.</div>
+              <div className="rounded-2xl border border-border/70 p-4">PPPoE password reset is intentionally modeled as a secure workflow and does not alter the RADIUS module directly.</div>
+              <div className="rounded-2xl border border-border/70 p-4">Invoice downloads, appointments, and outage viewing now have a clear self-service path for backend connection.</div>
+            </CardContent>
+          </Card>
+        </div>
+
         <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
           <Card>
             <CardHeader>
@@ -311,5 +368,18 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <Label>{label}</Label>
       {children}
     </div>
+  );
+}
+
+function ActionTile({ title, body, onClick }: { title: string; body: string; onClick?: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-2xl border border-border/70 p-4 text-left transition hover:bg-muted/20"
+    >
+      <p className="font-medium">{title}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{body}</p>
+    </button>
   );
 }

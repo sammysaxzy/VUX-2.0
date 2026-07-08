@@ -3,7 +3,7 @@ import { useDashboardData } from "@/hooks/api/use-dashboard";
 import { useFinanceSummary } from "@/hooks/api/use-finance";
 import { useInventorySummary, useWorkOrders } from "@/hooks/api/use-inventory";
 import { useFaults } from "@/hooks/api/use-faults";
-import { useEnterpriseSlaReports, useNocAlerts, useSystemHealth, useUsageAnalytics } from "@/hooks/api/use-operations";
+import { useBusinessIntelligence, useEnterpriseSlaReports, useNocAlerts, useSystemHealth, useUsageAnalytics } from "@/hooks/api/use-operations";
 import { getRoleLabel } from "@/lib/isp";
 import { formatCurrency, titleCase } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
@@ -24,6 +24,7 @@ export function DashboardPage() {
   const nocAlerts = useNocAlerts();
   const usageAnalytics = useUsageAnalytics();
   const systemHealth = useSystemHealth();
+  const businessIntelligence = useBusinessIntelligence();
   const branding = useAppStore((state) => state.branding);
   const currentUser = useAppStore((state) => state.user);
   const realtimeKpis = useAppStore((state) => state.realtimeKpis);
@@ -166,6 +167,13 @@ export function DashboardPage() {
           value={titleCase(systemHealth.data?.serverStatus ?? "unknown")}
           note={`Failed jobs: ${systemHealth.data?.failedJobs ?? 0} | Queue: ${systemHealth.data?.queueStatus ?? "unknown"}`}
         />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-4">
+        <DashboardFactCard title="MRR" value={formatCurrency(businessIntelligence.data?.mrr ?? 0)} note="Monthly recurring revenue" />
+        <DashboardFactCard title="ARR" value={formatCurrency(businessIntelligence.data?.arr ?? 0)} note="Annual recurring revenue" />
+        <DashboardFactCard title="ARPU" value={formatCurrency(businessIntelligence.data?.arpu ?? 0)} note="Average revenue per user" />
+        <DashboardFactCard title="Churn Rate" value={`${businessIntelligence.data?.churnRate ?? 0}%`} note="Current churn exposure" />
       </div>
 
       <Card>

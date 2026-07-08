@@ -22,13 +22,17 @@ import type {
   DeviceAssignmentRecord,
   DiscountPromoRecord,
   ExpenseSummaryLine,
+  EquipmentLifecycleRecord,
   OnuTelemetryPayload,
   EngineerActivity,
   FinanceSummary,
   Fault,
+  FiberCoreManagementSnapshot,
   FinancialTransaction,
   FibreCable,
   BackupStatus,
+  BusinessIntelligenceSnapshot,
+  CapacityResource,
   InventoryItem,
   InventoryMovement,
   InventorySummary,
@@ -36,11 +40,16 @@ import type {
   IntegrationService,
   ImportValidationSummary,
   InstallationWorkflowRecord,
+  IpamSubnetRecord,
   KpiSnapshot,
   KnowledgeBaseArticle,
   Lead,
+  LaunchReadinessChecklist,
+  LicenseSubscriptionSnapshot,
+  LocalizationSettings,
   NasEntry,
   NocAlert,
+  NetworkTopologySnapshot,
   NetworkNode,
   NotificationRule,
   OnboardingChecklist,
@@ -56,6 +65,7 @@ import type {
   ServicePlan,
   SiteSurveyRecord,
   SiteManagementRecord,
+  GisDistanceEstimate,
   StockLocationType,
   StockMovementType,
   SettingsLog,
@@ -68,6 +78,10 @@ import type {
   FaultWorkflowTicket,
   OutageMaintenanceRecord,
   ApprovalWorkflowRecord,
+  CustomerTimelineEvent,
+  DeveloperPortalSnapshot,
+  DisasterRecoverySnapshot,
+  PluginCatalogEntry,
   PlanChangeRecord,
   SuspensionWorkflowRecord,
   ContractRenewalRecord,
@@ -954,6 +968,135 @@ let mockSecurityControls: SecurityControlSettings = {
   auditTrailEnabled: true,
 };
 
+const mockNetworkTopology: NetworkTopologySnapshot = {
+  faultDomain: "Distribution Router DR-Lekki-02 to OLT-Lekki-01",
+  impactedCustomers: 21,
+  path: [
+    { id: "top-1", label: "Main Upstream Provider", layer: "provider", status: "healthy", linkedTo: ["top-2"], metric: "10 Gbps" },
+    { id: "top-2", label: "CCR-Core-01", layer: "core_router", status: "healthy", linkedTo: ["top-3"], metric: "4.3 Gbps" },
+    { id: "top-3", label: "DR-Lekki-02", layer: "distribution_router", status: "warning", linkedTo: ["top-4"], metric: "82% utilized" },
+    { id: "top-4", label: "OLT-Lekki-01", layer: "olt", status: "warning", linkedTo: ["top-5"], metric: "PON 3 degraded" },
+    { id: "top-5", label: "1:8 Splitter A", layer: "splitter", status: "fault", linkedTo: ["top-6"], metric: "High loss" },
+    { id: "top-6", label: "MST-04 Admiralty", layer: "mst", status: "fault", linkedTo: ["top-7"], metric: "21 customers" },
+    { id: "top-7", label: "Customer Cluster", layer: "customer", status: "warning", metric: "Affected" },
+  ],
+};
+
+const mockCapacityPlanning: CapacityResource[] = [
+  { id: "cap-1", name: "OLT-Lekki-01 / PON 3", type: "pon_port", utilizationPercent: 86, thresholdPercent: 80, availableUnits: 12, forecastDaysToExhaustion: 42, recommendation: "Plan split ratio reduction or new PON card." },
+  { id: "cap-2", name: "MST-04 Splitter", type: "splitter", utilizationPercent: 88, thresholdPercent: 75, availableUnits: 1, forecastDaysToExhaustion: 18, recommendation: "Install additional 1:8 splitter in this estate." },
+  { id: "cap-3", name: "Metro Uplink A", type: "uplink", utilizationPercent: 78, thresholdPercent: 70, availableUnits: 220, forecastDaysToExhaustion: 65, recommendation: "Prepare uplink burst upgrade before next quarter." },
+  { id: "cap-4", name: "Lekki POP Alpha", type: "pop", utilizationPercent: 73, thresholdPercent: 70, availableUnits: 4, forecastDaysToExhaustion: 90, recommendation: "Reserve rack and power expansion capacity." },
+  { id: "cap-5", name: "Retail Bandwidth Pool", type: "bandwidth", utilizationPercent: 81, thresholdPercent: 75, availableUnits: 450, forecastDaysToExhaustion: 54, recommendation: "Increase upstream commit and review peak-hour shaping." },
+];
+
+const mockGisEstimates: GisDistanceEstimate[] = [
+  { customerName: "Amina Bello", closureName: "Closure CL-17", mstName: "MST-04 Admiralty", distanceClosureToMstMeters: 310, distanceMstToCustomerMeters: 86, estimatedCableMeters: 430, estimatedInstallationCost: 185000, nearestAvailableMst: "MST-04 Admiralty" },
+  { customerName: "Favour Clinic", closureName: "Closure GW-03", mstName: "MST-11 Gwarinpa", distanceClosureToMstMeters: 420, distanceMstToCustomerMeters: 95, estimatedCableMeters: 560, estimatedInstallationCost: 228000, nearestAvailableMst: "MST-11 Gwarinpa" },
+];
+
+const mockFiberCoreManagement: FiberCoreManagementSnapshot[] = [
+  { cableName: "Lekki Backbone 48F", coreCount: 48, usedCores: 31, spareCores: 11, reservedCores: 4, damagedCores: 2, spliceHistoryCount: 18 },
+  { cableName: "Chevron Distribution 24F", coreCount: 24, usedCores: 16, spareCores: 5, reservedCores: 2, damagedCores: 1, spliceHistoryCount: 9 },
+  { cableName: "Admiralty Drop Bundle 12F", coreCount: 12, usedCores: 8, spareCores: 3, reservedCores: 1, damagedCores: 0, spliceHistoryCount: 4 },
+];
+
+const mockIpamOverview: IpamSubnetRecord[] = [
+  { id: "ipam-1", segment: "Core public pool", type: "public", subnet: "102.89.16.0/28", allocated: 10, available: 4, status: "warning" },
+  { id: "ipam-2", segment: "Residential PPPoE VLAN 120", type: "vlan", vlanId: 120, subnet: "10.120.0.0/22", allocated: 702, available: 322, status: "healthy" },
+  { id: "ipam-3", segment: "Business static pool", type: "private", subnet: "10.50.8.0/24", allocated: 181, available: 73, status: "healthy" },
+  { id: "ipam-4", segment: "CGNAT pool A", type: "cgnat", subnet: "100.64.0.0/18", allocated: 14320, available: 2064, status: "critical" },
+  { id: "ipam-5", segment: "DHCP Router Pool", type: "dhcp_pool", subnet: "192.168.10.0/24", allocated: 188, available: 54, status: "warning" },
+];
+
+const mockEquipmentLifecycle: EquipmentLifecycleRecord[] = [
+  { id: "life-1", assetName: "OLT-Lekki-01", assetType: "olt", purchaseDate: new Date(Date.now() - 920 * 86400000).toISOString(), installationDate: new Date(Date.now() - 870 * 86400000).toISOString(), warrantyEndDate: new Date(Date.now() + 175 * 86400000).toISOString(), depreciationStatus: "mid_life", maintenanceHistory: ["Fan replacement - Jan 2026", "Optics health check - Apr 2026"], replacementSchedule: "Review for refresh in Q2 2027" },
+  { id: "life-2", assetName: "Battery Bank POP Alpha", assetType: "battery", purchaseDate: new Date(Date.now() - 1280 * 86400000).toISOString(), installationDate: new Date(Date.now() - 1260 * 86400000).toISOString(), warrantyEndDate: new Date(Date.now() - 220 * 86400000).toISOString(), depreciationStatus: "end_of_life", maintenanceHistory: ["Voltage balancing - Dec 2025", "Capacity drop alert - Jul 2026"], replacementSchedule: "Immediate replacement recommended" },
+];
+
+const mockBusinessIntelligence: BusinessIntelligenceSnapshot = {
+  mrr: 18450000,
+  arr: 221400000,
+  churnRate: 2.7,
+  customerGrowthPercent: 14.8,
+  arpu: 27850,
+  ltv: 334200,
+  ticketTrendPercent: -6.4,
+  technicianPerformancePercent: 91,
+  revenueByArea: [
+    { area: "Lekki Phase 1", revenue: 6200000 },
+    { area: "Chevron", revenue: 4100000 },
+    { area: "Gwarinpa Central", revenue: 3250000 },
+  ],
+};
+
+const mockDisasterRecovery: DisasterRecoverySnapshot = {
+  backupHealth: "healthy",
+  failoverReadiness: "partial",
+  restoreTestedAt: new Date(Date.now() - 21 * 86400000).toISOString(),
+  recoveryStatus: "documented",
+  notes: [
+    "Daily backups healthy and replicated to secondary region.",
+    "Quarterly restore testing exists but application failover is still partial.",
+    "Runbook for major outage response has been documented for operations leadership.",
+  ],
+};
+
+const mockDeveloperPortal: DeveloperPortalSnapshot = {
+  apiBaseUrl: "https://api.vux.example/v1",
+  authentication: ["api_key", "oauth2", "webhooks", "rate_limiting"],
+  docsStatus: "draft",
+  exampleCollections: ["Postman collection", "Webhook signing example", "OAuth client walkthrough"],
+};
+
+const mockPluginCatalog: PluginCatalogEntry[] = [
+  { id: "plug-1", name: "Paystack Billing Connector", category: "payment", status: "installed", description: "Extends invoice collection and webhook handling." },
+  { id: "plug-2", name: "SmartOLT Telemetry Adapter", category: "network", status: "beta", description: "Imports optical alarms and device metrics." },
+  { id: "plug-3", name: "WhatsApp Broadcast Add-on", category: "communication", status: "available", description: "Adds message templates and campaign dispatching." },
+];
+
+const mockLocalizationSettings: LocalizationSettings = {
+  currencies: ["NGN", "USD", "KES"],
+  timezones: ["Africa/Lagos", "Africa/Nairobi", "UTC"],
+  languages: ["English", "French", "Swahili"],
+  taxMode: "per-tenant regional rules",
+  regionalFormats: ["en-NG", "en-KE", "fr-FR"],
+};
+
+const mockLicenseSubscription: LicenseSubscriptionSnapshot = {
+  tenantName: "WestLink Fibre",
+  licenseTier: "enterprise",
+  billingCycle: "annually",
+  activeSeats: 26,
+  seatLimit: 40,
+  storageUsedGb: 182,
+  storageLimitGb: 500,
+  enabledModules: ["CRM", "Billing", "Inventory", "Field Ops", "Maps", "AI NOC", "Customer Portal"],
+};
+
+const mockLaunchReadiness: LaunchReadinessChecklist = {
+  score: 86,
+  completed: [
+    "Commercial CRM, billing, inventory, support, and technician modules are present.",
+    "Enterprise operations workflows now have backend-ready persistence structure.",
+    "Multi-tenant brand and settings experience is demo-ready.",
+  ],
+  remaining: [
+    "Move remaining mock analytics and portal workflows to live backend persistence.",
+    "Add tenant-level backend isolation to all new operations records.",
+    "Finalize production API gateway, rate limiting, and webhook security.",
+  ],
+  securityRisks: [
+    "2FA is still a placeholder and should be implemented before production launch.",
+    "Some integration modules are API-ready but still awaiting secret management and webhook verification.",
+  ],
+  performanceNotes: [
+    "Introduce pagination and server-side filtering for large CRM and inventory datasets.",
+    "Add caching and background aggregation for BI metrics above 100k customers.",
+    "Index operation_records by tenant/module/status before production-scale rollout.",
+  ],
+};
+
 let mockInventorySuppliers: Supplier[] = [
   { id: 1, name: "Main FTTH Supplier", contact_person: "Procurement Desk", phone: "08000000000", email: "supply@westlink.ng" },
   { id: 2, name: "Metro Fiber Depot", contact_person: "Ade Martins", phone: "08031234567", email: "procurement@metrofiber.ng" },
@@ -1305,6 +1448,36 @@ function enrichCustomerRecord(customer: Customer): Customer {
     },
   ];
 
+  const defaultTimeline: CustomerTimelineEvent[] = [
+    {
+      id: `${customer.id}-timeline-registration`,
+      type: "registration",
+      title: "Customer registered",
+      description: "Initial CRM profile created.",
+      createdAt: customer.customerSince ?? new Date().toISOString(),
+      actor: "Customer Care",
+      status: "completed",
+    },
+    {
+      id: `${customer.id}-timeline-install`,
+      type: "installation",
+      title: "Installation completed",
+      description: `ONU ${customer.onuSerial} and router assets assigned.`,
+      createdAt: customer.installDate ?? customer.customerSince ?? new Date().toISOString(),
+      actor: customer.assignedEngineer ?? "Installation Team",
+      status: customer.installStatus ?? "installed",
+    },
+    {
+      id: `${customer.id}-timeline-payment`,
+      type: "payment",
+      title: "Latest payment cycle",
+      description: customer.paymentStatus === "overdue" ? "Customer account has overdue invoices." : "Subscription payment recorded successfully.",
+      createdAt: customer.lastPaymentDate ?? customer.nextInvoiceDate ?? new Date().toISOString(),
+      actor: "Finance",
+      status: customer.paymentStatus ?? "pending",
+    },
+  ];
+
   return {
     ...customer,
     kyc:
@@ -1335,6 +1508,7 @@ function enrichCustomerRecord(customer: Customer): Customer {
     suspensionHistory: customer.suspensionHistory ?? defaultSuspensions,
     contractRenewals: customer.contractRenewals ?? defaultRenewals,
     feedback: customer.feedback ?? defaultFeedback,
+    timeline: customer.timeline ?? defaultTimeline,
   };
 }
 
@@ -2775,6 +2949,161 @@ export const apiClient = {
       return payload;
     }
     const { data } = await api.put<SecurityControlSettings>("/operations/security-controls", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getNetworkTopology(tenantId: string, token?: string): Promise<NetworkTopologySnapshot> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockNetworkTopology;
+    }
+    const { data } = await api.get<NetworkTopologySnapshot>("/operations/topology", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getCapacityPlanning(tenantId: string, token?: string): Promise<CapacityResource[]> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockCapacityPlanning;
+    }
+    const { data } = await api.get<CapacityResource[]>("/operations/capacity-planning", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getGisDistanceEstimates(tenantId: string, token?: string): Promise<GisDistanceEstimate[]> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockGisEstimates;
+    }
+    const { data } = await api.get<GisDistanceEstimate[]>("/operations/gis-distance", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getFiberCoreManagement(tenantId: string, token?: string): Promise<FiberCoreManagementSnapshot[]> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockFiberCoreManagement;
+    }
+    const { data } = await api.get<FiberCoreManagementSnapshot[]>("/operations/fiber-core-management", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getIpamOverview(tenantId: string, token?: string): Promise<IpamSubnetRecord[]> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockIpamOverview;
+    }
+    const { data } = await api.get<IpamSubnetRecord[]>("/operations/ipam", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getEquipmentLifecycle(tenantId: string, token?: string): Promise<EquipmentLifecycleRecord[]> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockEquipmentLifecycle;
+    }
+    const { data } = await api.get<EquipmentLifecycleRecord[]>("/operations/equipment-lifecycle", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getCustomerTimeline(customerId: string, tenantId: string, token?: string): Promise<CustomerTimelineEvent[]> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      const customer = mockCustomers.find((entry) => entry.id === customerId);
+      return customer?.timeline ?? [];
+    }
+    const { data } = await api.get<CustomerTimelineEvent[]>(`/operations/customer-timeline/${customerId}`, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getBusinessIntelligence(tenantId: string, token?: string): Promise<BusinessIntelligenceSnapshot> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockBusinessIntelligence;
+    }
+    const { data } = await api.get<BusinessIntelligenceSnapshot>("/operations/business-intelligence", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getDisasterRecovery(tenantId: string, token?: string): Promise<DisasterRecoverySnapshot> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockDisasterRecovery;
+    }
+    const { data } = await api.get<DisasterRecoverySnapshot>("/operations/disaster-recovery", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getDeveloperPortal(tenantId: string, token?: string): Promise<DeveloperPortalSnapshot> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockDeveloperPortal;
+    }
+    const { data } = await api.get<DeveloperPortalSnapshot>("/operations/developer-portal", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getPluginCatalog(tenantId: string, token?: string): Promise<PluginCatalogEntry[]> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockPluginCatalog;
+    }
+    const { data } = await api.get<PluginCatalogEntry[]>("/operations/plugins", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getLocalizationSettings(tenantId: string, token?: string): Promise<LocalizationSettings> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockLocalizationSettings;
+    }
+    const { data } = await api.get<LocalizationSettings>("/operations/localization", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getLicenseSubscription(tenantId: string, token?: string): Promise<LicenseSubscriptionSnapshot> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockLicenseSubscription;
+    }
+    const { data } = await api.get<LicenseSubscriptionSnapshot>("/operations/license-subscription", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getLaunchReadiness(tenantId: string, token?: string): Promise<LaunchReadinessChecklist> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockLaunchReadiness;
+    }
+    const { data } = await api.get<LaunchReadinessChecklist>("/operations/launch-readiness", {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;

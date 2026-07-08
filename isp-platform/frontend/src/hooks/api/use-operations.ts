@@ -351,3 +351,143 @@ export function useSaveSecurityControls() {
     onError: () => toast.error("Unable to update security controls."),
   });
 }
+
+export function useNetworkTopology() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["network-topology", tenantId],
+    queryFn: () => apiClient.getNetworkTopology(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useCapacityPlanning() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["capacity-planning", tenantId],
+    queryFn: () => apiClient.getCapacityPlanning(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useGisDistanceEstimates() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["gis-distance", tenantId],
+    queryFn: () => apiClient.getGisDistanceEstimates(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useFiberCoreManagement() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["fiber-core-management", tenantId],
+    queryFn: () => apiClient.getFiberCoreManagement(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useIpamOverview() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["ipam", tenantId],
+    queryFn: () => apiClient.getIpamOverview(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useEquipmentLifecycle() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["equipment-lifecycle", tenantId],
+    queryFn: () => apiClient.getEquipmentLifecycle(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useCustomerTimeline(customerId?: string) {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["customer-timeline", tenantId, customerId],
+    queryFn: () => apiClient.getCustomerTimeline(customerId as string, tenantId, token),
+    enabled: Boolean(tenantId && customerId),
+  });
+}
+
+export function useBusinessIntelligence() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["business-intelligence", tenantId],
+    queryFn: () => apiClient.getBusinessIntelligence(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useDisasterRecovery() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["disaster-recovery", tenantId],
+    queryFn: () => apiClient.getDisasterRecovery(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useDeveloperPortal() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["developer-portal", tenantId],
+    queryFn: () => apiClient.getDeveloperPortal(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function usePluginCatalog() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["plugin-catalog", tenantId],
+    queryFn: () => apiClient.getPluginCatalog(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useLocalizationSettings() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["localization", tenantId],
+    queryFn: () => apiClient.getLocalizationSettings(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useLicenseSubscription() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["license-subscription", tenantId],
+    queryFn: () => apiClient.getLicenseSubscription(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useLaunchReadiness() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["launch-readiness", tenantId],
+    queryFn: () => apiClient.getLaunchReadiness(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}

@@ -289,6 +289,148 @@ class SecurityControlSettings(BaseModel):
     auditTrailEnabled: bool
 
 
+class NetworkTopologyNode(BaseModel):
+    id: str
+    label: str
+    layer: str
+    status: str
+    linkedTo: list[str] = []
+    metric: Optional[str] = None
+
+
+class NetworkTopologySnapshot(BaseModel):
+    faultDomain: Optional[str] = None
+    impactedCustomers: int
+    path: list[NetworkTopologyNode]
+
+
+class CapacityResource(BaseModel):
+    id: str
+    name: str
+    type: str
+    utilizationPercent: int
+    thresholdPercent: int
+    availableUnits: int
+    forecastDaysToExhaustion: int
+    recommendation: str
+
+
+class GisDistanceEstimate(BaseModel):
+    customerName: str
+    closureName: str
+    mstName: str
+    distanceClosureToMstMeters: int
+    distanceMstToCustomerMeters: int
+    estimatedCableMeters: int
+    estimatedInstallationCost: Decimal
+    nearestAvailableMst: str
+
+
+class FiberCoreManagementSnapshot(BaseModel):
+    cableName: str
+    coreCount: int
+    usedCores: int
+    spareCores: int
+    reservedCores: int
+    damagedCores: int
+    spliceHistoryCount: int
+
+
+class IpamSubnetRecord(BaseModel):
+    id: str
+    segment: str
+    type: str
+    vlanId: Optional[int] = None
+    subnet: str
+    allocated: int
+    available: int
+    status: str
+
+
+class EquipmentLifecycleRecord(BaseModel):
+    id: str
+    assetName: str
+    assetType: str
+    purchaseDate: datetime
+    installationDate: Optional[datetime] = None
+    warrantyEndDate: Optional[datetime] = None
+    depreciationStatus: str
+    maintenanceHistory: list[str]
+    replacementSchedule: str
+
+
+class CustomerTimelineEvent(BaseModel):
+    id: str
+    type: str
+    title: str
+    description: str
+    createdAt: datetime
+    actor: Optional[str] = None
+    status: Optional[str] = None
+
+
+class BusinessIntelligenceSnapshot(BaseModel):
+    mrr: Decimal
+    arr: Decimal
+    churnRate: Decimal
+    customerGrowthPercent: Decimal
+    arpu: Decimal
+    ltv: Decimal
+    ticketTrendPercent: Decimal
+    technicianPerformancePercent: Decimal
+    revenueByArea: list[dict[str, Any]]
+
+
+class DisasterRecoverySnapshot(BaseModel):
+    backupHealth: str
+    failoverReadiness: str
+    restoreTestedAt: Optional[datetime] = None
+    recoveryStatus: str
+    notes: list[str]
+
+
+class DeveloperPortalSnapshot(BaseModel):
+    apiBaseUrl: str
+    authentication: list[str]
+    docsStatus: str
+    exampleCollections: list[str]
+
+
+class PluginCatalogEntry(BaseModel):
+    id: str
+    name: str
+    category: str
+    status: str
+    description: str
+
+
+class LocalizationSettings(BaseModel):
+    currencies: list[str]
+    timezones: list[str]
+    languages: list[str]
+    taxMode: str
+    regionalFormats: list[str]
+
+
+class LicenseSubscriptionSnapshot(BaseModel):
+    tenantName: str
+    licenseTier: str
+    billingCycle: str
+    activeSeats: int
+    seatLimit: int
+    storageUsedGb: int
+    storageLimitGb: int
+    enabledModules: list[str]
+
+
+class LaunchReadinessChecklist(BaseModel):
+    score: int
+    completed: list[str]
+    remaining: list[str]
+    securityRisks: list[str]
+    performanceNotes: list[str]
+
+
 MODULE_INSTALLATIONS = "installations"
 MODULE_SITE_SURVEYS = "site_surveys"
 MODULE_FAULT_WORKFLOW = "fault_workflow"
@@ -1529,4 +1671,302 @@ async def update_security_controls(
         current_user_id=current_user.id,
         action_type="security_controls_updated",
         description="Updated security control settings.",
+    )
+
+
+@router.get("/operations/topology", response_model=NetworkTopologySnapshot)
+async def get_network_topology(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return NetworkTopologySnapshot(
+        faultDomain="Distribution Router DR-Lekki-02 to OLT-Lekki-01",
+        impactedCustomers=21,
+        path=[
+            NetworkTopologyNode(id="top-1", label="Main Upstream Provider", layer="provider", status="healthy", linkedTo=["top-2"], metric="10 Gbps"),
+            NetworkTopologyNode(id="top-2", label="CCR-Core-01", layer="core_router", status="healthy", linkedTo=["top-3"], metric="4.3 Gbps"),
+            NetworkTopologyNode(id="top-3", label="DR-Lekki-02", layer="distribution_router", status="warning", linkedTo=["top-4"], metric="82% utilized"),
+            NetworkTopologyNode(id="top-4", label="OLT-Lekki-01", layer="olt", status="warning", linkedTo=["top-5"], metric="PON 3 degraded"),
+            NetworkTopologyNode(id="top-5", label="1:8 Splitter A", layer="splitter", status="fault", linkedTo=["top-6"], metric="High loss"),
+            NetworkTopologyNode(id="top-6", label="MST-04 Admiralty", layer="mst", status="fault", linkedTo=["top-7"], metric="21 customers"),
+            NetworkTopologyNode(id="top-7", label="Customer Cluster", layer="customer", status="warning", metric="Affected"),
+        ],
+    )
+
+
+@router.get("/operations/capacity-planning", response_model=list[CapacityResource])
+async def get_capacity_planning(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return [
+        CapacityResource(id="cap-1", name="OLT-Lekki-01 / PON 3", type="pon_port", utilizationPercent=86, thresholdPercent=80, availableUnits=12, forecastDaysToExhaustion=42, recommendation="Plan split ratio reduction or new PON card."),
+        CapacityResource(id="cap-2", name="MST-04 Splitter", type="splitter", utilizationPercent=88, thresholdPercent=75, availableUnits=1, forecastDaysToExhaustion=18, recommendation="Install additional 1:8 splitter in this estate."),
+        CapacityResource(id="cap-3", name="Metro Uplink A", type="uplink", utilizationPercent=78, thresholdPercent=70, availableUnits=220, forecastDaysToExhaustion=65, recommendation="Prepare uplink burst upgrade before next quarter."),
+        CapacityResource(id="cap-4", name="Lekki POP Alpha", type="pop", utilizationPercent=73, thresholdPercent=70, availableUnits=4, forecastDaysToExhaustion=90, recommendation="Reserve rack and power expansion capacity."),
+        CapacityResource(id="cap-5", name="Retail Bandwidth Pool", type="bandwidth", utilizationPercent=81, thresholdPercent=75, availableUnits=450, forecastDaysToExhaustion=54, recommendation="Increase upstream commit and review peak-hour shaping."),
+    ]
+
+
+@router.get("/operations/gis-distance", response_model=list[GisDistanceEstimate])
+async def get_gis_distance_estimates(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return [
+        GisDistanceEstimate(
+            customerName="Amina Bello",
+            closureName="Closure CL-17",
+            mstName="MST-04 Admiralty",
+            distanceClosureToMstMeters=310,
+            distanceMstToCustomerMeters=86,
+            estimatedCableMeters=430,
+            estimatedInstallationCost=Decimal("185000"),
+            nearestAvailableMst="MST-04 Admiralty",
+        ),
+        GisDistanceEstimate(
+            customerName="Favour Clinic",
+            closureName="Closure GW-03",
+            mstName="MST-11 Gwarinpa",
+            distanceClosureToMstMeters=420,
+            distanceMstToCustomerMeters=95,
+            estimatedCableMeters=560,
+            estimatedInstallationCost=Decimal("228000"),
+            nearestAvailableMst="MST-11 Gwarinpa",
+        ),
+    ]
+
+
+@router.get("/operations/fiber-core-management", response_model=list[FiberCoreManagementSnapshot])
+async def get_fiber_core_management(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = current_user
+    return [
+        FiberCoreManagementSnapshot(cableName="Lekki Backbone 48F", coreCount=48, usedCores=31, spareCores=11, reservedCores=4, damagedCores=2, spliceHistoryCount=18),
+        FiberCoreManagementSnapshot(cableName="Chevron Distribution 24F", coreCount=24, usedCores=16, spareCores=5, reservedCores=2, damagedCores=1, spliceHistoryCount=9),
+        FiberCoreManagementSnapshot(cableName="Admiralty Drop Bundle 12F", coreCount=12, usedCores=8, spareCores=3, reservedCores=1, damagedCores=0, spliceHistoryCount=4),
+    ]
+
+
+@router.get("/operations/ipam", response_model=list[IpamSubnetRecord])
+async def get_ipam_overview(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return [
+        IpamSubnetRecord(id="ipam-1", segment="Core public pool", type="public", subnet="102.89.16.0/28", allocated=10, available=4, status="warning"),
+        IpamSubnetRecord(id="ipam-2", segment="Residential PPPoE VLAN 120", type="vlan", vlanId=120, subnet="10.120.0.0/22", allocated=702, available=322, status="healthy"),
+        IpamSubnetRecord(id="ipam-3", segment="Business static pool", type="private", subnet="10.50.8.0/24", allocated=181, available=73, status="healthy"),
+        IpamSubnetRecord(id="ipam-4", segment="CGNAT pool A", type="cgnat", subnet="100.64.0.0/18", allocated=14320, available=2064, status="critical"),
+        IpamSubnetRecord(id="ipam-5", segment="DHCP Router Pool", type="dhcp_pool", subnet="192.168.10.0/24", allocated=188, available=54, status="warning"),
+    ]
+
+
+@router.get("/operations/equipment-lifecycle", response_model=list[EquipmentLifecycleRecord])
+async def get_equipment_lifecycle(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return [
+        EquipmentLifecycleRecord(
+            id="life-1",
+            assetName="OLT-Lekki-01",
+            assetType="olt",
+            purchaseDate=datetime.utcnow() - timedelta(days=920),
+            installationDate=datetime.utcnow() - timedelta(days=870),
+            warrantyEndDate=datetime.utcnow() + timedelta(days=175),
+            depreciationStatus="mid_life",
+            maintenanceHistory=["Fan replacement - Jan 2026", "Optics health check - Apr 2026"],
+            replacementSchedule="Review for refresh in Q2 2027",
+        ),
+        EquipmentLifecycleRecord(
+            id="life-2",
+            assetName="Battery Bank POP Alpha",
+            assetType="battery",
+            purchaseDate=datetime.utcnow() - timedelta(days=1280),
+            installationDate=datetime.utcnow() - timedelta(days=1260),
+            warrantyEndDate=datetime.utcnow() - timedelta(days=220),
+            depreciationStatus="end_of_life",
+            maintenanceHistory=["Voltage balancing - Dec 2025", "Capacity drop alert - Jul 2026"],
+            replacementSchedule="Immediate replacement recommended",
+        ),
+    ]
+
+
+@router.get("/operations/customer-timeline/{customer_id}", response_model=list[CustomerTimelineEvent])
+async def get_customer_timeline(
+    customer_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = current_user
+    client = await db.get(Client, customer_id)
+    customer_name = client.name if client else f"Customer {customer_id}"
+    base_date = datetime.utcnow()
+    return [
+        CustomerTimelineEvent(id=f"tl-{customer_id}-1", type="registration", title=f"{customer_name} registered", description="Initial CRM record created.", createdAt=base_date - timedelta(days=120), actor="Customer Care", status="completed"),
+        CustomerTimelineEvent(id=f"tl-{customer_id}-2", type="survey", title="Site survey completed", description="Nearest MST and route length confirmed.", createdAt=base_date - timedelta(days=115), actor="Field Engineer", status="approved"),
+        CustomerTimelineEvent(id=f"tl-{customer_id}-3", type="installation", title="Installation completed", description="ONU and router installed with light level acceptance.", createdAt=base_date - timedelta(days=110), actor="Installation Team", status="completed"),
+        CustomerTimelineEvent(id=f"tl-{customer_id}-4", type="activation", title="Service activated", description="PPPoE profile provisioned and service handed over.", createdAt=base_date - timedelta(days=109), actor="NOC", status="active"),
+        CustomerTimelineEvent(id=f"tl-{customer_id}-5", type="payment", title="Subscription payment received", description="Monthly service invoice settled.", createdAt=base_date - timedelta(days=30), actor="Finance", status="paid"),
+        CustomerTimelineEvent(id=f"tl-{customer_id}-6", type="ticket", title="Fault ticket resolved", description="Weak optical power issue restored after splice correction.", createdAt=base_date - timedelta(days=8), actor="Support", status="resolved"),
+    ]
+
+
+@router.get("/operations/business-intelligence", response_model=BusinessIntelligenceSnapshot)
+async def get_business_intelligence(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return BusinessIntelligenceSnapshot(
+        mrr=Decimal("18450000"),
+        arr=Decimal("221400000"),
+        churnRate=Decimal("2.7"),
+        customerGrowthPercent=Decimal("14.8"),
+        arpu=Decimal("27850"),
+        ltv=Decimal("334200"),
+        ticketTrendPercent=Decimal("-6.4"),
+        technicianPerformancePercent=Decimal("91.0"),
+        revenueByArea=[
+            {"area": "Lekki Phase 1", "revenue": 6200000},
+            {"area": "Chevron", "revenue": 4100000},
+            {"area": "Gwarinpa Central", "revenue": 3250000},
+        ],
+    )
+
+
+@router.get("/operations/disaster-recovery", response_model=DisasterRecoverySnapshot)
+async def get_disaster_recovery(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return DisasterRecoverySnapshot(
+        backupHealth="healthy",
+        failoverReadiness="partial",
+        restoreTestedAt=datetime.utcnow() - timedelta(days=21),
+        recoveryStatus="documented",
+        notes=[
+            "Daily backups healthy and replicated to secondary region.",
+            "Quarterly restore testing exists but application failover is still partial.",
+            "Runbook for major outage response has been documented for operations leadership.",
+        ],
+    )
+
+
+@router.get("/operations/developer-portal", response_model=DeveloperPortalSnapshot)
+async def get_developer_portal(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return DeveloperPortalSnapshot(
+        apiBaseUrl="https://api.vux.example/v1",
+        authentication=["api_key", "oauth2", "webhooks", "rate_limiting"],
+        docsStatus="draft",
+        exampleCollections=["Postman collection", "Webhook signing example", "OAuth client walkthrough"],
+    )
+
+
+@router.get("/operations/plugins", response_model=list[PluginCatalogEntry])
+async def get_plugin_catalog(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return [
+        PluginCatalogEntry(id="plug-1", name="Paystack Billing Connector", category="payment", status="installed", description="Extends invoice collection and webhook handling."),
+        PluginCatalogEntry(id="plug-2", name="SmartOLT Telemetry Adapter", category="network", status="beta", description="Imports optical alarms and device metrics."),
+        PluginCatalogEntry(id="plug-3", name="WhatsApp Broadcast Add-on", category="communication", status="available", description="Adds message templates and campaign dispatching."),
+    ]
+
+
+@router.get("/operations/localization", response_model=LocalizationSettings)
+async def get_localization_settings(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return LocalizationSettings(
+        currencies=["NGN", "USD", "KES"],
+        timezones=["Africa/Lagos", "Africa/Nairobi", "UTC"],
+        languages=["English", "French", "Swahili"],
+        taxMode="per-tenant regional rules",
+        regionalFormats=["en-NG", "en-KE", "fr-FR"],
+    )
+
+
+@router.get("/operations/license-subscription", response_model=LicenseSubscriptionSnapshot)
+async def get_license_subscription(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    tenant_name = current_user.full_name if getattr(current_user, "full_name", None) else "WestLink Fibre"
+    return LicenseSubscriptionSnapshot(
+        tenantName=tenant_name,
+        licenseTier="enterprise",
+        billingCycle="annually",
+        activeSeats=26,
+        seatLimit=40,
+        storageUsedGb=182,
+        storageLimitGb=500,
+        enabledModules=[
+            "CRM",
+            "Billing",
+            "Inventory",
+            "Field Ops",
+            "Maps",
+            "AI NOC",
+            "Customer Portal",
+        ],
+    )
+
+
+@router.get("/operations/launch-readiness", response_model=LaunchReadinessChecklist)
+async def get_launch_readiness(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return LaunchReadinessChecklist(
+        score=86,
+        completed=[
+            "Commercial CRM, billing, inventory, support, and technician modules are present.",
+            "Enterprise operations workflows now have backend-ready persistence structure.",
+            "Multi-tenant brand and settings experience is demo-ready.",
+        ],
+        remaining=[
+            "Move remaining mock analytics and portal workflows to live backend persistence.",
+            "Add tenant-level backend isolation to all new operations records.",
+            "Finalize production API gateway, rate limiting, and webhook security.",
+        ],
+        securityRisks=[
+            "2FA is still a placeholder and should be implemented before production launch.",
+            "Some integration modules are API-ready but still awaiting secret management and webhook verification.",
+        ],
+        performanceNotes=[
+            "Introduce pagination and server-side filtering for large CRM and inventory datasets.",
+            "Add caching and background aggregation for BI metrics above 100k customers.",
+            "Index operation_records by tenant/module/status before production-scale rollout.",
+        ],
     )

@@ -789,6 +789,159 @@ export interface SecurityControlSettings {
   auditTrailEnabled: boolean;
 }
 
+export interface NetworkTopologyNode {
+  id: string;
+  label: string;
+  layer: "provider" | "core_router" | "distribution_router" | "olt" | "splitter" | "mst" | "customer";
+  status: "healthy" | "warning" | "fault";
+  linkedTo?: string[];
+  metric?: string;
+}
+
+export interface NetworkTopologySnapshot {
+  faultDomain?: string;
+  impactedCustomers: number;
+  path: NetworkTopologyNode[];
+}
+
+export interface CapacityResource {
+  id: string;
+  name: string;
+  type: "pon_port" | "splitter" | "uplink" | "pop" | "bandwidth";
+  utilizationPercent: number;
+  thresholdPercent: number;
+  availableUnits: number;
+  forecastDaysToExhaustion: number;
+  recommendation: string;
+}
+
+export interface GisDistanceEstimate {
+  customerName: string;
+  closureName: string;
+  mstName: string;
+  distanceClosureToMstMeters: number;
+  distanceMstToCustomerMeters: number;
+  estimatedCableMeters: number;
+  estimatedInstallationCost: number;
+  nearestAvailableMst: string;
+}
+
+export interface FiberCoreManagementSnapshot {
+  cableName: string;
+  coreCount: number;
+  usedCores: number;
+  spareCores: number;
+  reservedCores: number;
+  damagedCores: number;
+  spliceHistoryCount: number;
+}
+
+export interface IpamSubnetRecord {
+  id: string;
+  segment: string;
+  type: "public" | "private" | "dhcp_pool" | "cgnat" | "vlan";
+  vlanId?: number;
+  subnet: string;
+  allocated: number;
+  available: number;
+  status: "healthy" | "warning" | "critical";
+}
+
+export interface EquipmentLifecycleRecord {
+  id: string;
+  assetName: string;
+  assetType: "olt" | "router" | "onu" | "splitter" | "battery" | "inverter";
+  purchaseDate: string;
+  installationDate?: string;
+  warrantyEndDate?: string;
+  depreciationStatus: "normal" | "mid_life" | "end_of_life";
+  maintenanceHistory: string[];
+  replacementSchedule: string;
+}
+
+export interface CustomerTimelineEvent {
+  id: string;
+  type:
+    | "registration"
+    | "survey"
+    | "installation"
+    | "activation"
+    | "payment"
+    | "plan_change"
+    | "ticket"
+    | "maintenance"
+    | "device_replacement"
+    | "suspension"
+    | "reactivation";
+  title: string;
+  description: string;
+  createdAt: string;
+  actor?: string;
+  status?: string;
+}
+
+export interface BusinessIntelligenceSnapshot {
+  mrr: number;
+  arr: number;
+  churnRate: number;
+  customerGrowthPercent: number;
+  arpu: number;
+  ltv: number;
+  ticketTrendPercent: number;
+  technicianPerformancePercent: number;
+  revenueByArea: Array<{ area: string; revenue: number }>;
+}
+
+export interface DisasterRecoverySnapshot {
+  backupHealth: "healthy" | "warning" | "critical";
+  failoverReadiness: "ready" | "partial" | "not_ready";
+  restoreTestedAt?: string;
+  recoveryStatus: "documented" | "in_progress" | "pending";
+  notes: string[];
+}
+
+export interface DeveloperPortalSnapshot {
+  apiBaseUrl: string;
+  authentication: Array<"api_key" | "oauth2" | "webhooks" | "rate_limiting">;
+  docsStatus: "draft" | "published";
+  exampleCollections: string[];
+}
+
+export interface PluginCatalogEntry {
+  id: string;
+  name: string;
+  category: "payment" | "communication" | "network" | "analytics" | "custom";
+  status: "installed" | "available" | "beta";
+  description: string;
+}
+
+export interface LocalizationSettings {
+  currencies: string[];
+  timezones: string[];
+  languages: string[];
+  taxMode: string;
+  regionalFormats: string[];
+}
+
+export interface LicenseSubscriptionSnapshot {
+  tenantName: string;
+  licenseTier: "starter" | "growth" | "enterprise";
+  billingCycle: "monthly" | "quarterly" | "annually";
+  activeSeats: number;
+  seatLimit: number;
+  storageUsedGb: number;
+  storageLimitGb: number;
+  enabledModules: string[];
+}
+
+export interface LaunchReadinessChecklist {
+  score: number;
+  completed: string[];
+  remaining: string[];
+  securityRisks: string[];
+  performanceNotes: string[];
+}
+
 export interface Customer {
   id: string;
   tenantId: string;
@@ -871,6 +1024,7 @@ export interface Customer {
   suspensionHistory?: SuspensionWorkflowRecord[];
   contractRenewals?: ContractRenewalRecord[];
   feedback?: CustomerFeedbackRecord[];
+  timeline?: CustomerTimelineEvent[];
 }
 
 export type CustomerPortalStatus = "active" | "suspended";

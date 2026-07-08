@@ -3,6 +3,7 @@ import { ArrowLeft, FileText, Router, ShieldCheck, Signal, Ticket, Wallet } from
 import { buildCustomerServiceLabel, formatPlanAndFee, getCustomerPaymentStatus } from "@/lib/isp";
 import { formatCurrency, formatDateOrDash, formatDateTimeOrDash, titleCase } from "@/lib/utils";
 import { useCustomer } from "@/hooks/api/use-customers";
+import { useCustomerTimeline } from "@/hooks/api/use-operations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +12,7 @@ import { PageSkeleton } from "@/components/ui/page-skeleton";
 export function CustomerProfilePage() {
   const { id } = useParams();
   const { data: customer, isLoading, isError } = useCustomer(id);
+  const timeline = useCustomerTimeline(id);
 
   if (isLoading) return <PageSkeleton />;
 
@@ -176,6 +178,25 @@ export function CustomerProfilePage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Customer Usage Timeline</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {(timeline.data ?? customer.timeline ?? []).map((entry) => (
+            <div key={entry.id} className="rounded-2xl border border-border/70 p-4 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-medium">{entry.title}</p>
+                <Badge variant="outline">{entry.type.replace(/_/g, " ")}</Badge>
+              </div>
+              <p className="mt-1 text-muted-foreground">{entry.description}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{formatDateTimeOrDash(entry.createdAt)}</p>
+              {entry.actor ? <p className="mt-1 text-xs text-muted-foreground">Actor: {entry.actor}</p> : null}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr_1fr]">
         <Card>

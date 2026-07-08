@@ -24,6 +24,8 @@ import { SystemHealthPage } from "@/pages/system-health-page";
 import { OnboardingPage } from "@/pages/onboarding-page";
 import { KnowledgeBasePage } from "@/pages/knowledge-base-page";
 import { ApprovalsPage } from "@/pages/approvals-page";
+import { NetworkIntelligencePage } from "@/pages/network-intelligence-page";
+import { EnterpriseReadinessPage } from "@/pages/enterprise-readiness-page";
 
 const ConfigurationMenuPage = lazy(() =>
   import("@/pages/configuration-menu-page").then((module) => ({ default: module.ConfigurationMenuPage })),
@@ -85,6 +87,8 @@ export default function App() {
         <Route path="field" element={<FieldPage />} />
         <Route path="knowledge-base" element={<KnowledgeBasePage />} />
         <Route path="approvals" element={<ApprovalsPage />} />
+        <Route path="network-intelligence" element={<NetworkIntelligencePage />} />
+        <Route path="enterprise-readiness" element={<EnterpriseReadinessPage />} />
         <Route path="onboarding" element={<OnboardingPage />} />
         <Route path="ai-noc" element={<AiNocPage />} />
         <Route path="system-health" element={<SystemHealthPage />} />
