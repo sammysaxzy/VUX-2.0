@@ -9,11 +9,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 const tabs: { key: SettingsTab; label: string; href: string }[] = [
+  { key: "company", label: "Company", href: "/settings?tab=company" },
   { key: "nas", label: "NAS Management", href: "/settings?tab=nas" },
   { key: "zones", label: "Zone Management", href: "/settings?tab=zones" },
   { key: "permissions", label: "Permissions", href: "/settings?tab=permissions" },
-  { key: "services", label: "Services", href: "/settings?tab=services" },
-  { key: "logs", label: "Logs", href: "/settings?tab=logs" },
+  { key: "services", label: "Plans", href: "/settings?tab=services" },
+  { key: "notifications", label: "Notifications", href: "/settings?tab=notifications" },
+  { key: "coverage", label: "Coverage", href: "/settings?tab=coverage" },
+  { key: "logs", label: "Audit Logs", href: "/settings?tab=logs" },
   { key: "configuration", label: "Configuration", href: "/settings/configuration" },
 ];
 
@@ -39,7 +42,7 @@ export function SettingsLayout({
   return (
     <div className="space-y-5 animate-fade-up">
       <div>
-        <h1 className="text-2xl font-semibold">Settings</h1>
+        <h1 className="text-2xl font-semibold">Tenant Settings</h1>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
 

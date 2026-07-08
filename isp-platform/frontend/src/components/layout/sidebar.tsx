@@ -1,10 +1,12 @@
 import { NavLink } from "react-router-dom";
 import {
   AlertTriangle,
+  Bot,
   Cable,
   Boxes,
   Gauge,
   HardDrive,
+  Megaphone,
   MapPinned,
   ReceiptText,
   Settings,
@@ -24,8 +26,10 @@ const navItems = [
   { href: "/infrastructure", label: "Infrastructure", icon: Cable },
   { href: "/inventory", label: "Inventory", icon: Boxes, permission: "inventory_access" as const },
   { href: "/finance", label: "Billing & Finance", icon: ReceiptText, permission: "finance_access" as const },
+  { href: "/leads", label: "Sales & Leads", icon: Megaphone, permission: "view_customers" as const },
   { href: "/faults", label: "Support & Faults", icon: AlertTriangle },
   { href: "/field", label: "Technicians", icon: Wrench },
+  { href: "/ai-noc", label: "AI NOC", icon: Bot, permission: "settings_access" as const },
   { href: "/radius", label: "RADIUS", icon: Signal, permission: "radius_access" as const },
   { href: "/settings", label: "Settings", icon: Settings, permission: "settings_access" as const },
 ];

@@ -7,7 +7,7 @@ export function ConfigurationMenuPage() {
   return (
     <SettingsLayout
       activeTab="configuration"
-      summary="9 configuration modules"
+      summary="11 configuration modules"
       description="Manage global system behavior for portal experience, communications, automation, billing, and integrations."
     >
       <ConfigurationMenu />

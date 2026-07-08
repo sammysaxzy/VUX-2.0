@@ -16,6 +16,10 @@ import { InfrastructurePage } from "@/pages/infrastructure-page";
 import { InventoryPage } from "@/pages/inventory-page";
 import { FinancePage } from "@/pages/finance-page";
 import { FaultsPage } from "@/pages/faults-page";
+import { LeadsPage } from "@/pages/leads-page";
+import { AiNocPage } from "@/pages/ai-noc-page";
+import { CustomerPortalLoginPage } from "@/pages/customer-portal-login-page";
+import { CustomerPortalPage } from "@/pages/customer-portal-page";
 
 const ConfigurationMenuPage = lazy(() =>
   import("@/pages/configuration-menu-page").then((module) => ({ default: module.ConfigurationMenuPage })),
@@ -60,6 +64,8 @@ export default function App() {
           </PublicRoute>
         }
       />
+      <Route path="/portal/login" element={<CustomerPortalLoginPage />} />
+      <Route path="/portal" element={<CustomerPortalPage />} />
 
       <Route path="/" element={<ProtectedLayout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
@@ -70,8 +76,10 @@ export default function App() {
         <Route path="infrastructure" element={<InfrastructurePage />} />
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="finance" element={<FinancePage />} />
+        <Route path="leads" element={<LeadsPage />} />
         <Route path="faults" element={<FaultsPage />} />
         <Route path="field" element={<FieldPage />} />
+        <Route path="ai-noc" element={<AiNocPage />} />
         <Route path="radius" element={<RadiusPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route

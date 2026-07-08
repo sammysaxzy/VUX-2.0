@@ -1,6 +1,7 @@
 import axios from "axios";
 import type {
   AlertItem,
+  AiNocResponse,
   AuthResponse,
   ClosureBox,
   Customer,
@@ -21,18 +22,22 @@ import type {
   InventorySummary,
   InventoryPurchase,
   KpiSnapshot,
+  Lead,
   NasEntry,
   NetworkNode,
+  NotificationRule,
   PermissionFlags,
   PermissionRole,
   RadiusBulkImportResult,
   RadiusSession,
   RadiusUser,
+  ServiceArea,
   ServicePlan,
   StockLocationType,
   StockMovementType,
   SettingsLog,
   Supplier,
+  TenantProfile,
   TenantBranding,
   User,
   Zone,
@@ -148,6 +153,166 @@ function authHeaders(token?: string) {
 }
 
 const sleep = (ms = 350) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const mockTenantProfiles: TenantProfile[] = [
+  {
+    tenantId: "tenant-west-001",
+    companyName: "WestLink Fibre",
+    legalName: "WestLink Fibre Networks Ltd",
+    logoUrl: "https://images.unsplash.com/photo-1598928506311-c55ded91a20c?q=80&w=300&auto=format&fit=crop",
+    primaryColor: "#0B7285",
+    supportEmail: "support@westlink.io",
+    supportPhone: "+234 800 WESTLINK",
+    billingEmail: "billing@westlink.io",
+    address: "Lekki Phase 1, Lagos, Nigeria",
+    website: "https://westlink.example",
+    timezone: "Africa/Lagos",
+    currency: "NGN",
+    taxId: "TIN-1029384",
+    registrationNumber: "RC-2201884",
+    defaultBillingCycle: "monthly",
+    paymentGateway: "paystack",
+    mapProvider: "mapbox",
+    whatsappEnabled: true,
+    companyNotes: "Premium FTTH operator focused on estates and SMEs in Lagos.",
+  },
+  {
+    tenantId: "tenant-north-002",
+    companyName: "NorthWave Broadband",
+    legalName: "NorthWave Digital Infrastructure Ltd",
+    primaryColor: "#155EEF",
+    supportEmail: "care@northwave.ng",
+    supportPhone: "+234 809 NORTHWAVE",
+    billingEmail: "accounts@northwave.ng",
+    address: "Gwarinpa, Abuja, Nigeria",
+    website: "https://northwave.example",
+    timezone: "Africa/Lagos",
+    currency: "NGN",
+    defaultBillingCycle: "monthly",
+    paymentGateway: "manual",
+    mapProvider: "openstreetmap",
+    whatsappEnabled: false,
+    companyNotes: "Regional ISP serving mixed residential and enterprise clusters in Abuja.",
+  },
+];
+
+let mockServiceAreas: ServiceArea[] = [
+  {
+    id: "area-1",
+    tenantId: "tenant-west-001",
+    name: "Lekki Phase 1",
+    type: "service_zone",
+    status: "active",
+    households: 420,
+    notes: "Primary FTTH service cluster with strong enterprise demand.",
+  },
+  {
+    id: "area-2",
+    tenantId: "tenant-west-001",
+    name: "Admiralty Way",
+    type: "street",
+    parentName: "Lekki Phase 1",
+    status: "active",
+    households: 90,
+  },
+  {
+    id: "area-3",
+    tenantId: "tenant-west-001",
+    name: "Chevron POP",
+    type: "pop",
+    parentName: "Chevron",
+    status: "maintenance",
+  },
+  {
+    id: "area-4",
+    tenantId: "tenant-north-002",
+    name: "Gwarinpa Central",
+    type: "service_zone",
+    status: "active",
+    households: 360,
+  },
+];
+
+let mockLeads: Lead[] = [
+  {
+    id: "lead-1",
+    tenantId: "tenant-west-001",
+    fullName: "Halima Yusuf",
+    phone: "+234 803 400 9981",
+    email: "halima@example.com",
+    source: "referral",
+    status: "survey_scheduled",
+    serviceAreaId: "area-1",
+    serviceAreaName: "Lekki Phase 1",
+    address: "16 Fola Osibo, Lekki",
+    followUpDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 2).toISOString(),
+    assignedMarketer: "Tosin A.",
+    surveyStatus: "booked",
+    interestedPlan: "Business 50 Mbps",
+    notes: "Prospect referred by existing SME customer.",
+  },
+  {
+    id: "lead-2",
+    tenantId: "tenant-west-001",
+    fullName: "Greenwood Estate HOA",
+    phone: "+234 809 111 2020",
+    source: "estate_campaign",
+    status: "negotiating",
+    serviceAreaName: "Chevron",
+    address: "Greenwood Estate Main Gate",
+    followUpDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 5).toISOString(),
+    assignedMarketer: "Ini O.",
+    surveyStatus: "completed",
+    interestedPlan: "Dedicated 100 Mbps",
+  },
+  {
+    id: "lead-3",
+    tenantId: "tenant-north-002",
+    fullName: "Favour Clinic",
+    phone: "+234 812 559 4310",
+    source: "website",
+    status: "new",
+    serviceAreaId: "area-4",
+    serviceAreaName: "Gwarinpa Central",
+    address: "3rd Avenue, Gwarinpa",
+    assignedMarketer: "Musa J.",
+    surveyStatus: "pending",
+    interestedPlan: "Business 25 Mbps",
+  },
+];
+
+let mockNotificationRules: NotificationRule[] = [
+  {
+    id: "notify-1",
+    tenantId: "tenant-west-001",
+    name: "Payment reminders",
+    channels: ["email", "whatsapp", "in_app"],
+    trigger: "payment_reminder",
+    enabled: true,
+    audience: "customer",
+    templateNote: "Send 5 days before due date and on due date morning.",
+  },
+  {
+    id: "notify-2",
+    tenantId: "tenant-west-001",
+    name: "Outage escalation",
+    channels: ["email", "sms", "in_app"],
+    trigger: "outage_alert",
+    enabled: true,
+    audience: "management",
+  },
+  {
+    id: "notify-3",
+    tenantId: "tenant-west-001",
+    name: "Low stock alerts",
+    channels: ["email", "in_app"],
+    trigger: "low_stock_alert",
+    enabled: true,
+    audience: "operations",
+  },
+];
+
+let mockAiNocResponses: AiNocResponse[] = [];
 
 let mockInventorySuppliers: Supplier[] = [
   { id: 1, name: "Main FTTH Supplier", contact_person: "Procurement Desk", phone: "08000000000", email: "supply@westlink.ng" },
@@ -424,14 +589,43 @@ type DashboardPayload = {
   activities: EngineerActivity[];
 };
 
+function getTenantProfile(tenantId: string) {
+  return mockTenantProfiles.find((profile) => profile.tenantId === tenantId) ?? {
+    tenantId,
+    companyName: tenantId,
+    supportEmail: `support@${tenantId}.example`,
+    supportPhone: "+234 800 000 0000",
+    address: "Tenant address pending",
+    timezone: "Africa/Lagos",
+    currency: "NGN",
+    defaultBillingCycle: "monthly" as const,
+    paymentGateway: "manual" as const,
+    mapProvider: "openstreetmap" as const,
+    whatsappEnabled: false,
+  };
+}
+
+function appendSettingsLog(
+  tenantId: string,
+  entry: Omit<SettingsLog, "id" | "createdAt" | "tenantId">,
+) {
+  mockSettingsLogs.unshift({
+    id: randomId("log"),
+    tenantId,
+    createdAt: new Date().toISOString(),
+    ...entry,
+  });
+}
+
 export const apiClient = {
   async login(email: string, password: string, tenantId: string): Promise<AuthResponse> {
     if (USE_MOCKS) {
       await sleep();
+      const profile = getTenantProfile(tenantId);
       return {
         token: `mock-token-${password.length}`,
-        user: { ...mockUser, email, tenantId },
-        branding: { ...mockBranding, tenantId },
+        user: { ...mockUser, email, tenantId, fullName: tenantId === "tenant-north-002" ? "NorthWave Supervisor" : mockUser.fullName },
+        branding: { tenantId, ispName: profile.companyName, logoUrl: profile.logoUrl, primaryColor: profile.primaryColor },
       };
     }
     const { data } = await api.post<AuthResponse>("/auth/login", {
@@ -451,6 +645,22 @@ export const apiClient = {
   }): Promise<AuthResponse> {
     if (USE_MOCKS) {
       await sleep();
+      const existing = mockTenantProfiles.find((profile) => profile.tenantId === payload.tenantId);
+      if (!existing) {
+        mockTenantProfiles.push({
+          tenantId: payload.tenantId,
+          companyName: payload.ispName,
+          supportEmail: payload.email,
+          supportPhone: "+234 800 000 0000",
+          address: "Tenant address pending",
+          timezone: "Africa/Lagos",
+          currency: "NGN",
+          defaultBillingCycle: "monthly",
+          paymentGateway: "manual",
+          mapProvider: "openstreetmap",
+          whatsappEnabled: false,
+        });
+      }
       const user: User = {
         id: randomId("u"),
         email: payload.email,
@@ -458,10 +668,7 @@ export const apiClient = {
         role: "tenant_admin",
         tenantId: payload.tenantId,
       };
-      const branding: TenantBranding = {
-        tenantId: payload.tenantId,
-        ispName: payload.ispName,
-      };
+      const branding: TenantBranding = { tenantId: payload.tenantId, ispName: payload.ispName };
       return { token: `mock-token-${Date.now()}`, user, branding };
     }
     const { data } = await api.post<AuthResponse>("/auth/register", {
@@ -1034,7 +1241,16 @@ export const apiClient = {
   async getServicePlans(tenantId: string, token?: string): Promise<ServicePlan[]> {
     if (USE_MOCKS) {
       await sleep(200);
-      return mockServicePlans;
+      return mockServicePlans.map((plan, index) => ({
+        id: plan.id ?? `plan-${tenantId}-${index + 1}`,
+        tenantId,
+        billingCycle: plan.billingCycle ?? "monthly",
+        status: plan.status ?? "active",
+        category: plan.category ?? "business",
+        speedMbps: plan.speedMbps ?? (Number.parseInt(plan.speed, 10) || undefined),
+        priceMonthly: plan.priceMonthly ?? (Number(String(plan.price).replace(/[^\d.]/g, "")) || undefined),
+        ...plan,
+      }));
     }
     const { data } = await api.get<ServicePlan[]>("/settings/services", {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
@@ -1045,7 +1261,13 @@ export const apiClient = {
   async createServicePlan(payload: ServicePlan, tenantId: string, token?: string): Promise<ServicePlan> {
     if (USE_MOCKS) {
       await sleep(170);
-      return addMockServicePlan(payload);
+      appendSettingsLog(tenantId, {
+        type: "create",
+        actor: "Tenant Admin",
+        module: "plans",
+        description: `Created plan ${payload.name}.`,
+      });
+      return addMockServicePlan({ ...payload, tenantId, id: payload.id ?? randomId("plan"), status: payload.status ?? "active" });
     }
     const { data } = await api.post<ServicePlan>("/settings/services", payload, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
@@ -1067,6 +1289,12 @@ export const apiClient = {
   async createNasEntry(payload: Omit<NasEntry, "id">, tenantId: string, token?: string): Promise<NasEntry> {
     if (USE_MOCKS) {
       await sleep(170);
+      appendSettingsLog(tenantId, {
+        type: "create",
+        actor: "Tenant Admin",
+        module: "nas",
+        description: `Added NAS ${payload.name}.`,
+      });
       return addMockNasEntry(payload);
     }
     const { data } = await api.post<NasEntry>("/settings/nas", payload, {
@@ -1078,6 +1306,12 @@ export const apiClient = {
   async updateNasEntry(id: string, payload: Omit<NasEntry, "id">, tenantId: string, token?: string): Promise<NasEntry> {
     if (USE_MOCKS) {
       await sleep(170);
+      appendSettingsLog(tenantId, {
+        type: "update",
+        actor: "Tenant Admin",
+        module: "nas",
+        description: `Updated NAS ${payload.name}.`,
+      });
       return updateMockNasEntry(id, payload) as NasEntry;
     }
     const { data } = await api.put<NasEntry>(`/settings/nas/${encodeURIComponent(id)}`, payload, {
@@ -1100,6 +1334,12 @@ export const apiClient = {
   async createZone(payload: Omit<Zone, "id" | "usersCount" | "nasName"> & { usersCount?: number }, tenantId: string, token?: string): Promise<Zone> {
     if (USE_MOCKS) {
       await sleep(170);
+      appendSettingsLog(tenantId, {
+        type: "create",
+        actor: "Tenant Admin",
+        module: "zones",
+        description: `Created zone ${payload.name}.`,
+      });
       return addMockZone(payload);
     }
     const { data } = await api.post<Zone>("/settings/zones", payload, {
@@ -1126,6 +1366,12 @@ export const apiClient = {
   ) {
     if (USE_MOCKS) {
       await sleep(150);
+      appendSettingsLog(tenantId, {
+        type: "update",
+        actor: "Tenant Admin",
+        module: "permissions",
+        description: `Updated permission profile ${payload.id}.`,
+      });
       return updateMockPermissionRole({
         id: payload.id,
         privilegeModel: payload.payload.privilegeModel,
@@ -1147,6 +1393,12 @@ export const apiClient = {
   ) {
     if (USE_MOCKS) {
       await sleep(150);
+      appendSettingsLog(tenantId, {
+        type: "create",
+        actor: "Tenant Admin",
+        module: "users",
+        description: `Created team member ${payload.fullName}.`,
+      });
       return createMockPrivilegeAccount(payload);
     }
     const { data } = await api.post(`/settings/permissions/members`, payload, {
@@ -1171,6 +1423,12 @@ export const apiClient = {
   ): Promise<PermissionRole[]> {
     if (USE_MOCKS) {
       await sleep(150);
+      appendSettingsLog(tenantId, {
+        type: "assign",
+        actor: "Tenant Admin",
+        module: "permissions",
+        description: `Updated map access for ${payload.member.fullName}.`,
+      });
       return upsertMockPermissionMemberAccess(payload);
     }
     const { data } = await api.put<PermissionRole[]>("/settings/permissions", payload, {
@@ -1182,9 +1440,176 @@ export const apiClient = {
   async getSettingsLogs(tenantId: string, token?: string): Promise<SettingsLog[]> {
     if (USE_MOCKS) {
       await sleep(160);
-      return mockSettingsLogs;
+      return mockSettingsLogs
+        .filter((entry) => !entry.tenantId || entry.tenantId === tenantId)
+        .map((entry) => ({ ...entry, tenantId: entry.tenantId ?? tenantId }));
     }
     const { data } = await api.get<SettingsLog[]>("/settings/logs", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getTenantProfileSettings(tenantId: string, token?: string): Promise<TenantProfile> {
+    if (USE_MOCKS) {
+      await sleep(180);
+      return getTenantProfile(tenantId);
+    }
+    const { data } = await api.get<TenantProfile>("/settings/company", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async updateTenantProfileSettings(payload: TenantProfile, tenantId: string, token?: string): Promise<TenantProfile> {
+    if (USE_MOCKS) {
+      await sleep(170);
+      const index = mockTenantProfiles.findIndex((entry) => entry.tenantId === tenantId);
+      if (index >= 0) {
+        mockTenantProfiles[index] = payload;
+      } else {
+        mockTenantProfiles.push(payload);
+      }
+      appendSettingsLog(tenantId, {
+        type: "update",
+        actor: "Tenant Admin",
+        module: "company",
+        description: "Updated company profile and tenant settings.",
+      });
+      return payload;
+    }
+    const { data } = await api.put<TenantProfile>("/settings/company", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getNotificationRules(tenantId: string, token?: string): Promise<NotificationRule[]> {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return mockNotificationRules.filter((entry) => entry.tenantId === tenantId);
+    }
+    const { data } = await api.get<NotificationRule[]>("/settings/notifications", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async saveNotificationRule(payload: NotificationRule, tenantId: string, token?: string): Promise<NotificationRule> {
+    if (USE_MOCKS) {
+      await sleep(160);
+      const index = mockNotificationRules.findIndex((entry) => entry.id === payload.id);
+      if (index >= 0) {
+        mockNotificationRules[index] = payload;
+      } else {
+        mockNotificationRules.unshift(payload);
+      }
+      appendSettingsLog(tenantId, {
+        type: "notification",
+        actor: "Tenant Admin",
+        module: "notifications",
+        description: `Saved notification rule ${payload.name}.`,
+      });
+      return payload;
+    }
+    const { data } = await api.post<NotificationRule>("/settings/notifications", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getServiceAreas(tenantId: string, token?: string): Promise<ServiceArea[]> {
+    if (USE_MOCKS) {
+      await sleep(150);
+      return mockServiceAreas.filter((entry) => entry.tenantId === tenantId);
+    }
+    const { data } = await api.get<ServiceArea[]>("/settings/coverage", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async createServiceArea(payload: ServiceArea, tenantId: string, token?: string): Promise<ServiceArea> {
+    if (USE_MOCKS) {
+      await sleep(150);
+      mockServiceAreas.unshift(payload);
+      appendSettingsLog(tenantId, {
+        type: "create",
+        actor: "Operations Manager",
+        module: "coverage",
+        description: `Added coverage area ${payload.name}.`,
+      });
+      return payload;
+    }
+    const { data } = await api.post<ServiceArea>("/settings/coverage", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getLeads(tenantId: string, token?: string): Promise<Lead[]> {
+    if (USE_MOCKS) {
+      await sleep(150);
+      return mockLeads.filter((entry) => entry.tenantId === tenantId);
+    }
+    const { data } = await api.get<Lead[]>("/crm/leads", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async createLead(payload: Lead, tenantId: string, token?: string): Promise<Lead> {
+    if (USE_MOCKS) {
+      await sleep(150);
+      mockLeads.unshift(payload);
+      appendSettingsLog(tenantId, {
+        type: "create",
+        actor: "Sales Desk",
+        module: "leads",
+        description: `Created lead ${payload.fullName}.`,
+      });
+      return payload;
+    }
+    const { data } = await api.post<Lead>("/crm/leads", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async askAiNoc(
+    payload: { prompt: string; mode: AiNocResponse["mode"] },
+    tenantId: string,
+    token?: string,
+  ): Promise<AiNocResponse> {
+    if (USE_MOCKS) {
+      await sleep(260);
+      const response: AiNocResponse = {
+        id: randomId("ai"),
+        tenantId,
+        prompt: payload.prompt,
+        mode: payload.mode,
+        response:
+          payload.mode === "fault_analysis"
+            ? "Probable cause: optical loss on the distribution segment. Check the last closure splice, compare recent RX drop trends, and prioritize the affected business customers for dispatch."
+            : payload.mode === "report"
+              ? "Executive summary: service remained stable in the core zone, while one distribution outage affected a small customer cluster and required coordinated NOC, field, and customer-care follow-up."
+              : payload.mode === "outage_explanation"
+                ? "Customer-facing explanation: a fibre path issue reduced service quality in your area. Our field team is already working on restoration and updates will be shared as repair milestones are completed."
+                : payload.mode === "technician_guidance"
+                  ? "Technician guidance: verify power levels at ONU and MST, inspect drop cable bends, test spare core continuity, and record before/after signal values before closing the task."
+                  : "Support guidance: confirm tenant, customer ID, plan, payment state, and current outage context, then provide the next action and ETA clearly.",
+        createdAt: new Date().toISOString(),
+      };
+      mockAiNocResponses.unshift(response);
+      appendSettingsLog(tenantId, {
+        type: "create",
+        actor: "AI NOC",
+        module: "ai",
+        description: `Generated AI ${payload.mode.replace("_", " ")} response.`,
+      });
+      return response;
+    }
+    const { data } = await api.post<AiNocResponse>("/ai/noc", payload, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;

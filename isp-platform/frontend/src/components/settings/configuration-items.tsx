@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 import {
   BellRing,
+  Bot,
   CreditCard,
   Globe,
+  LocateFixed,
   Mail,
   MessageSquareText,
   ReceiptText,
@@ -16,11 +18,13 @@ export type ConfigurationSection =
   | "portal"
   | "billing"
   | "mail"
+  | "map-api"
   | "payment"
   | "sms"
   | "notification"
   | "auto-user"
-  | "whatsapp";
+  | "whatsapp"
+  | "ai";
 
 export type ConfigurationItem = {
   slug: ConfigurationSection;
@@ -107,7 +111,25 @@ export const configurationItems: ConfigurationItem[] = [
           { type: "text", id: "smtp-host", label: "SMTP Host", placeholder: "smtp.mailgun.org" },
           { type: "text", id: "smtp-port", label: "SMTP Port", placeholder: "587" },
           { type: "email", id: "sender-email", label: "Sender Email", placeholder: "no-reply@isp.com" },
-          { type: "password", id: "smtp-password", label: "SMTP Password", placeholder: "••••••••" },
+          { type: "password", id: "smtp-password", label: "SMTP Password Env Var", placeholder: "SMTP_PASSWORD" },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "map-api",
+    label: "Map & API",
+    description: "Configure map providers, geocoding, outage overlays, and integration endpoints.",
+    icon: <LocateFixed className="h-5 w-5" />,
+    sections: [
+      {
+        title: "Network Mapping Integrations",
+        description: "Use environment-backed provider keys and endpoint URLs for network planning and customer geolocation.",
+        fields: [
+          { type: "select", id: "map-provider", label: "Map Provider", options: ["Mapbox", "Google Maps", "OpenStreetMap"] },
+          { type: "text", id: "map-api-key-env", label: "Map API Key Env Var", placeholder: "VITE_MAPBOX_ACCESS_TOKEN" },
+          { type: "text", id: "geocoding-endpoint", label: "Geocoding Endpoint", placeholder: "https://api.mapbox.com/geocoding/v5/..." },
+          { type: "toggle", id: "fault-overlay-enabled", label: "Fault Overlay", helper: "Show outage and fibre cut overlays on the operational map." },
         ],
       },
     ],
@@ -123,8 +145,8 @@ export const configurationItems: ConfigurationItem[] = [
         description: "Register the default online payment processor and associated credentials.",
         fields: [
           { type: "select", id: "payment-gateway", label: "Gateway", options: ["Paystack", "Flutterwave", "Manual Transfer"] },
-          { type: "text", id: "public-key", label: "Public Key", placeholder: "pk_live_xxx" },
-          { type: "password", id: "secret-key", label: "Secret Key", placeholder: "sk_live_xxx" },
+          { type: "text", id: "public-key", label: "Public Key Env Var", placeholder: "VITE_PAYSTACK_PUBLIC_KEY" },
+          { type: "password", id: "secret-key", label: "Secret Key Env Var", placeholder: "PAYSTACK_SECRET_KEY" },
           { type: "toggle", id: "auto-reconcile", label: "Enable Auto Reconciliation", helper: "Match successful payments to invoices automatically." },
         ],
       },
@@ -141,7 +163,7 @@ export const configurationItems: ConfigurationItem[] = [
         description: "Configure the primary SMS provider used for OTPs and customer alerts.",
         fields: [
           { type: "text", id: "sms-provider", label: "Provider Name", placeholder: "Termii" },
-          { type: "password", id: "sms-api-key", label: "API Key", placeholder: "••••••••" },
+          { type: "password", id: "sms-api-key", label: "API Key Env Var", placeholder: "TERMII_API_KEY" },
           { type: "text", id: "sender-id", label: "Sender ID", placeholder: "WESTLINK" },
           { type: "toggle", id: "sms-delivery-report", label: "Delivery Reports", helper: "Track gateway delivery callbacks in logs." },
         ],
@@ -194,9 +216,27 @@ export const configurationItems: ConfigurationItem[] = [
         description: "Connect the business messaging channel used for payment and outage notices.",
         fields: [
           { type: "text", id: "whatsapp-phone-id", label: "Phone Number ID", placeholder: "1234567890" },
-          { type: "password", id: "whatsapp-token", label: "Access Token", placeholder: "••••••••" },
+          { type: "password", id: "whatsapp-token", label: "Access Token Env Var", placeholder: "WHATSAPP_ACCESS_TOKEN" },
           { type: "text", id: "template-namespace", label: "Template Namespace", placeholder: "westlink_prod" },
           { type: "textarea", id: "template-notes", label: "Template Notes", placeholder: "Payment reminder, outage, and welcome message templates..." },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "ai",
+    label: "AI NOC",
+    description: "Configure AI assistant prompts, provider settings, and operational guardrails.",
+    icon: <Bot className="h-5 w-5" />,
+    sections: [
+      {
+        title: "AI Operations",
+        description: "Prepare AI-ready settings without hard-coding credentials or pretending a provider is already live.",
+        fields: [
+          { type: "select", id: "ai-provider", label: "Provider", options: ["OpenAI", "Azure OpenAI", "Disabled"] },
+          { type: "text", id: "ai-api-key-env", label: "API Key Env Var", placeholder: "OPENAI_API_KEY" },
+          { type: "text", id: "ai-model", label: "Model", placeholder: "gpt-4.1-mini" },
+          { type: "textarea", id: "ai-guardrails", label: "Operational Guardrails", placeholder: "Keep responses advisory, require human approval for destructive network changes, and log all operator prompts." },
         ],
       },
     ],

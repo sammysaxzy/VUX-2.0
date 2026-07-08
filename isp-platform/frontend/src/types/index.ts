@@ -48,6 +48,28 @@ export interface TenantBranding {
   primaryColor?: string;
 }
 
+export interface TenantProfile {
+  tenantId: string;
+  companyName: string;
+  legalName?: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  supportEmail: string;
+  supportPhone: string;
+  billingEmail?: string;
+  address: string;
+  website?: string;
+  timezone: string;
+  currency: string;
+  taxId?: string;
+  registrationNumber?: string;
+  defaultBillingCycle: "monthly" | "quarterly" | "annually";
+  paymentGateway: "paystack" | "flutterwave" | "manual";
+  mapProvider: "mapbox" | "google_maps" | "openstreetmap";
+  whatsappEnabled: boolean;
+  companyNotes?: string;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -250,12 +272,19 @@ export interface RadiusBulkImportResult {
 }
 
 export interface ServicePlan {
+  id?: string;
+  tenantId?: string;
   name: string;
+  category?: "residential" | "business" | "dedicated" | "custom";
   speed: string;
   price: string;
   rateLimit: string;
   description?: string;
   customerTypes?: CustomerType[];
+  billingCycle?: "monthly" | "quarterly" | "annually";
+  status?: "active" | "draft" | "archived";
+  speedMbps?: number;
+  priceMonthly?: number;
 }
 
 export type RadiusRealtimeEvent =
@@ -265,7 +294,16 @@ export type RadiusRealtimeEvent =
 
 export type RadiusTab = "sessions" | "users";
 
-export type SettingsTab = "nas" | "zones" | "permissions" | "services" | "logs" | "configuration";
+export type SettingsTab =
+  | "company"
+  | "nas"
+  | "zones"
+  | "permissions"
+  | "services"
+  | "notifications"
+  | "coverage"
+  | "logs"
+  | "configuration";
 
 export interface NasEntry {
   id: string;
@@ -320,9 +358,77 @@ export interface PrivilegeMember {
 
 export interface SettingsLog {
   id: string;
-  type: "authentication" | "disconnect" | "sync";
+  tenantId?: string;
+  type:
+    | "authentication"
+    | "disconnect"
+    | "sync"
+    | "create"
+    | "update"
+    | "delete"
+    | "assign"
+    | "billing"
+    | "inventory"
+    | "fault"
+    | "notification";
   actor: string;
+  module?: string;
   description: string;
+  createdAt: string;
+}
+
+export interface NotificationRule {
+  id: string;
+  tenantId: string;
+  name: string;
+  channels: Array<"email" | "sms" | "whatsapp" | "in_app">;
+  trigger:
+    | "payment_reminder"
+    | "payment_success"
+    | "outage_alert"
+    | "ticket_update"
+    | "installation_update"
+    | "low_stock_alert";
+  enabled: boolean;
+  audience: "customer" | "operations" | "management";
+  templateNote?: string;
+}
+
+export interface ServiceArea {
+  id: string;
+  tenantId: string;
+  name: string;
+  type: "estate" | "street" | "town" | "pop" | "service_zone";
+  parentName?: string;
+  status: "active" | "planned" | "maintenance";
+  households?: number;
+  notes?: string;
+}
+
+export interface Lead {
+  id: string;
+  tenantId: string;
+  fullName: string;
+  phone: string;
+  email?: string;
+  source: "estate_campaign" | "referral" | "walk_in" | "website" | "social_media";
+  status: "new" | "survey_scheduled" | "proposal_sent" | "negotiating" | "converted" | "lost";
+  serviceAreaId?: string;
+  serviceAreaName?: string;
+  address: string;
+  followUpDate?: string;
+  assignedMarketer?: string;
+  surveyStatus?: "pending" | "booked" | "completed";
+  interestedPlan?: string;
+  notes?: string;
+}
+
+export interface AiNocResponse {
+  id: string;
+  tenantId: string;
+  prompt: string;
+  mode: "support" | "fault_analysis" | "report" | "outage_explanation" | "technician_guidance";
+  response: string;
   createdAt: string;
 }
 

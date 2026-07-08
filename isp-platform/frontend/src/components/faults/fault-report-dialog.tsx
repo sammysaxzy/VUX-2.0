@@ -16,7 +16,7 @@ const schema = z.object({
   title: z.string().min(3),
   description: z.string().min(6),
   severity: z.enum(["minor", "major", "critical"]),
-  status: z.enum(["open", "investigating", "resolved"]),
+  status: z.enum(["open", "investigating", "escalated", "resolved"]),
   lat: z.coerce.number().min(-90).max(90),
   lng: z.coerce.number().min(-180).max(180),
   affectedNodeId: z.string().optional(),
