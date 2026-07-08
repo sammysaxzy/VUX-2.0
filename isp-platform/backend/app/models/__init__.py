@@ -25,6 +25,8 @@ from .models import (
     NetworkDevice,
     NetworkLink,
     NetworkNodeType,
+    OperationRecord,
+    OperationSetting,
     OLTOffice,
     PaymentStatus,
     FinancialTransaction,

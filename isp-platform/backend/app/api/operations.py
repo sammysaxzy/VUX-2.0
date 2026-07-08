@@ -1,15 +1,26 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db
 from ..core.security import get_current_user_dependency as get_current_user
-from ..models import BillingPayment, Client, FinancialTransaction, InventoryItem, PaymentStatus, User
+from ..models import (
+    ActivityLog,
+    BillingPayment,
+    Client,
+    FinancialTransaction,
+    InventoryItem,
+    OperationRecord,
+    OperationSetting,
+    PaymentStatus,
+    User,
+)
 
 router = APIRouter(tags=["Operations"])
 
@@ -56,7 +67,7 @@ class UsagePlanLine(BaseModel):
 
 
 class UsageUserLine(BaseModel):
-    customerId: str
+    customerId: Optional[str] = None
     customerName: str
     usageGb: int
     planName: str
@@ -278,6 +289,499 @@ class SecurityControlSettings(BaseModel):
     auditTrailEnabled: bool
 
 
+MODULE_INSTALLATIONS = "installations"
+MODULE_SITE_SURVEYS = "site_surveys"
+MODULE_FAULT_WORKFLOW = "fault_workflow"
+MODULE_OUTAGES = "outages"
+MODULE_COMMUNICATION_TEMPLATES = "communication_templates"
+MODULE_KNOWLEDGE_BASE = "knowledge_base"
+MODULE_APPROVALS = "approvals"
+MODULE_PROMOS = "promos"
+MODULE_COMMISSIONS = "commissions"
+MODULE_CHURN_RETENTION = "churn_retention"
+MODULE_IMPORT_VALIDATION = "import_validation"
+SETTING_DEMO_MODE = "demo_mode"
+SETTING_SECURITY_CONTROLS = "security_controls"
+
+
+def _record_key(module: str, record_id: str) -> str:
+    return f"{module}:{record_id}"
+
+
+def _activity_payload(payload: BaseModel | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(payload, BaseModel):
+        return payload.model_dump(mode="json")
+    return payload
+
+
+async def _log_activity(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    action_type: str,
+    description: str,
+    after_state: Optional[dict[str, Any]] = None,
+):
+    db.add(
+        ActivityLog(
+            user_id=user_id,
+            action_type=action_type,
+            action_description=description,
+            after_state=after_state,
+        )
+    )
+
+
+async def _seed_module_records(
+    db: AsyncSession,
+    *,
+    module: str,
+    model_cls,
+    defaults: list[BaseModel],
+):
+    existing = await db.execute(select(func.count(OperationRecord.id)).where(OperationRecord.module == module))
+    if (existing.scalar() or 0) > 0:
+        return
+    for default in defaults:
+        payload = default.model_dump(mode="json")
+        record_id = str(payload["id"])
+        db.add(
+            OperationRecord(
+                module=module,
+                record_key=_record_key(module, record_id),
+                title=payload.get("title") or payload.get("name") or payload.get("customerName"),
+                status=payload.get("status") or payload.get("approvalStatus") or payload.get("active"),
+                payload=payload,
+            )
+        )
+    await db.flush()
+
+
+async def _list_module_records(
+    db: AsyncSession,
+    *,
+    module: str,
+    model_cls,
+    defaults: list[BaseModel],
+):
+    await _seed_module_records(db, module=module, model_cls=model_cls, defaults=defaults)
+    result = await db.execute(select(OperationRecord).where(OperationRecord.module == module).order_by(OperationRecord.created_at.desc()))
+    rows = result.scalars().all()
+    return [model_cls.model_validate(row.payload) for row in rows]
+
+
+async def _create_module_record(
+    db: AsyncSession,
+    *,
+    module: str,
+    payload: BaseModel,
+    current_user_id: int,
+    action_type: str,
+    description: str,
+):
+    data = payload.model_dump(mode="json")
+    record_id = str(data["id"])
+    existing = await db.execute(select(OperationRecord).where(OperationRecord.record_key == _record_key(module, record_id)))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Record ID already exists")
+    record = OperationRecord(
+        module=module,
+        record_key=_record_key(module, record_id),
+        title=data.get("title") or data.get("name") or data.get("customerName"),
+        status=str(data.get("status") or data.get("approvalStatus") or data.get("active") or ""),
+        payload=data,
+        created_by_user_id=current_user_id,
+        updated_by_user_id=current_user_id,
+    )
+    db.add(record)
+    await db.flush()
+    await _log_activity(
+        db,
+        user_id=current_user_id,
+        action_type=action_type,
+        description=description,
+        after_state=data,
+    )
+    return payload
+
+
+async def _update_module_record(
+    db: AsyncSession,
+    *,
+    module: str,
+    record_id: str,
+    payload: BaseModel,
+    current_user_id: int,
+    action_type: str,
+    description: str,
+):
+    result = await db.execute(select(OperationRecord).where(OperationRecord.record_key == _record_key(module, record_id)))
+    record = result.scalar_one_or_none()
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
+    data = payload.model_dump(mode="json")
+    data["id"] = record_id
+    record.title = data.get("title") or data.get("name") or data.get("customerName")
+    record.status = str(data.get("status") or data.get("approvalStatus") or data.get("active") or "")
+    record.payload = data
+    record.updated_by_user_id = current_user_id
+    record.updated_at = datetime.utcnow()
+    await db.flush()
+    await _log_activity(
+        db,
+        user_id=current_user_id,
+        action_type=action_type,
+        description=description,
+        after_state=data,
+    )
+    return payload.__class__.model_validate(data)
+
+
+async def _get_or_seed_setting(
+    db: AsyncSession,
+    *,
+    setting_key: str,
+    model_cls,
+    default_payload: BaseModel,
+):
+    result = await db.execute(select(OperationSetting).where(OperationSetting.setting_key == setting_key))
+    setting = result.scalar_one_or_none()
+    if not setting:
+        setting = OperationSetting(setting_key=setting_key, payload=default_payload.model_dump(mode="json"))
+        db.add(setting)
+        await db.flush()
+    return model_cls.model_validate(setting.payload)
+
+
+async def _update_setting(
+    db: AsyncSession,
+    *,
+    setting_key: str,
+    payload: BaseModel,
+    current_user_id: int,
+    action_type: str,
+    description: str,
+):
+    result = await db.execute(select(OperationSetting).where(OperationSetting.setting_key == setting_key))
+    setting = result.scalar_one_or_none()
+    if not setting:
+        setting = OperationSetting(setting_key=setting_key, payload={})
+        db.add(setting)
+        await db.flush()
+    data = payload.model_dump(mode="json")
+    setting.payload = data
+    setting.updated_by_user_id = current_user_id
+    setting.updated_at = datetime.utcnow()
+    await db.flush()
+    await _log_activity(db, user_id=current_user_id, action_type=action_type, description=description, after_state=data)
+    return payload
+
+
+def _default_installations() -> list[InstallationWorkflowRecord]:
+    return [
+        InstallationWorkflowRecord(
+            id="install-1",
+            customerName="Greenwood Estate HOA",
+            stage="quotation",
+            assignedTo="Tosin A.",
+            dueDate=datetime.utcnow() + timedelta(days=2),
+            notes="Dedicated service quotation awaiting approval.",
+        ),
+        InstallationWorkflowRecord(
+            id="install-2",
+            customerName="Amina Bello",
+            stage="installation_assigned",
+            assignedTo="Kunle O.",
+            dueDate=datetime.utcnow() + timedelta(days=1),
+            notes="Materials issued and field team scheduled.",
+        ),
+        InstallationWorkflowRecord(
+            id="install-3",
+            customerName="Favour Clinic",
+            stage="testing",
+            assignedTo="Musa J.",
+            dueDate=datetime.utcnow() + timedelta(hours=12),
+            notes="Awaiting final activation and handover.",
+        ),
+    ]
+
+
+def _default_site_surveys() -> list[SiteSurveyRecord]:
+    return [
+        SiteSurveyRecord(
+            id="survey-1",
+            leadName="Greenwood Estate HOA",
+            location="Greenwood Estate Main Gate",
+            buildingType="estate",
+            distanceFromNodeMeters=180,
+            signalReading="-18.2 dBm",
+            powerReading="Stable mains + inverter",
+            requiredMaterials=["1 Core Drop Cable", "ONU", "Router", "8 Port MST Closure"],
+            installationDifficulty="medium",
+            photos=6,
+            recommendation="approved",
+        ),
+        SiteSurveyRecord(
+            id="survey-2",
+            leadName="Favour Clinic",
+            location="3rd Avenue, Gwarinpa",
+            buildingType="commercial",
+            distanceFromNodeMeters=95,
+            signalReading="-21.0 dBm",
+            powerReading="UPS available",
+            requiredMaterials=["ONU", "Router", "Patch Cord"],
+            installationDifficulty="low",
+            photos=4,
+            recommendation="approved",
+        ),
+    ]
+
+
+def _default_fault_workflow() -> list[FaultWorkflowTicket]:
+    return [
+        FaultWorkflowTicket(
+            id="ft-1",
+            customerName="The Annex Workspace",
+            category="degraded_signal",
+            priority="high",
+            affectedService="Business 50 Mbps",
+            assignedTechnician="Sade A.",
+            faultLocation="Admiralty Way distribution segment",
+            diagnosis="High splice loss near closure CL-17.",
+            materialsUsed=["Pigtail", "Splice protector"],
+            resolutionNote="Respliced affected core and restored RX levels.",
+            customerConfirmation="confirmed",
+            closureTime=datetime.utcnow() - timedelta(minutes=35),
+        ),
+        FaultWorkflowTicket(
+            id="ft-2",
+            customerName="Amina Bello",
+            category="no_internet",
+            priority="medium",
+            affectedService="20 Mbps Home",
+            assignedTechnician="Kunle O.",
+            faultLocation="Drop cable from MST-04",
+            diagnosis="Outdoor connector damaged by weather exposure.",
+            materialsUsed=["Fast connector"],
+            customerConfirmation="pending",
+        ),
+    ]
+
+
+def _default_outages() -> list[OutageMaintenanceRecord]:
+    return [
+        OutageMaintenanceRecord(
+            id="out-1",
+            type="planned_maintenance",
+            title="Lekki POP battery maintenance",
+            affectedAreas=["Lekki Phase 1", "Admiralty Way"],
+            affectedCustomers=48,
+            startTime=datetime.utcnow() + timedelta(hours=18),
+            endTime=datetime.utcnow() + timedelta(hours=20),
+            customerNotice="Brief maintenance window to improve site power resilience.",
+            status="scheduled",
+        ),
+        OutageMaintenanceRecord(
+            id="out-2",
+            type="unplanned_outage",
+            title="Distribution fibre cut near Chevron axis",
+            affectedAreas=["Chevron"],
+            affectedCustomers=21,
+            startTime=datetime.utcnow() - timedelta(hours=4),
+            customerNotice="Emergency outage response underway.",
+            completionReport="Temporary reroute restored services pending permanent civil fix.",
+            status="completed",
+        ),
+    ]
+
+
+def _default_communication_templates() -> list[CommunicationTemplateRecord]:
+    return [
+        CommunicationTemplateRecord(
+            id="tpl-1",
+            channel="whatsapp",
+            name="payment_reminder",
+            message="Hello {{name}}, your invoice of {{amount}} is due on {{due_date}}.",
+            active=True,
+        ),
+        CommunicationTemplateRecord(
+            id="tpl-2",
+            channel="email",
+            name="welcome_message",
+            subject="Welcome to {{isp_name}}",
+            message="Your service is now active. Plan: {{plan}}, username: {{username}}.",
+            active=True,
+        ),
+        CommunicationTemplateRecord(
+            id="tpl-3",
+            channel="sms",
+            name="outage_notice",
+            message="We are working on a service issue in your area. Updates will follow shortly.",
+            active=True,
+        ),
+    ]
+
+
+def _default_knowledge_base() -> list[KnowledgeBaseArticle]:
+    return [
+        KnowledgeBaseArticle(
+            id="kb-1",
+            category="troubleshooting",
+            title="Weak optical power triage checklist",
+            summary="Validate ONU levels, inspect closure splices, check bends, and compare recent degradation pattern before dispatch.",
+            audience="noc",
+        ),
+        KnowledgeBaseArticle(
+            id="kb-2",
+            category="installation",
+            title="Standard FTTH installation handover procedure",
+            summary="Verify light levels, document router and ONU assets, confirm Wi-Fi, and collect signed completion acknowledgment.",
+            audience="engineer",
+        ),
+        KnowledgeBaseArticle(
+            id="kb-3",
+            category="responses",
+            title="Customer outage response script",
+            summary="Acknowledge complaints professionally, explain outage context, and set expectation on the next update window.",
+            audience="support",
+        ),
+    ]
+
+
+def _default_approvals() -> list[ApprovalWorkflowRecord]:
+    return [
+        ApprovalWorkflowRecord(
+            id="apr-1",
+            type="discount",
+            requester="Finance Desk",
+            target="Greenwood Estate HOA onboarding discount",
+            amount=Decimal("150000"),
+            status="pending",
+            requestedAt=datetime.utcnow() - timedelta(hours=3),
+        ),
+        ApprovalWorkflowRecord(
+            id="apr-2",
+            type="large_expense",
+            requester="Operations Manager",
+            target="POP Alpha battery replacement",
+            amount=Decimal("880000"),
+            status="approved",
+            requestedAt=datetime.utcnow() - timedelta(hours=12),
+        ),
+    ]
+
+
+def _default_promos() -> list[DiscountPromoRecord]:
+    return [
+        DiscountPromoRecord(
+            id="promo-1",
+            code="ESTATE100",
+            type="fixed",
+            amount=Decimal("100000"),
+            expiryDate=datetime.utcnow() + timedelta(days=21),
+            eligiblePlans=["Dedicated 100 Mbps", "Business 50 Mbps"],
+            approvalStatus="approved",
+            usageCount=3,
+        ),
+        DiscountPromoRecord(
+            id="promo-2",
+            code="WELCOME10",
+            type="percentage",
+            amount=Decimal("10"),
+            expiryDate=datetime.utcnow() + timedelta(days=14),
+            eligiblePlans=["20 Mbps Home", "25 Mbps Home"],
+            approvalStatus="pending",
+            usageCount=0,
+        ),
+    ]
+
+
+def _default_commissions() -> list[CommissionRecord]:
+    return [
+        CommissionRecord(
+            id="com-1",
+            partnerName="Tosin A.",
+            leadSource="Referral",
+            convertedCustomer="Favour Clinic",
+            planValue=Decimal("125000"),
+            commissionAmount=Decimal("25000"),
+            approvalStatus="approved",
+            payoutStatus="processing",
+        ),
+        CommissionRecord(
+            id="com-2",
+            partnerName="PrimeNet Reseller Desk",
+            leadSource="Estate campaign",
+            convertedCustomer="Greenwood Estate HOA",
+            planValue=Decimal("850000"),
+            commissionAmount=Decimal("95000"),
+            approvalStatus="pending",
+            payoutStatus="pending",
+        ),
+    ]
+
+
+def _default_churn_retention() -> list[ChurnRetentionRecord]:
+    return [
+        ChurnRetentionRecord(
+            id="ch-1",
+            customerName="Amina Bello",
+            riskLevel="high",
+            cancellationRequested=False,
+            reasonForLeaving="Repeated service instability",
+            retentionAction="Offer temporary service credit and fast-track field intervention.",
+            winBackStatus="in_progress",
+        ),
+        ChurnRetentionRecord(
+            id="ch-2",
+            customerName="Legacy Prints",
+            riskLevel="medium",
+            cancellationRequested=True,
+            reasonForLeaving="Budget pressure",
+            retentionAction="Proposed downgrade with promo support.",
+            winBackStatus="in_progress",
+        ),
+    ]
+
+
+def _default_import_validation() -> list[ImportValidationSummary]:
+    return [
+        ImportValidationSummary(
+            module="customers",
+            totalRows=120,
+            validRows=114,
+            invalidRows=6,
+            sampleErrors=["Duplicate PPPoE username on row 17", "Missing phone number on row 43"],
+        ),
+        ImportValidationSummary(
+            module="inventory",
+            totalRows=42,
+            validRows=39,
+            invalidRows=3,
+            sampleErrors=["Negative stock value on row 9", "Unknown supplier code on row 16"],
+        ),
+    ]
+
+
+def _default_demo_mode() -> DemoModeSettings:
+    return DemoModeSettings(
+        enabled=True,
+        hideSensitiveSettings=True,
+        preventDestructiveActions=True,
+        sampleDatasetName="WestLink Commercial Demo Pack",
+    )
+
+
+def _default_security_controls() -> SecurityControlSettings:
+    return SecurityControlSettings(
+        passwordResetFlow="email_link",
+        twoFactorPlaceholder=True,
+        sessionTimeoutMinutes=30,
+        sensitiveActionConfirmation=True,
+        auditTrailEnabled=True,
+    )
+
+
 @router.get("/operations/sites", response_model=List[SiteManagementRecord])
 async def get_site_management(
     db: AsyncSession = Depends(get_db),
@@ -339,6 +843,7 @@ async def get_noc_alerts(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    _ = current_user
     active_clients_result = await db.execute(select(func.count(Client.id)))
     active_clients = active_clients_result.scalar() or 0
     return [
@@ -380,6 +885,7 @@ async def get_usage_analytics(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    _ = current_user
     clients_result = await db.execute(select(Client).order_by(Client.created_at.desc()).limit(3))
     clients = clients_result.scalars().all()
     customer_usage = [
@@ -392,9 +898,7 @@ async def get_usage_analytics(
         for client, usage in zip(clients, [387, 192, 144], strict=False)
     ]
     if not customer_usage:
-      customer_usage = [
-          UsageUserLine(customerId="1", customerName="Demo Customer", usageGb=120, planName="Business 50 Mbps"),
-      ]
+        customer_usage = [UsageUserLine(customerId="1", customerName="Demo Customer", usageGb=120, planName="Business 50 Mbps")]
     return UsageAnalyticsSnapshot(
         totalCapacityMbps=2500,
         peakUsageMbps=1830,
@@ -415,10 +919,11 @@ async def get_sla_reports(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    _ = current_user
     clients_result = await db.execute(select(Client).limit(2))
     clients = clients_result.scalars().all()
     names = [client.name for client in clients] or ["Greenwood Estate HOA", "The Annex Workspace"]
-    reports = [
+    return [
         EnterpriseSlaReport(
             id="sla-1",
             customerName=names[0],
@@ -440,7 +945,6 @@ async def get_sla_reports(
             breachStatus="met",
         ),
     ]
-    return reports
 
 
 @router.get("/procurement/records", response_model=List[ProcurementRecord])
@@ -481,6 +985,7 @@ async def get_expense_breakdown(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    _ = current_user
     expense_total_result = await db.execute(
         select(func.coalesce(func.sum(FinancialTransaction.amount), 0)).where(FinancialTransaction.entry_type == "expense")
     )
@@ -597,6 +1102,7 @@ async def get_system_health(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    _ = current_user
     user_count_result = await db.execute(select(func.count(User.id)))
     payment_failures_result = await db.execute(
         select(func.count(BillingPayment.id)).where(BillingPayment.status != PaymentStatus.PAID)
@@ -619,435 +1125,408 @@ async def get_onboarding_checklist(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    _ = current_user
     clients_result = await db.execute(select(func.count(Client.id)))
     items_result = await db.execute(select(func.count(InventoryItem.id)))
     clients_count = clients_result.scalar() or 0
     items_count = items_result.scalar() or 0
     return [
-        OnboardingChecklist(
-            id="ob-1",
-            title="Company setup",
-            description="Branding, support contacts, billing identity, and tenant profile.",
-            completed=True,
-        ),
-        OnboardingChecklist(
-            id="ob-2",
-            title="Service areas",
-            description="Create estates, streets, POPs, and coverage zones.",
-            completed=True,
-        ),
-        OnboardingChecklist(
-            id="ob-3",
-            title="Internet plans",
-            description="Publish residential, business, and dedicated packages.",
-            completed=True,
-        ),
-        OnboardingChecklist(
-            id="ob-4",
-            title="Users and roles",
-            description="Create admin, NOC, finance, support, and engineer accounts.",
-            completed=False,
-        ),
-        OnboardingChecklist(
-            id="ob-5",
-            title="Payment settings",
-            description="Configure gateway env vars and billing defaults.",
-            completed=False,
-        ),
-        OnboardingChecklist(
-            id="ob-6",
-            title="Map settings",
-            description="Select provider, API env vars, and asset import rules.",
-            completed=items_count > 0,
-        ),
-        OnboardingChecklist(
-            id="ob-7",
-            title="First customer import",
-            description="Import CRM data from CSV or Excel templates.",
-            completed=clients_count > 0,
-        ),
+        OnboardingChecklist(id="ob-1", title="Company setup", description="Branding, support contacts, billing identity, and tenant profile.", completed=True),
+        OnboardingChecklist(id="ob-2", title="Service areas", description="Create estates, streets, POPs, and coverage zones.", completed=True),
+        OnboardingChecklist(id="ob-3", title="Internet plans", description="Publish residential, business, and dedicated packages.", completed=True),
+        OnboardingChecklist(id="ob-4", title="Users and roles", description="Create admin, NOC, finance, support, and engineer accounts.", completed=False),
+        OnboardingChecklist(id="ob-5", title="Payment settings", description="Configure gateway env vars and billing defaults.", completed=False),
+        OnboardingChecklist(id="ob-6", title="Map settings", description="Select provider, API env vars, and asset import rules.", completed=items_count > 0),
+        OnboardingChecklist(id="ob-7", title="First customer import", description="Import CRM data from CSV or Excel templates.", completed=clients_count > 0),
     ]
 
 
 @router.get("/operations/installations", response_model=List[InstallationWorkflowRecord])
-async def get_installation_workflow(
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    clients_result = await db.execute(select(Client).limit(3))
-    clients = clients_result.scalars().all()
-    names = [client.name for client in clients] or ["Greenwood Estate HOA", "Amina Bello", "Favour Clinic"]
-    return [
-        InstallationWorkflowRecord(
-            id="install-1",
-            customerName=names[0],
-            stage="quotation",
-            assignedTo="Tosin A.",
-            dueDate=datetime.utcnow() + timedelta(days=2),
-            notes="Dedicated service quotation awaiting approval.",
-        ),
-        InstallationWorkflowRecord(
-            id="install-2",
-            customerName=names[1 if len(names) > 1 else 0],
-            stage="installation_assigned",
-            assignedTo="Kunle O.",
-            dueDate=datetime.utcnow() + timedelta(days=1),
-            notes="Materials issued and field team scheduled.",
-        ),
-        InstallationWorkflowRecord(
-            id="install-3",
-            customerName=names[-1],
-            stage="testing",
-            assignedTo="Musa J.",
-            dueDate=datetime.utcnow() + timedelta(hours=12),
-            notes="Awaiting final activation and handover.",
-        ),
-    ]
+async def get_installation_workflow(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    _ = current_user
+    return await _list_module_records(
+        db,
+        module=MODULE_INSTALLATIONS,
+        model_cls=InstallationWorkflowRecord,
+        defaults=_default_installations(),
+    )
 
 
 @router.get("/operations/site-surveys", response_model=List[SiteSurveyRecord])
-async def get_site_surveys(
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    _ = db
+async def get_site_surveys(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     _ = current_user
-    return [
-        SiteSurveyRecord(
-            id="survey-1",
-            leadName="Greenwood Estate HOA",
-            location="Greenwood Estate Main Gate",
-            buildingType="estate",
-            distanceFromNodeMeters=180,
-            signalReading="-18.2 dBm",
-            powerReading="Stable mains + inverter",
-            requiredMaterials=["1 Core Drop Cable", "ONU", "Router", "8 Port MST Closure"],
-            installationDifficulty="medium",
-            photos=6,
-            recommendation="approved",
-        ),
-        SiteSurveyRecord(
-            id="survey-2",
-            leadName="Favour Clinic",
-            location="3rd Avenue, Gwarinpa",
-            buildingType="commercial",
-            distanceFromNodeMeters=95,
-            signalReading="-21.0 dBm",
-            powerReading="UPS available",
-            requiredMaterials=["ONU", "Router", "Patch Cord"],
-            installationDifficulty="low",
-            photos=4,
-            recommendation="approved",
-        ),
-    ]
+    return await _list_module_records(
+        db,
+        module=MODULE_SITE_SURVEYS,
+        model_cls=SiteSurveyRecord,
+        defaults=_default_site_surveys(),
+    )
 
 
 @router.get("/operations/fault-workflow", response_model=List[FaultWorkflowTicket])
-async def get_fault_workflow(
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    _ = db
+async def get_fault_workflow(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     _ = current_user
-    return [
-        FaultWorkflowTicket(
-            id="ft-1",
-            customerName="The Annex Workspace",
-            category="degraded_signal",
-            priority="high",
-            affectedService="Business 50 Mbps",
-            assignedTechnician="Sade A.",
-            faultLocation="Admiralty Way distribution segment",
-            diagnosis="High splice loss near closure CL-17.",
-            materialsUsed=["Pigtail", "Splice protector"],
-            resolutionNote="Respliced affected core and restored RX levels.",
-            customerConfirmation="confirmed",
-            closureTime=datetime.utcnow() - timedelta(minutes=35),
-        ),
-        FaultWorkflowTicket(
-            id="ft-2",
-            customerName="Amina Bello",
-            category="no_internet",
-            priority="medium",
-            affectedService="20 Mbps Home",
-            assignedTechnician="Kunle O.",
-            faultLocation="Drop cable from MST-04",
-            diagnosis="Outdoor connector damaged by weather exposure.",
-            materialsUsed=["Fast connector"],
-            customerConfirmation="pending",
-        ),
-    ]
+    return await _list_module_records(
+        db,
+        module=MODULE_FAULT_WORKFLOW,
+        model_cls=FaultWorkflowTicket,
+        defaults=_default_fault_workflow(),
+    )
 
 
 @router.get("/operations/outages", response_model=List[OutageMaintenanceRecord])
-async def get_outages(
+async def get_outages(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    _ = current_user
+    return await _list_module_records(
+        db,
+        module=MODULE_OUTAGES,
+        model_cls=OutageMaintenanceRecord,
+        defaults=_default_outages(),
+    )
+
+
+@router.post("/operations/outages", response_model=OutageMaintenanceRecord, status_code=status.HTTP_201_CREATED)
+async def create_outage(
+    payload: OutageMaintenanceRecord,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    _ = db
-    _ = current_user
-    return [
-        OutageMaintenanceRecord(
-            id="out-1",
-            type="planned_maintenance",
-            title="Lekki POP battery maintenance",
-            affectedAreas=["Lekki Phase 1", "Admiralty Way"],
-            affectedCustomers=48,
-            startTime=datetime.utcnow() + timedelta(hours=18),
-            endTime=datetime.utcnow() + timedelta(hours=20),
-            customerNotice="Brief maintenance window to improve site power resilience.",
-            status="scheduled",
-        ),
-        OutageMaintenanceRecord(
-            id="out-2",
-            type="unplanned_outage",
-            title="Distribution fibre cut near Chevron axis",
-            affectedAreas=["Chevron"],
-            affectedCustomers=21,
-            startTime=datetime.utcnow() - timedelta(hours=4),
-            customerNotice="Emergency outage response underway.",
-            completionReport="Temporary reroute restored services pending permanent civil fix.",
-            status="completed",
-        ),
-    ]
+    if not payload.id:
+        payload.id = f"out-{uuid4().hex[:8]}"
+    return await _create_module_record(
+        db,
+        module=MODULE_OUTAGES,
+        payload=payload,
+        current_user_id=current_user.id,
+        action_type="outage_created",
+        description=f"Created outage or maintenance record '{payload.title}'.",
+    )
+
+
+@router.patch("/operations/outages/{record_id}", response_model=OutageMaintenanceRecord)
+async def update_outage(
+    record_id: str,
+    payload: OutageMaintenanceRecord,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return await _update_module_record(
+        db,
+        module=MODULE_OUTAGES,
+        record_id=record_id,
+        payload=payload,
+        current_user_id=current_user.id,
+        action_type="outage_updated",
+        description=f"Updated outage or maintenance record '{payload.title}'.",
+    )
 
 
 @router.get("/operations/communication-templates", response_model=List[CommunicationTemplateRecord])
-async def get_communication_templates(
+async def get_communication_templates(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    _ = current_user
+    return await _list_module_records(
+        db,
+        module=MODULE_COMMUNICATION_TEMPLATES,
+        model_cls=CommunicationTemplateRecord,
+        defaults=_default_communication_templates(),
+    )
+
+
+@router.post("/operations/communication-templates", response_model=CommunicationTemplateRecord, status_code=status.HTTP_201_CREATED)
+async def create_communication_template(
+    payload: CommunicationTemplateRecord,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    _ = db
-    _ = current_user
-    return [
-        CommunicationTemplateRecord(
-            id="tpl-1",
-            channel="whatsapp",
-            name="payment_reminder",
-            message="Hello {{name}}, your invoice of {{amount}} is due on {{due_date}}.",
-            active=True,
-        ),
-        CommunicationTemplateRecord(
-            id="tpl-2",
-            channel="email",
-            name="welcome_message",
-            subject="Welcome to {{isp_name}}",
-            message="Your service is now active. Plan: {{plan}}, username: {{username}}.",
-            active=True,
-        ),
-        CommunicationTemplateRecord(
-            id="tpl-3",
-            channel="sms",
-            name="outage_notice",
-            message="We are working on a service issue in your area. Updates will follow shortly.",
-            active=True,
-        ),
-    ]
+    if not payload.id:
+        payload.id = f"tpl-{uuid4().hex[:8]}"
+    return await _create_module_record(
+        db,
+        module=MODULE_COMMUNICATION_TEMPLATES,
+        payload=payload,
+        current_user_id=current_user.id,
+        action_type="communication_template_created",
+        description=f"Created communication template '{payload.name}'.",
+    )
+
+
+@router.patch("/operations/communication-templates/{record_id}", response_model=CommunicationTemplateRecord)
+async def update_communication_template(
+    record_id: str,
+    payload: CommunicationTemplateRecord,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return await _update_module_record(
+        db,
+        module=MODULE_COMMUNICATION_TEMPLATES,
+        record_id=record_id,
+        payload=payload,
+        current_user_id=current_user.id,
+        action_type="communication_template_updated",
+        description=f"Updated communication template '{payload.name}'.",
+    )
 
 
 @router.get("/operations/knowledge-base", response_model=List[KnowledgeBaseArticle])
-async def get_knowledge_base(
+async def get_knowledge_base(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    _ = current_user
+    return await _list_module_records(
+        db,
+        module=MODULE_KNOWLEDGE_BASE,
+        model_cls=KnowledgeBaseArticle,
+        defaults=_default_knowledge_base(),
+    )
+
+
+@router.post("/operations/knowledge-base", response_model=KnowledgeBaseArticle, status_code=status.HTTP_201_CREATED)
+async def create_knowledge_base_article(
+    payload: KnowledgeBaseArticle,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    _ = db
-    _ = current_user
-    return [
-        KnowledgeBaseArticle(
-            id="kb-1",
-            category="troubleshooting",
-            title="Weak optical power triage checklist",
-            summary="Validate ONU levels, inspect closure splices, check bends, and compare recent degradation pattern before dispatch.",
-            audience="noc",
-        ),
-        KnowledgeBaseArticle(
-            id="kb-2",
-            category="installation",
-            title="Standard FTTH installation handover procedure",
-            summary="Verify light levels, document router and ONU assets, confirm Wi-Fi, and collect signed completion acknowledgment.",
-            audience="engineer",
-        ),
-        KnowledgeBaseArticle(
-            id="kb-3",
-            category="responses",
-            title="Customer outage response script",
-            summary="Acknowledge complaints professionally, explain outage context, and set expectation on the next update window.",
-            audience="support",
-        ),
-    ]
+    if not payload.id:
+        payload.id = f"kb-{uuid4().hex[:8]}"
+    return await _create_module_record(
+        db,
+        module=MODULE_KNOWLEDGE_BASE,
+        payload=payload,
+        current_user_id=current_user.id,
+        action_type="knowledge_base_article_created",
+        description=f"Created knowledge base article '{payload.title}'.",
+    )
+
+
+@router.patch("/operations/knowledge-base/{record_id}", response_model=KnowledgeBaseArticle)
+async def update_knowledge_base_article(
+    record_id: str,
+    payload: KnowledgeBaseArticle,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return await _update_module_record(
+        db,
+        module=MODULE_KNOWLEDGE_BASE,
+        record_id=record_id,
+        payload=payload,
+        current_user_id=current_user.id,
+        action_type="knowledge_base_article_updated",
+        description=f"Updated knowledge base article '{payload.title}'.",
+    )
 
 
 @router.get("/operations/approvals", response_model=List[ApprovalWorkflowRecord])
-async def get_approval_requests(
+async def get_approval_requests(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    _ = current_user
+    return await _list_module_records(
+        db,
+        module=MODULE_APPROVALS,
+        model_cls=ApprovalWorkflowRecord,
+        defaults=_default_approvals(),
+    )
+
+
+@router.post("/operations/approvals", response_model=ApprovalWorkflowRecord, status_code=status.HTTP_201_CREATED)
+async def create_approval_request(
+    payload: ApprovalWorkflowRecord,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    _ = db
-    _ = current_user
-    return [
-        ApprovalWorkflowRecord(
-            id="apr-1",
-            type="discount",
-            requester="Finance Desk",
-            target="Greenwood Estate HOA onboarding discount",
-            amount=Decimal("150000"),
-            status="pending",
-            requestedAt=datetime.utcnow() - timedelta(hours=3),
-        ),
-        ApprovalWorkflowRecord(
-            id="apr-2",
-            type="large_expense",
-            requester="Operations Manager",
-            target="POP Alpha battery replacement",
-            amount=Decimal("880000"),
-            status="approved",
-            requestedAt=datetime.utcnow() - timedelta(hours=12),
-        ),
-    ]
+    if not payload.id:
+        payload.id = f"apr-{uuid4().hex[:8]}"
+    return await _create_module_record(
+        db,
+        module=MODULE_APPROVALS,
+        payload=payload,
+        current_user_id=current_user.id,
+        action_type="approval_request_created",
+        description=f"Created approval request for '{payload.target}'.",
+    )
+
+
+@router.patch("/operations/approvals/{record_id}", response_model=ApprovalWorkflowRecord)
+async def update_approval_request(
+    record_id: str,
+    payload: ApprovalWorkflowRecord,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return await _update_module_record(
+        db,
+        module=MODULE_APPROVALS,
+        record_id=record_id,
+        payload=payload,
+        current_user_id=current_user.id,
+        action_type="approval_request_updated",
+        description=f"Updated approval request for '{payload.target}'.",
+    )
 
 
 @router.get("/operations/promos", response_model=List[DiscountPromoRecord])
-async def get_discount_promos(
+async def get_discount_promos(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    _ = current_user
+    return await _list_module_records(
+        db,
+        module=MODULE_PROMOS,
+        model_cls=DiscountPromoRecord,
+        defaults=_default_promos(),
+    )
+
+
+@router.post("/operations/promos", response_model=DiscountPromoRecord, status_code=status.HTTP_201_CREATED)
+async def create_discount_promo(
+    payload: DiscountPromoRecord,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    _ = db
-    _ = current_user
-    return [
-        DiscountPromoRecord(
-            id="promo-1",
-            code="ESTATE100",
-            type="fixed",
-            amount=Decimal("100000"),
-            expiryDate=datetime.utcnow() + timedelta(days=21),
-            eligiblePlans=["Dedicated 100 Mbps", "Business 50 Mbps"],
-            approvalStatus="approved",
-            usageCount=3,
-        ),
-        DiscountPromoRecord(
-            id="promo-2",
-            code="WELCOME10",
-            type="percentage",
-            amount=Decimal("10"),
-            expiryDate=datetime.utcnow() + timedelta(days=14),
-            eligiblePlans=["20 Mbps Home", "25 Mbps Home"],
-            approvalStatus="pending",
-            usageCount=0,
-        ),
-    ]
+    if not payload.id:
+        payload.id = f"promo-{uuid4().hex[:8]}"
+    return await _create_module_record(
+        db,
+        module=MODULE_PROMOS,
+        payload=payload,
+        current_user_id=current_user.id,
+        action_type="promo_created",
+        description=f"Created promo '{payload.code}'.",
+    )
+
+
+@router.patch("/operations/promos/{record_id}", response_model=DiscountPromoRecord)
+async def update_discount_promo(
+    record_id: str,
+    payload: DiscountPromoRecord,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return await _update_module_record(
+        db,
+        module=MODULE_PROMOS,
+        record_id=record_id,
+        payload=payload,
+        current_user_id=current_user.id,
+        action_type="promo_updated",
+        description=f"Updated promo '{payload.code}'.",
+    )
 
 
 @router.get("/operations/commissions", response_model=List[CommissionRecord])
-async def get_commissions(
+async def get_commissions(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    _ = current_user
+    return await _list_module_records(
+        db,
+        module=MODULE_COMMISSIONS,
+        model_cls=CommissionRecord,
+        defaults=_default_commissions(),
+    )
+
+
+@router.post("/operations/commissions", response_model=CommissionRecord, status_code=status.HTTP_201_CREATED)
+async def create_commission_record(
+    payload: CommissionRecord,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    _ = db
-    _ = current_user
-    return [
-        CommissionRecord(
-            id="com-1",
-            partnerName="Tosin A.",
-            leadSource="Referral",
-            convertedCustomer="Favour Clinic",
-            planValue=Decimal("125000"),
-            commissionAmount=Decimal("25000"),
-            approvalStatus="approved",
-            payoutStatus="processing",
-        ),
-        CommissionRecord(
-            id="com-2",
-            partnerName="PrimeNet Reseller Desk",
-            leadSource="Estate campaign",
-            convertedCustomer="Greenwood Estate HOA",
-            planValue=Decimal("850000"),
-            commissionAmount=Decimal("95000"),
-            approvalStatus="pending",
-            payoutStatus="pending",
-        ),
-    ]
+    if not payload.id:
+        payload.id = f"com-{uuid4().hex[:8]}"
+    return await _create_module_record(
+        db,
+        module=MODULE_COMMISSIONS,
+        payload=payload,
+        current_user_id=current_user.id,
+        action_type="commission_created",
+        description=f"Created commission record for '{payload.partnerName}'.",
+    )
+
+
+@router.patch("/operations/commissions/{record_id}", response_model=CommissionRecord)
+async def update_commission_record(
+    record_id: str,
+    payload: CommissionRecord,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return await _update_module_record(
+        db,
+        module=MODULE_COMMISSIONS,
+        record_id=record_id,
+        payload=payload,
+        current_user_id=current_user.id,
+        action_type="commission_updated",
+        description=f"Updated commission record for '{payload.partnerName}'.",
+    )
 
 
 @router.get("/operations/churn-retention", response_model=List[ChurnRetentionRecord])
-async def get_churn_retention(
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    _ = db
+async def get_churn_retention(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     _ = current_user
-    return [
-        ChurnRetentionRecord(
-            id="ch-1",
-            customerName="Amina Bello",
-            riskLevel="high",
-            cancellationRequested=False,
-            reasonForLeaving="Repeated service instability",
-            retentionAction="Offer temporary service credit and fast-track field intervention.",
-            winBackStatus="in_progress",
-        ),
-        ChurnRetentionRecord(
-            id="ch-2",
-            customerName="Legacy Prints",
-            riskLevel="medium",
-            cancellationRequested=True,
-            reasonForLeaving="Budget pressure",
-            retentionAction="Proposed downgrade with promo support.",
-            winBackStatus="in_progress",
-        ),
-    ]
+    return await _list_module_records(
+        db,
+        module=MODULE_CHURN_RETENTION,
+        model_cls=ChurnRetentionRecord,
+        defaults=_default_churn_retention(),
+    )
 
 
 @router.get("/operations/import-validation", response_model=List[ImportValidationSummary])
-async def get_import_validation(
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    _ = db
+async def get_import_validation(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     _ = current_user
-    return [
-        ImportValidationSummary(
-            module="customers",
-            totalRows=120,
-            validRows=114,
-            invalidRows=6,
-            sampleErrors=["Duplicate PPPoE username on row 17", "Missing phone number on row 43"],
-        ),
-        ImportValidationSummary(
-            module="inventory",
-            totalRows=42,
-            validRows=39,
-            invalidRows=3,
-            sampleErrors=["Negative stock value on row 9", "Unknown supplier code on row 16"],
-        ),
-    ]
+    return await _list_module_records(
+        db,
+        module=MODULE_IMPORT_VALIDATION,
+        model_cls=ImportValidationSummary,
+        defaults=_default_import_validation(),
+    )
 
 
 @router.get("/operations/demo-mode", response_model=DemoModeSettings)
-async def get_demo_mode(
+async def get_demo_mode(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    _ = current_user
+    return await _get_or_seed_setting(
+        db,
+        setting_key=SETTING_DEMO_MODE,
+        model_cls=DemoModeSettings,
+        default_payload=_default_demo_mode(),
+    )
+
+
+@router.put("/operations/demo-mode", response_model=DemoModeSettings)
+async def update_demo_mode(
+    payload: DemoModeSettings,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    _ = db
-    _ = current_user
-    return DemoModeSettings(
-        enabled=True,
-        hideSensitiveSettings=True,
-        preventDestructiveActions=True,
-        sampleDatasetName="WestLink Commercial Demo Pack",
+    return await _update_setting(
+        db,
+        setting_key=SETTING_DEMO_MODE,
+        payload=payload,
+        current_user_id=current_user.id,
+        action_type="demo_mode_updated",
+        description="Updated demo mode controls.",
     )
 
 
 @router.get("/operations/security-controls", response_model=SecurityControlSettings)
-async def get_security_controls(
+async def get_security_controls(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    _ = current_user
+    return await _get_or_seed_setting(
+        db,
+        setting_key=SETTING_SECURITY_CONTROLS,
+        model_cls=SecurityControlSettings,
+        default_payload=_default_security_controls(),
+    )
+
+
+@router.put("/operations/security-controls", response_model=SecurityControlSettings)
+async def update_security_controls(
+    payload: SecurityControlSettings,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    _ = db
-    _ = current_user
-    return SecurityControlSettings(
-        passwordResetFlow="email_link",
-        twoFactorPlaceholder=True,
-        sessionTimeoutMinutes=30,
-        sensitiveActionConfirmation=True,
-        auditTrailEnabled=True,
+    return await _update_setting(
+        db,
+        setting_key=SETTING_SECURITY_CONTROLS,
+        payload=payload,
+        current_user_id=current_user.id,
+        action_type="security_controls_updated",
+        description="Updated security control settings.",
     )

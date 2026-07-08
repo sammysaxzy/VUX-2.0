@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { MapAccessRole, NasEntry, NotificationRule, ServiceArea, ServicePlan, SettingsTab, TenantProfile } from "@/types";
+import type {
+  DemoModeSettings,
+  MapAccessRole,
+  NasEntry,
+  NotificationRule,
+  SecurityControlSettings,
+  ServiceArea,
+  ServicePlan,
+  SettingsTab,
+  TenantProfile,
+} from "@/types";
 import {
   useCreateNasEntry,
   useCreatePrivilegeAccount,
@@ -22,7 +32,15 @@ import {
   useServiceAreas,
   useTenantProfile,
 } from "@/hooks/api/use-business";
-import { useApprovalRequests, useCommunicationTemplates, useDemoModeSettings, useDiscountPromos, useSecurityControls } from "@/hooks/api/use-operations";
+import {
+  useApprovalRequests,
+  useCommunicationTemplates,
+  useDemoModeSettings,
+  useDiscountPromos,
+  useSaveDemoModeSettings,
+  useSaveSecurityControls,
+  useSecurityControls,
+} from "@/hooks/api/use-operations";
 import { EMPTY_PERMISSIONS, canManagePermissions, flattenPermissionMembers, hasPermission } from "@/lib/permissions";
 import { resolveMapAccess } from "@/lib/map-permissions";
 import { formatRelativeDate, randomId, titleCase } from "@/lib/utils";
@@ -124,11 +142,26 @@ export function SettingsPage() {
   const discountPromosQuery = useDiscountPromos();
   const demoModeQuery = useDemoModeSettings();
   const securityControlsQuery = useSecurityControls();
+  const saveDemoModeMutation = useSaveDemoModeSettings();
+  const saveSecurityControlsMutation = useSaveSecurityControls();
   const logsQuery = useSettingsLogs();
   const setMembers = useAdminStore((state) => state.setMembers);
   const addMember = useAdminStore((state) => state.addMember);
 
   const [companyForm, setCompanyForm] = useState<TenantProfile>({ ...blankCompanyForm, tenantId });
+  const [demoModeForm, setDemoModeForm] = useState<DemoModeSettings>({
+    enabled: true,
+    hideSensitiveSettings: true,
+    preventDestructiveActions: true,
+    sampleDatasetName: "",
+  });
+  const [securityForm, setSecurityForm] = useState<SecurityControlSettings>({
+    passwordResetFlow: "email_link",
+    twoFactorPlaceholder: true,
+    sessionTimeoutMinutes: 30,
+    sensitiveActionConfirmation: true,
+    auditTrailEnabled: true,
+  });
   const [roleModels, setRoleModels] = useState<Record<string, "Role Based" | "Approval Based" | "Hybrid">>({});
   const [profilePermissions, setProfilePermissions] = useState<Record<string, typeof EMPTY_PERMISSIONS>>({});
   const permissionAccess = useMemo(
@@ -143,6 +176,18 @@ export function SettingsPage() {
       setCompanyForm(companyQuery.data);
     }
   }, [companyQuery.data]);
+
+  useEffect(() => {
+    if (demoModeQuery.data) {
+      setDemoModeForm(demoModeQuery.data);
+    }
+  }, [demoModeQuery.data]);
+
+  useEffect(() => {
+    if (securityControlsQuery.data) {
+      setSecurityForm(securityControlsQuery.data);
+    }
+  }, [securityControlsQuery.data]);
 
   useEffect(() => {
     setNotificationForm((current) => ({ ...current, tenantId }));
@@ -295,11 +340,56 @@ export function SettingsPage() {
                 <CardTitle>Commercial Readiness Controls</CardTitle>
                 <CardDescription>Safe demo mode, 2FA placeholder, session handling, sensitive action confirmation, and white-label readiness.</CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <InfoBlock title="Demo Protection" body={demoModeQuery.data?.preventDestructiveActions ? "Destructive actions blocked in demo mode." : "Live mode allows standard actions."} />
-                <InfoBlock title="Hide Sensitive Settings" body={demoModeQuery.data?.hideSensitiveSettings ? "Sensitive controls are hidden during presentations." : "Sensitive controls visible to admins."} />
-                <InfoBlock title="2FA Placeholder" body={securityControlsQuery.data?.twoFactorPlaceholder ? "Prepared for future rollout." : "Not enabled"} />
-                <InfoBlock title="Sensitive Actions" body={securityControlsQuery.data?.sensitiveActionConfirmation ? "Refunds, deletions, write-offs, and changes require confirmation." : "Confirmation disabled"} />
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <InfoBlock title="Demo Protection" body={demoModeForm.preventDestructiveActions ? "Destructive actions blocked in demo mode." : "Live mode allows standard actions."} />
+                  <InfoBlock title="Hide Sensitive Settings" body={demoModeForm.hideSensitiveSettings ? "Sensitive controls are hidden during presentations." : "Sensitive controls visible to admins."} />
+                  <InfoBlock title="2FA Placeholder" body={securityForm.twoFactorPlaceholder ? "Prepared for future rollout." : "Not enabled"} />
+                  <InfoBlock title="Sensitive Actions" body={securityForm.sensitiveActionConfirmation ? "Refunds, deletions, write-offs, and changes require confirmation." : "Confirmation disabled"} />
+                </div>
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <div className="space-y-3 rounded-2xl border border-border/70 p-4">
+                    <Field label="Demo Dataset"><Input value={demoModeForm.sampleDatasetName} onChange={(e) => setDemoModeForm((p) => ({ ...p, sampleDatasetName: e.target.value }))} /></Field>
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 px-3 py-2">
+                      <div><p className="text-sm font-medium">Enable Demo Mode</p></div>
+                      <Switch checked={demoModeForm.enabled} onCheckedChange={(checked) => setDemoModeForm((p) => ({ ...p, enabled: checked }))} />
+                    </div>
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 px-3 py-2">
+                      <div><p className="text-sm font-medium">Hide Sensitive Settings</p></div>
+                      <Switch checked={demoModeForm.hideSensitiveSettings} onCheckedChange={(checked) => setDemoModeForm((p) => ({ ...p, hideSensitiveSettings: checked }))} />
+                    </div>
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 px-3 py-2">
+                      <div><p className="text-sm font-medium">Block Destructive Actions</p></div>
+                      <Switch checked={demoModeForm.preventDestructiveActions} onCheckedChange={(checked) => setDemoModeForm((p) => ({ ...p, preventDestructiveActions: checked }))} />
+                    </div>
+                    <Button onClick={() => saveDemoModeMutation.mutate(demoModeForm)} disabled={saveDemoModeMutation.isPending}>
+                      {saveDemoModeMutation.isPending ? "Saving..." : "Save Demo Controls"}
+                    </Button>
+                  </div>
+                  <div className="space-y-3 rounded-2xl border border-border/70 p-4">
+                    <Field label="Password Reset Flow">
+                      <Select value={securityForm.passwordResetFlow} onChange={(e) => setSecurityForm((p) => ({ ...p, passwordResetFlow: e.target.value as typeof securityForm.passwordResetFlow }))}>
+                        <option value="email_link">email_link</option>
+                        <option value="admin_only">admin_only</option>
+                        <option value="disabled">disabled</option>
+                      </Select>
+                    </Field>
+                    <Field label="Session Timeout (minutes)">
+                      <Input type="number" value={securityForm.sessionTimeoutMinutes} onChange={(e) => setSecurityForm((p) => ({ ...p, sessionTimeoutMinutes: Number(e.target.value) || 0 }))} />
+                    </Field>
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 px-3 py-2">
+                      <div><p className="text-sm font-medium">Sensitive Action Confirmation</p></div>
+                      <Switch checked={securityForm.sensitiveActionConfirmation} onCheckedChange={(checked) => setSecurityForm((p) => ({ ...p, sensitiveActionConfirmation: checked }))} />
+                    </div>
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 px-3 py-2">
+                      <div><p className="text-sm font-medium">Audit Trail Enabled</p></div>
+                      <Switch checked={securityForm.auditTrailEnabled} onCheckedChange={(checked) => setSecurityForm((p) => ({ ...p, auditTrailEnabled: checked }))} />
+                    </div>
+                    <Button onClick={() => saveSecurityControlsMutation.mutate(securityForm)} disabled={saveSecurityControlsMutation.isPending}>
+                      {saveSecurityControlsMutation.isPending ? "Saving..." : "Save Security Controls"}
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>

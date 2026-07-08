@@ -785,7 +785,7 @@ const mockOutages: OutageMaintenanceRecord[] = [
   },
 ];
 
-const mockCommunicationTemplates: CommunicationTemplateRecord[] = [
+let mockCommunicationTemplates: CommunicationTemplateRecord[] = [
   {
     id: "tpl-1",
     channel: "whatsapp",
@@ -810,7 +810,7 @@ const mockCommunicationTemplates: CommunicationTemplateRecord[] = [
   },
 ];
 
-const mockKnowledgeBase: KnowledgeBaseArticle[] = [
+let mockKnowledgeBase: KnowledgeBaseArticle[] = [
   {
     id: "kb-1",
     category: "troubleshooting",
@@ -834,7 +834,7 @@ const mockKnowledgeBase: KnowledgeBaseArticle[] = [
   },
 ];
 
-const mockApprovalRequests: ApprovalWorkflowRecord[] = [
+let mockApprovalRequests: ApprovalWorkflowRecord[] = [
   {
     id: "apr-1",
     type: "discount",
@@ -855,7 +855,7 @@ const mockApprovalRequests: ApprovalWorkflowRecord[] = [
   },
 ];
 
-const mockDiscountPromos: DiscountPromoRecord[] = [
+let mockDiscountPromos: DiscountPromoRecord[] = [
   {
     id: "promo-1",
     code: "ESTATE100",
@@ -878,7 +878,7 @@ const mockDiscountPromos: DiscountPromoRecord[] = [
   },
 ];
 
-const mockCommissionRecords: CommissionRecord[] = [
+let mockCommissionRecords: CommissionRecord[] = [
   {
     id: "com-1",
     partnerName: "Tosin A.",
@@ -939,14 +939,14 @@ const mockImportValidation: ImportValidationSummary[] = [
   },
 ];
 
-const mockDemoMode: DemoModeSettings = {
+let mockDemoMode: DemoModeSettings = {
   enabled: true,
   hideSensitiveSettings: true,
   preventDestructiveActions: true,
   sampleDatasetName: "WestLink Commercial Demo Pack",
 };
 
-const mockSecurityControls: SecurityControlSettings = {
+let mockSecurityControls: SecurityControlSettings = {
   passwordResetFlow: "email_link",
   twoFactorPlaceholder: true,
   sessionTimeoutMinutes: 30,
@@ -2540,12 +2540,64 @@ export const apiClient = {
     return data;
   },
 
+  async saveCommunicationTemplate(
+    payload: CommunicationTemplateRecord,
+    tenantId: string,
+    token?: string,
+  ): Promise<CommunicationTemplateRecord> {
+    if (USE_MOCKS) {
+      await sleep(140);
+      const nextPayload = payload.id ? payload : { ...payload, id: randomId("tpl") };
+      const existingIndex = mockCommunicationTemplates.findIndex((entry) => entry.id === nextPayload.id);
+      if (existingIndex >= 0) {
+        mockCommunicationTemplates[existingIndex] = nextPayload;
+      } else {
+        mockCommunicationTemplates = [nextPayload, ...mockCommunicationTemplates];
+      }
+      return nextPayload;
+    }
+    if (payload.id) {
+      const { data } = await api.patch<CommunicationTemplateRecord>(`/operations/communication-templates/${payload.id}`, payload, {
+        headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+      });
+      return data;
+    }
+    const { data } = await api.post<CommunicationTemplateRecord>("/operations/communication-templates", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
   async getKnowledgeBase(tenantId: string, token?: string): Promise<KnowledgeBaseArticle[]> {
     if (USE_MOCKS) {
       await sleep(100);
       return mockKnowledgeBase;
     }
     const { data } = await api.get<KnowledgeBaseArticle[]>("/operations/knowledge-base", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async saveKnowledgeBaseArticle(payload: KnowledgeBaseArticle, tenantId: string, token?: string): Promise<KnowledgeBaseArticle> {
+    if (USE_MOCKS) {
+      await sleep(140);
+      const nextPayload = payload.id ? payload : { ...payload, id: randomId("kb") };
+      const existingIndex = mockKnowledgeBase.findIndex((entry) => entry.id === nextPayload.id);
+      if (existingIndex >= 0) {
+        mockKnowledgeBase[existingIndex] = nextPayload;
+      } else {
+        mockKnowledgeBase = [nextPayload, ...mockKnowledgeBase];
+      }
+      return nextPayload;
+    }
+    if (payload.id) {
+      const { data } = await api.patch<KnowledgeBaseArticle>(`/operations/knowledge-base/${payload.id}`, payload, {
+        headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+      });
+      return data;
+    }
+    const { data } = await api.post<KnowledgeBaseArticle>("/operations/knowledge-base", payload, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;
@@ -2562,6 +2614,34 @@ export const apiClient = {
     return data;
   },
 
+  async saveApprovalRequest(
+    payload: ApprovalWorkflowRecord,
+    tenantId: string,
+    token?: string,
+  ): Promise<ApprovalWorkflowRecord> {
+    if (USE_MOCKS) {
+      await sleep(140);
+      const nextPayload = payload.id ? payload : { ...payload, id: randomId("apr") };
+      const existingIndex = mockApprovalRequests.findIndex((entry) => entry.id === nextPayload.id);
+      if (existingIndex >= 0) {
+        mockApprovalRequests[existingIndex] = nextPayload;
+      } else {
+        mockApprovalRequests = [nextPayload, ...mockApprovalRequests];
+      }
+      return nextPayload;
+    }
+    if (payload.id) {
+      const { data } = await api.patch<ApprovalWorkflowRecord>(`/operations/approvals/${payload.id}`, payload, {
+        headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+      });
+      return data;
+    }
+    const { data } = await api.post<ApprovalWorkflowRecord>("/operations/approvals", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
   async getDiscountPromos(tenantId: string, token?: string): Promise<DiscountPromoRecord[]> {
     if (USE_MOCKS) {
       await sleep(100);
@@ -2573,12 +2653,60 @@ export const apiClient = {
     return data;
   },
 
+  async saveDiscountPromo(payload: DiscountPromoRecord, tenantId: string, token?: string): Promise<DiscountPromoRecord> {
+    if (USE_MOCKS) {
+      await sleep(140);
+      const nextPayload = payload.id ? payload : { ...payload, id: randomId("promo") };
+      const existingIndex = mockDiscountPromos.findIndex((entry) => entry.id === nextPayload.id);
+      if (existingIndex >= 0) {
+        mockDiscountPromos[existingIndex] = nextPayload;
+      } else {
+        mockDiscountPromos = [nextPayload, ...mockDiscountPromos];
+      }
+      return nextPayload;
+    }
+    if (payload.id) {
+      const { data } = await api.patch<DiscountPromoRecord>(`/operations/promos/${payload.id}`, payload, {
+        headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+      });
+      return data;
+    }
+    const { data } = await api.post<DiscountPromoRecord>("/operations/promos", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
   async getCommissionRecords(tenantId: string, token?: string): Promise<CommissionRecord[]> {
     if (USE_MOCKS) {
       await sleep(100);
       return mockCommissionRecords;
     }
     const { data } = await api.get<CommissionRecord[]>("/operations/commissions", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async saveCommissionRecord(payload: CommissionRecord, tenantId: string, token?: string): Promise<CommissionRecord> {
+    if (USE_MOCKS) {
+      await sleep(140);
+      const nextPayload = payload.id ? payload : { ...payload, id: randomId("com") };
+      const existingIndex = mockCommissionRecords.findIndex((entry) => entry.id === nextPayload.id);
+      if (existingIndex >= 0) {
+        mockCommissionRecords[existingIndex] = nextPayload;
+      } else {
+        mockCommissionRecords = [nextPayload, ...mockCommissionRecords];
+      }
+      return nextPayload;
+    }
+    if (payload.id) {
+      const { data } = await api.patch<CommissionRecord>(`/operations/commissions/${payload.id}`, payload, {
+        headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+      });
+      return data;
+    }
+    const { data } = await api.post<CommissionRecord>("/operations/commissions", payload, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;
@@ -2617,12 +2745,36 @@ export const apiClient = {
     return data;
   },
 
+  async updateDemoModeSettings(payload: DemoModeSettings, tenantId: string, token?: string): Promise<DemoModeSettings> {
+    if (USE_MOCKS) {
+      await sleep(140);
+      mockDemoMode = payload;
+      return payload;
+    }
+    const { data } = await api.put<DemoModeSettings>("/operations/demo-mode", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
   async getSecurityControls(tenantId: string, token?: string): Promise<SecurityControlSettings> {
     if (USE_MOCKS) {
       await sleep(100);
       return mockSecurityControls;
     }
     const { data } = await api.get<SecurityControlSettings>("/operations/security-controls", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async updateSecurityControls(payload: SecurityControlSettings, tenantId: string, token?: string): Promise<SecurityControlSettings> {
+    if (USE_MOCKS) {
+      await sleep(140);
+      mockSecurityControls = payload;
+      return payload;
+    }
+    const { data } = await api.put<SecurityControlSettings>("/operations/security-controls", payload, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;

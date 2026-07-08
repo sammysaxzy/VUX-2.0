@@ -774,6 +774,39 @@ class WorkOrderMaterial(Base):
     inventory_movement = relationship("InventoryMovement")
 
 
+class OperationRecord(Base):
+    __tablename__ = "operation_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    module = Column(String(100), index=True, nullable=False)
+    record_key = Column(String(100), unique=True, index=True, nullable=False)
+    title = Column(String(255))
+    status = Column(String(50))
+    payload = Column(JSON, default=dict, nullable=False)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    updated_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    client = relationship("Client")
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
+    updated_by = relationship("User", foreign_keys=[updated_by_user_id])
+
+
+class OperationSetting(Base):
+    __tablename__ = "operation_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    setting_key = Column(String(100), unique=True, index=True, nullable=False)
+    payload = Column(JSON, default=dict, nullable=False)
+    updated_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    updated_by = relationship("User", foreign_keys=[updated_by_user_id])
+
+
 # Standard Fiber Color Codes
 FIBER_COLORS = {
     1: "Blue",
