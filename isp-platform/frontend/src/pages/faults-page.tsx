@@ -3,6 +3,7 @@ import { AlertTriangle, Pencil, PlusCircle, Trash2 } from "lucide-react";
 import { useCustomers } from "@/hooks/api/use-customers";
 import { useDeleteFault, useFaults, useReportFault, useUpdateFault } from "@/hooks/api/use-faults";
 import { useFibreCables, useNetworkNodes } from "@/hooks/api/use-network";
+import { useCommunicationTemplates, useFaultWorkflowTickets, useOutageMaintenance } from "@/hooks/api/use-operations";
 import { getFaultImpact } from "@/lib/isp";
 import { formatDateTimeOrDash, titleCase } from "@/lib/utils";
 import { FaultReportDialog } from "@/components/faults/fault-report-dialog";
@@ -17,6 +18,9 @@ export function FaultsPage() {
   const { data: nodes, isLoading: nodesLoading } = useNetworkNodes();
   const { data: cables, isLoading: cableLoading } = useFibreCables();
   const { data: customers, isLoading: customerLoading } = useCustomers();
+  const faultWorkflow = useFaultWorkflowTickets();
+  const outageMaintenance = useOutageMaintenance();
+  const templates = useCommunicationTemplates();
   const reportFault = useReportFault();
   const updateFault = useUpdateFault();
   const deleteFault = useDeleteFault();
@@ -44,7 +48,19 @@ export function FaultsPage() {
     [customers],
   );
 
-  if (faultLoading || nodesLoading || cableLoading || customerLoading || !faults || !nodes || !cables || !customers) return <PageSkeleton />;
+  if (
+    faultLoading ||
+    nodesLoading ||
+    cableLoading ||
+    customerLoading ||
+    faultWorkflow.isLoading ||
+    outageMaintenance.isLoading ||
+    templates.isLoading ||
+    !faults ||
+    !nodes ||
+    !cables ||
+    !customers
+  ) return <PageSkeleton />;
 
   return (
     <div className="space-y-5 animate-fade-up">
@@ -168,6 +184,67 @@ export function FaultsPage() {
               <p className="font-medium">Workflow</p>
               <p className="mt-2 text-muted-foreground">Receive complaint, validate customer identity, open ticket, route to customer care or NOC, then escalate to management when SLA or severity thresholds are exceeded.</p>
             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1fr_1fr_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Fault Ticket Workflow</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(faultWorkflow.data ?? []).map((ticket) => (
+              <div key={ticket.id} className="rounded-2xl border border-border/70 p-4 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{ticket.customerName}</p>
+                  <Badge variant={ticket.priority === "critical" || ticket.priority === "high" ? "danger" : ticket.priority === "medium" ? "warning" : "outline"}>
+                    {ticket.priority}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-muted-foreground">{ticket.category.replace(/_/g, " ")}</p>
+                <p className="mt-1">Diagnosis: {ticket.diagnosis ?? "Pending triage"}</p>
+                <p>Customer confirmation: {ticket.customerConfirmation}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Outage / Maintenance</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(outageMaintenance.data ?? []).map((entry) => (
+              <div key={entry.id} className="rounded-2xl border border-border/70 p-4 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{entry.title}</p>
+                  <Badge variant={entry.status === "completed" ? "success" : entry.status === "in_progress" ? "warning" : "outline"}>
+                    {entry.status.replace(/_/g, " ")}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-muted-foreground">{entry.type.replace(/_/g, " ")}</p>
+                <p className="mt-1">{entry.affectedCustomers} affected customers</p>
+                <p className="mt-1 text-xs text-muted-foreground">{entry.customerNotice}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Communication Templates</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(templates.data ?? []).map((template) => (
+              <div key={template.id} className="rounded-2xl border border-border/70 p-4 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{template.name.replace(/_/g, " ")}</p>
+                  <Badge variant={template.active ? "success" : "outline"}>{template.channel}</Badge>
+                </div>
+                <p className="mt-2 text-muted-foreground">{template.message}</p>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>

@@ -250,6 +250,91 @@ export function CustomerProfilePage() {
           </CardContent>
         </Card>
       </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1fr_1fr_1fr_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>ONU / Router Asset History</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(customer.deviceAssignments ?? []).map((device) => (
+              <div key={device.id} className="rounded-2xl border border-border/70 p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{device.deviceType.replace(/_/g, " ")}</p>
+                  <Badge variant={device.status === "assigned" ? "success" : device.status === "faulty" || device.status === "damaged" ? "danger" : "warning"}>
+                    {device.status.replace(/_/g, " ")}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-muted-foreground">{device.model}</p>
+                <p>SN: {device.serialNumber}</p>
+                <p>MAC: {device.macAddress ?? "Not captured"}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Plan Upgrade / Downgrade</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(customer.planChangeHistory ?? []).map((change) => (
+              <div key={change.id} className="rounded-2xl border border-border/70 p-3 text-sm">
+                <p className="font-medium">{change.oldPlan} to {change.newPlan}</p>
+                <p className="mt-1 text-muted-foreground">{change.paymentAdjustment}</p>
+                <p className="mt-1">Difference: {formatCurrency(change.priceDifference)}</p>
+                <Badge variant={change.approvalStatus === "approved" ? "success" : change.approvalStatus === "rejected" ? "danger" : "warning"}>
+                  {change.approvalStatus}
+                </Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Suspension / Renewal</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {(customer.suspensionHistory ?? []).map((entry) => (
+              <div key={entry.id} className="rounded-2xl border border-border/70 p-3">
+                <p className="font-medium">{entry.reason}</p>
+                <p className="mt-1 text-muted-foreground">By {entry.suspendedBy} on {formatDateOrDash(entry.suspensionDate)}</p>
+              </div>
+            ))}
+            {(customer.contractRenewals ?? []).map((renewal) => (
+              <div key={renewal.id} className="rounded-2xl border border-border/70 p-3">
+                <p className="font-medium">Contract renewal</p>
+                <p className="mt-1 text-muted-foreground">{formatDateOrDash(renewal.contractStartDate)} to {formatDateOrDash(renewal.contractEndDate)}</p>
+                <p>Account manager: {renewal.accountManager}</p>
+                <Badge variant={renewal.renewalStatus === "renewed" ? "success" : renewal.renewalStatus === "expired" ? "danger" : "warning"}>
+                  {renewal.renewalStatus}
+                </Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Customer Feedback</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(customer.feedback ?? []).map((entry) => (
+              <div key={entry.id} className="rounded-2xl border border-border/70 p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{entry.source}</p>
+                  <Badge variant={entry.rating >= 4 ? "success" : entry.rating <= 2 ? "danger" : "warning"}>
+                    {entry.rating}/5
+                  </Badge>
+                </div>
+                <p className="mt-1 text-muted-foreground">{entry.comment}</p>
+                <p className="mt-1">Satisfaction score: {entry.satisfactionScore}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

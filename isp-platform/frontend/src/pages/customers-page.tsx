@@ -6,6 +6,7 @@ import { formatCurrency } from "@/lib/utils";
 import type { Customer } from "@/types";
 import { useCustomers, useDeleteCustomer, useExportCustomers, useSaveCustomer } from "@/hooks/api/use-customers";
 import { useFibreCables, useNetworkNodes } from "@/hooks/api/use-network";
+import { useChurnRetention, useImportValidationSummaries, useInstallationWorkflow, useSiteSurveys } from "@/hooks/api/use-operations";
 import { useAppStore, useTenantId } from "@/store/app-store";
 import { CustomerForm } from "@/components/customers/customer-form";
 import { CustomerTable } from "@/components/customers/customer-table";
@@ -27,6 +28,10 @@ export function CustomersPage() {
   const saveCustomer = useSaveCustomer();
   const deleteCustomer = useDeleteCustomer();
   const exportCustomersMutation = useExportCustomers();
+  const installationWorkflow = useInstallationWorkflow();
+  const siteSurveys = useSiteSurveys();
+  const churnRetention = useChurnRetention();
+  const importValidation = useImportValidationSummaries();
   const [openDrawer, setOpenDrawer] = useState(false);
   const [activeCustomer, setActiveCustomer] = useState<Customer | undefined>();
   const canViewCustomers = hasPermission(user, "view_customers");
@@ -59,7 +64,18 @@ export function CustomersPage() {
     );
   }
 
-  if (customerLoading || nodesLoading || cablesLoading || !nodes || !cables || !customers) {
+  if (
+    customerLoading ||
+    nodesLoading ||
+    cablesLoading ||
+    installationWorkflow.isLoading ||
+    siteSurveys.isLoading ||
+    churnRetention.isLoading ||
+    importValidation.isLoading ||
+    !nodes ||
+    !cables ||
+    !customers
+  ) {
     return <PageSkeleton />;
   }
 
@@ -154,6 +170,76 @@ export function CustomersPage() {
             {priorityCustomers.length === 0 ? (
               <p className="text-sm text-muted-foreground">All customers are current and connected.</p>
             ) : null}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr_0.9fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Customer Installation Workflow</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(installationWorkflow.data ?? []).map((entry) => (
+              <div key={entry.id} className="rounded-2xl border border-border/70 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium">{entry.customerName}</p>
+                    <p className="text-xs text-muted-foreground">{entry.assignedTo ?? "Unassigned"}</p>
+                  </div>
+                  <Badge variant={entry.stage === "activation" || entry.stage === "handover" ? "success" : "warning"}>
+                    {entry.stage.replace(/_/g, " ")}
+                  </Badge>
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">{entry.notes ?? "Workflow progressing through install lifecycle."}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Site Survey Module</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(siteSurveys.data ?? []).map((survey) => (
+              <div key={survey.id} className="rounded-2xl border border-border/70 p-4 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{survey.leadName}</p>
+                  <Badge variant={survey.recommendation === "approved" ? "success" : survey.recommendation === "not_feasible" ? "danger" : "warning"}>
+                    {survey.recommendation.replace(/_/g, " ")}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-muted-foreground">{survey.location}</p>
+                <p className="mt-2">Distance from MST/closure: {survey.distanceFromNodeMeters} m</p>
+                <p>Difficulty: {survey.installationDifficulty}</p>
+                <p>Photos: {survey.photos}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Churn / Import Validation</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(churnRetention.data ?? []).slice(0, 2).map((entry) => (
+              <div key={entry.id} className="rounded-2xl border border-border/70 p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{entry.customerName}</p>
+                  <Badge variant={entry.riskLevel === "high" ? "danger" : entry.riskLevel === "medium" ? "warning" : "outline"}>{entry.riskLevel}</Badge>
+                </div>
+                <p className="mt-1 text-muted-foreground">{entry.retentionAction ?? "No action recorded yet."}</p>
+              </div>
+            ))}
+            {(importValidation.data ?? []).map((summary) => (
+              <div key={summary.module} className="rounded-2xl border border-border/70 p-3 text-sm">
+                <p className="font-medium capitalize">{summary.module} import validation</p>
+                <p className="mt-1 text-muted-foreground">{summary.validRows}/{summary.totalRows} valid rows, {summary.invalidRows} blocked.</p>
+                <p className="mt-1 text-xs text-muted-foreground">{summary.sampleErrors[0]}</p>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>

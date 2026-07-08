@@ -22,6 +22,7 @@ import {
   useServiceAreas,
   useTenantProfile,
 } from "@/hooks/api/use-business";
+import { useApprovalRequests, useCommunicationTemplates, useDemoModeSettings, useDiscountPromos, useSecurityControls } from "@/hooks/api/use-operations";
 import { EMPTY_PERMISSIONS, canManagePermissions, flattenPermissionMembers, hasPermission } from "@/lib/permissions";
 import { resolveMapAccess } from "@/lib/map-permissions";
 import { formatRelativeDate, randomId, titleCase } from "@/lib/utils";
@@ -118,6 +119,11 @@ export function SettingsPage() {
   const saveNotificationMutation = useSaveNotificationRule();
   const serviceAreasQuery = useServiceAreas();
   const createServiceAreaMutation = useCreateServiceArea();
+  const communicationTemplatesQuery = useCommunicationTemplates();
+  const approvalRequestsQuery = useApprovalRequests();
+  const discountPromosQuery = useDiscountPromos();
+  const demoModeQuery = useDemoModeSettings();
+  const securityControlsQuery = useSecurityControls();
   const logsQuery = useSettingsLogs();
   const setMembers = useAdminStore((state) => state.setMembers);
   const addMember = useAdminStore((state) => state.addMember);
@@ -278,6 +284,22 @@ export function SettingsPage() {
                 <InfoBlock title="Tenant ID" body={companyForm.tenantId} />
                 <InfoBlock title="Data Scope" body="Customers, plans, billing, tickets, inventory, coverage, and settings are resolved per tenant ID." />
                 <InfoBlock title="Presentation Note" body="Log in with a different tenant ID to demo another ISP brand and administrative context." />
+                <InfoBlock title="White-label Branding" body={`Set branded portal identity, invoice appearance, support contact details, and logo for ${companyForm.companyName}.`} />
+                <InfoBlock title="Demo Mode" body={demoModeQuery.data?.enabled ? `${demoModeQuery.data.sampleDatasetName} is active and destructive actions are blocked.` : "Demo mode disabled."} />
+                <InfoBlock title="Security Controls" body={`Session timeout ${securityControlsQuery.data?.sessionTimeoutMinutes ?? 0} minutes, password reset ${securityControlsQuery.data?.passwordResetFlow?.replace(/_/g, " ") ?? "pending"}, audit trail ${securityControlsQuery.data?.auditTrailEnabled ? "enabled" : "disabled"}.`} />
+              </CardContent>
+            </Card>
+
+            <Card className="xl:col-span-2">
+              <CardHeader>
+                <CardTitle>Commercial Readiness Controls</CardTitle>
+                <CardDescription>Safe demo mode, 2FA placeholder, session handling, sensitive action confirmation, and white-label readiness.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <InfoBlock title="Demo Protection" body={demoModeQuery.data?.preventDestructiveActions ? "Destructive actions blocked in demo mode." : "Live mode allows standard actions."} />
+                <InfoBlock title="Hide Sensitive Settings" body={demoModeQuery.data?.hideSensitiveSettings ? "Sensitive controls are hidden during presentations." : "Sensitive controls visible to admins."} />
+                <InfoBlock title="2FA Placeholder" body={securityControlsQuery.data?.twoFactorPlaceholder ? "Prepared for future rollout." : "Not enabled"} />
+                <InfoBlock title="Sensitive Actions" body={securityControlsQuery.data?.sensitiveActionConfirmation ? "Refunds, deletions, write-offs, and changes require confirmation." : "Confirmation disabled"} />
               </CardContent>
             </Card>
           </div>
@@ -427,6 +449,38 @@ export function SettingsPage() {
                 <Button onClick={() => saveNotificationMutation.mutate({ ...notificationForm, id: notificationForm.id || randomId("notify"), tenantId })} disabled={saveNotificationMutation.isPending}>
                   {saveNotificationMutation.isPending ? "Saving..." : "Save Rule"}
                 </Button>
+              </CardContent>
+            </Card>
+            <Card className="xl:col-span-2">
+              <CardHeader>
+                <CardTitle>Templates, Promos & Approvals</CardTitle>
+                <CardDescription>Customer communication templates, discount governance, and approval workflow for sensitive commercial actions.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4 xl:grid-cols-3">
+                <div className="space-y-3">
+                  {(communicationTemplatesQuery.data ?? []).slice(0, 3).map((template) => (
+                    <div key={template.id} className="rounded-xl border border-border/70 p-3 text-sm">
+                      <p className="font-medium">{template.name.replace(/_/g, " ")}</p>
+                      <p className="mt-1 text-muted-foreground">{template.channel}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-3">
+                  {(discountPromosQuery.data ?? []).slice(0, 3).map((promo) => (
+                    <div key={promo.id} className="rounded-xl border border-border/70 p-3 text-sm">
+                      <p className="font-medium">{promo.code}</p>
+                      <p className="mt-1 text-muted-foreground">{promo.type} | {promo.amount}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-3">
+                  {(approvalRequestsQuery.data ?? []).slice(0, 3).map((request) => (
+                    <div key={request.id} className="rounded-xl border border-border/70 p-3 text-sm">
+                      <p className="font-medium">{request.type.replace(/_/g, " ")}</p>
+                      <p className="mt-1 text-muted-foreground">{request.requester}</p>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           </div>

@@ -14,7 +14,13 @@ import type {
   CustomerSlaMetrics,
   CustomerTicket,
   CustomerTicketCategory,
+  CommunicationTemplateRecord,
+  CommissionRecord,
+  ChurnRetentionRecord,
   EnterpriseSlaReport,
+  DemoModeSettings,
+  DeviceAssignmentRecord,
+  DiscountPromoRecord,
   ExpenseSummaryLine,
   OnuTelemetryPayload,
   EngineerActivity,
@@ -28,7 +34,10 @@ import type {
   InventorySummary,
   InventoryPurchase,
   IntegrationService,
+  ImportValidationSummary,
+  InstallationWorkflowRecord,
   KpiSnapshot,
+  KnowledgeBaseArticle,
   Lead,
   NasEntry,
   NocAlert,
@@ -42,8 +51,10 @@ import type {
   RadiusSession,
   RadiusUser,
   ResellerAgentRecord,
+  SecurityControlSettings,
   ServiceArea,
   ServicePlan,
+  SiteSurveyRecord,
   SiteManagementRecord,
   StockLocationType,
   StockMovementType,
@@ -54,6 +65,13 @@ import type {
   TenantBranding,
   User,
   UsageAnalyticsSnapshot,
+  FaultWorkflowTicket,
+  OutageMaintenanceRecord,
+  ApprovalWorkflowRecord,
+  PlanChangeRecord,
+  SuspensionWorkflowRecord,
+  ContractRenewalRecord,
+  CustomerFeedbackRecord,
   Zone,
   UsageSnapshot,
   WorkOrder,
@@ -658,6 +676,284 @@ const mockOnboardingChecklist: OnboardingChecklist[] = [
   { id: "ob-7", title: "First customer import", description: "Import CRM data from CSV or Excel templates.", completed: false },
 ];
 
+const mockInstallationWorkflow: InstallationWorkflowRecord[] = [
+  {
+    id: "install-1",
+    customerName: "Greenwood Estate HOA",
+    stage: "quotation",
+    assignedTo: "Tosin A.",
+    dueDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 2).toISOString(),
+    notes: "Dedicated 100 Mbps quotation awaiting commercial sign-off.",
+  },
+  {
+    id: "install-2",
+    customerName: "Amina Bello",
+    stage: "installation_assigned",
+    assignedTo: "Kunle O.",
+    dueDate: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+    notes: "Materials issued for MST drop and ONU install.",
+  },
+  {
+    id: "install-3",
+    customerName: "Favour Clinic",
+    stage: "testing",
+    assignedTo: "Musa J.",
+    dueDate: new Date(Date.now() + 1000 * 60 * 60 * 12).toISOString(),
+  },
+];
+
+const mockSiteSurveys: SiteSurveyRecord[] = [
+  {
+    id: "survey-1",
+    leadName: "Greenwood Estate HOA",
+    location: "Greenwood Estate Main Gate",
+    buildingType: "estate",
+    distanceFromNodeMeters: 180,
+    signalReading: "-18.2 dBm",
+    powerReading: "Stable mains + inverter",
+    requiredMaterials: ["1 Core Drop Cable", "ONU", "Router", "8 Port MST Closure"],
+    installationDifficulty: "medium",
+    photos: 6,
+    recommendation: "approved",
+  },
+  {
+    id: "survey-2",
+    leadName: "Favour Clinic",
+    location: "3rd Avenue, Gwarinpa",
+    buildingType: "commercial",
+    distanceFromNodeMeters: 95,
+    signalReading: "-21.0 dBm",
+    powerReading: "UPS available",
+    requiredMaterials: ["ONU", "Router", "Patch Cord"],
+    installationDifficulty: "low",
+    photos: 4,
+    recommendation: "approved",
+  },
+];
+
+const mockFaultWorkflowTickets: FaultWorkflowTicket[] = [
+  {
+    id: "ft-1",
+    customerName: "The Annex Workspace",
+    category: "degraded_signal",
+    priority: "high",
+    affectedService: "Business 50 Mbps",
+    assignedTechnician: "Sade A.",
+    faultLocation: "Admiralty Way distribution segment",
+    diagnosis: "High splice loss near closure CL-17.",
+    materialsUsed: ["Pigtail", "Splice protector"],
+    resolutionNote: "Respliced affected core and restored RX levels.",
+    customerConfirmation: "confirmed",
+    closureTime: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
+  },
+  {
+    id: "ft-2",
+    customerName: "Amina Bello",
+    category: "no_internet",
+    priority: "medium",
+    affectedService: "20 Mbps Home",
+    assignedTechnician: "Kunle O.",
+    faultLocation: "Drop cable from MST-04",
+    diagnosis: "Outdoor connector damaged by weather exposure.",
+    materialsUsed: ["Fast connector"],
+    customerConfirmation: "pending",
+  },
+];
+
+const mockOutages: OutageMaintenanceRecord[] = [
+  {
+    id: "out-1",
+    type: "planned_maintenance",
+    title: "Lekki POP battery maintenance",
+    affectedAreas: ["Lekki Phase 1", "Admiralty Way"],
+    affectedCustomers: 48,
+    startTime: new Date(Date.now() + 1000 * 60 * 60 * 18).toISOString(),
+    endTime: new Date(Date.now() + 1000 * 60 * 60 * 20).toISOString(),
+    customerNotice: "Brief maintenance window to improve site power resilience.",
+    status: "scheduled",
+  },
+  {
+    id: "out-2",
+    type: "unplanned_outage",
+    title: "Distribution fibre cut near Chevron axis",
+    affectedAreas: ["Chevron"],
+    affectedCustomers: 21,
+    startTime: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
+    customerNotice: "Emergency outage response underway.",
+    completionReport: "Temporary reroute restored services pending permanent civil fix.",
+    status: "completed",
+  },
+];
+
+const mockCommunicationTemplates: CommunicationTemplateRecord[] = [
+  {
+    id: "tpl-1",
+    channel: "whatsapp",
+    name: "payment_reminder",
+    message: "Hello {{name}}, your invoice of {{amount}} is due on {{due_date}}. Please pay to avoid suspension.",
+    active: true,
+  },
+  {
+    id: "tpl-2",
+    channel: "email",
+    name: "welcome_message",
+    subject: "Welcome to {{isp_name}}",
+    message: "Your service is now active. Plan: {{plan}}, username: {{username}}.",
+    active: true,
+  },
+  {
+    id: "tpl-3",
+    channel: "sms",
+    name: "outage_notice",
+    message: "We are working on a service issue in your area. Updates will follow shortly.",
+    active: true,
+  },
+];
+
+const mockKnowledgeBase: KnowledgeBaseArticle[] = [
+  {
+    id: "kb-1",
+    category: "troubleshooting",
+    title: "Weak optical power triage checklist",
+    summary: "Validate ONU levels, inspect closure splices, check bends, and compare recent degradation pattern before dispatch.",
+    audience: "noc",
+  },
+  {
+    id: "kb-2",
+    category: "installation",
+    title: "Standard FTTH installation handover procedure",
+    summary: "Verify light levels, document router and ONU assets, confirm Wi-Fi, and collect signed completion acknowledgment.",
+    audience: "engineer",
+  },
+  {
+    id: "kb-3",
+    category: "responses",
+    title: "Customer outage response script",
+    summary: "How to acknowledge complaints professionally, explain outage context, and set expectation on the next update window.",
+    audience: "support",
+  },
+];
+
+const mockApprovalRequests: ApprovalWorkflowRecord[] = [
+  {
+    id: "apr-1",
+    type: "discount",
+    requester: "Finance Desk",
+    target: "Greenwood Estate HOA onboarding discount",
+    amount: 150000,
+    status: "pending",
+    requestedAt: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
+  },
+  {
+    id: "apr-2",
+    type: "large_expense",
+    requester: "Operations Manager",
+    target: "POP Alpha battery replacement",
+    amount: 880000,
+    status: "approved",
+    requestedAt: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
+  },
+];
+
+const mockDiscountPromos: DiscountPromoRecord[] = [
+  {
+    id: "promo-1",
+    code: "ESTATE100",
+    type: "fixed",
+    amount: 100000,
+    expiryDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 21).toISOString(),
+    eligiblePlans: ["Dedicated 100 Mbps", "Business 50 Mbps"],
+    approvalStatus: "approved",
+    usageCount: 3,
+  },
+  {
+    id: "promo-2",
+    code: "WELCOME10",
+    type: "percentage",
+    amount: 10,
+    expiryDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString(),
+    eligiblePlans: ["20 Mbps Home", "25 Mbps Home"],
+    approvalStatus: "pending",
+    usageCount: 0,
+  },
+];
+
+const mockCommissionRecords: CommissionRecord[] = [
+  {
+    id: "com-1",
+    partnerName: "Tosin A.",
+    leadSource: "Referral",
+    convertedCustomer: "Favour Clinic",
+    planValue: 125000,
+    commissionAmount: 25000,
+    approvalStatus: "approved",
+    payoutStatus: "processing",
+  },
+  {
+    id: "com-2",
+    partnerName: "PrimeNet Reseller Desk",
+    leadSource: "Estate campaign",
+    convertedCustomer: "Greenwood Estate HOA",
+    planValue: 850000,
+    commissionAmount: 95000,
+    approvalStatus: "pending",
+    payoutStatus: "pending",
+  },
+];
+
+const mockChurnRetention: ChurnRetentionRecord[] = [
+  {
+    id: "ch-1",
+    customerName: "Amina Bello",
+    riskLevel: "high",
+    cancellationRequested: false,
+    reasonForLeaving: "Repeated service instability",
+    retentionAction: "Offer temporary service credit and fast-track field intervention.",
+    winBackStatus: "in_progress",
+  },
+  {
+    id: "ch-2",
+    customerName: "Legacy Prints",
+    riskLevel: "medium",
+    cancellationRequested: true,
+    reasonForLeaving: "Budget pressure",
+    retentionAction: "Proposed downgrade with promo support.",
+    winBackStatus: "in_progress",
+  },
+];
+
+const mockImportValidation: ImportValidationSummary[] = [
+  {
+    module: "customers",
+    totalRows: 120,
+    validRows: 114,
+    invalidRows: 6,
+    sampleErrors: ["Duplicate PPPoE username on row 17", "Missing phone number on row 43"],
+  },
+  {
+    module: "inventory",
+    totalRows: 42,
+    validRows: 39,
+    invalidRows: 3,
+    sampleErrors: ["Negative stock value on row 9", "Unknown supplier code on row 16"],
+  },
+];
+
+const mockDemoMode: DemoModeSettings = {
+  enabled: true,
+  hideSensitiveSettings: true,
+  preventDestructiveActions: true,
+  sampleDatasetName: "WestLink Commercial Demo Pack",
+};
+
+const mockSecurityControls: SecurityControlSettings = {
+  passwordResetFlow: "email_link",
+  twoFactorPlaceholder: true,
+  sessionTimeoutMinutes: 30,
+  sensitiveActionConfirmation: true,
+  auditTrailEnabled: true,
+};
+
 let mockInventorySuppliers: Supplier[] = [
   { id: 1, name: "Main FTTH Supplier", contact_person: "Procurement Desk", phone: "08000000000", email: "supply@westlink.ng" },
   { id: 2, name: "Metro Fiber Depot", contact_person: "Ade Martins", phone: "08031234567", email: "procurement@metrofiber.ng" },
@@ -934,6 +1230,81 @@ type DashboardPayload = {
 };
 
 function enrichCustomerRecord(customer: Customer): Customer {
+  const defaultDeviceAssignments: DeviceAssignmentRecord[] = [
+    {
+      id: `${customer.id}-onu`,
+      deviceType: "onu",
+      model: `${customer.onuVendor ?? "ZTE"} ${customer.onuModel ?? "ONU"}`.trim(),
+      serialNumber: customer.onuSerial,
+      macAddress: customer.onuMac,
+      status: "assigned",
+      assignedAt: customer.installDate ?? customer.customerSince ?? new Date().toISOString(),
+    },
+    {
+      id: `${customer.id}-router`,
+      deviceType: "router",
+      model: `${customer.routerBrand ?? "Huawei"} ${customer.routerModel ?? "Router"}`.trim(),
+      serialNumber: customer.routerSerial ?? `RTR-${customer.id}`,
+      macAddress: customer.routerMac,
+      status: customer.routerMac ? "assigned" : "replaced",
+      assignedAt: customer.installDate ?? customer.customerSince ?? new Date().toISOString(),
+      notes: customer.routerType === "upgraded" ? "Upgraded router supplied during service optimization." : undefined,
+    },
+  ];
+
+  const defaultPlanChanges: PlanChangeRecord[] = customer.planName
+    ? [
+        {
+          id: `${customer.id}-plan-change`,
+          oldPlan: customer.planName === "Business 50 Mbps" ? "25 Mbps Home" : customer.planName,
+          newPlan: customer.planName,
+          priceDifference: customer.monthlyFee ? Math.round(customer.monthlyFee * 0.35) : 0,
+          effectiveDate: customer.lastPaymentDate ?? new Date().toISOString(),
+          paymentAdjustment: "Proration to be calculated on billing confirmation.",
+          approvalStatus: "approved",
+        },
+      ]
+    : [];
+
+  const defaultSuspensions: SuspensionWorkflowRecord[] =
+    customer.accountStatus === "suspended"
+      ? [
+          {
+            id: `${customer.id}-suspend`,
+            reason: "Payment delinquency",
+            suspendedBy: "Finance Desk",
+            suspensionDate: customer.nextInvoiceDate ?? new Date().toISOString(),
+            paymentStatus: customer.paymentStatus ?? "overdue",
+          },
+        ]
+      : [];
+
+  const defaultRenewals: ContractRenewalRecord[] =
+    customer.slaTier && customer.slaTier !== "bronze"
+      ? [
+          {
+            id: `${customer.id}-renewal`,
+            contractStartDate: customer.customerSince ?? new Date().toISOString(),
+            contractEndDate: customer.nextInvoiceDate ?? new Date(Date.now() + 1000 * 60 * 60 * 24 * 90).toISOString(),
+            renewalReminderDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
+            renewalStatus: "upcoming",
+            signedAgreement: true,
+            accountManager: customer.assignedEngineer ?? "Enterprise Desk",
+          },
+        ]
+      : [];
+
+  const defaultFeedback: CustomerFeedbackRecord[] = [
+    {
+      id: `${customer.id}-feedback`,
+      source: "installation",
+      rating: customer.supportStatus === "needs_attention" ? 3 : 5,
+      comment: customer.supportStatus === "needs_attention" ? "Install was completed, but follow-up signal stabilization was needed." : "Installation team was prompt and professional.",
+      satisfactionScore: customer.supportStatus === "needs_attention" ? 62 : 91,
+      createdAt: customer.installDate ?? customer.customerSince ?? new Date().toISOString(),
+    },
+  ];
+
   return {
     ...customer,
     kyc:
@@ -959,6 +1330,11 @@ function enrichCustomerRecord(customer: Customer): Customer {
         faultDurationMinutes: customer.online ? 64 : 202,
         breachRisk: customer.online ? "normal" : "warning",
       },
+    deviceAssignments: customer.deviceAssignments ?? defaultDeviceAssignments,
+    planChangeHistory: customer.planChangeHistory ?? defaultPlanChanges,
+    suspensionHistory: customer.suspensionHistory ?? defaultSuspensions,
+    contractRenewals: customer.contractRenewals ?? defaultRenewals,
+    feedback: customer.feedback ?? defaultFeedback,
   };
 }
 
@@ -2104,6 +2480,149 @@ export const apiClient = {
       return mockOnboardingChecklist;
     }
     const { data } = await api.get<OnboardingChecklist[]>("/system/onboarding", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getInstallationWorkflow(tenantId: string, token?: string): Promise<InstallationWorkflowRecord[]> {
+    if (USE_MOCKS) {
+      await sleep(120);
+      return mockInstallationWorkflow;
+    }
+    const { data } = await api.get<InstallationWorkflowRecord[]>("/operations/installations", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getSiteSurveys(tenantId: string, token?: string): Promise<SiteSurveyRecord[]> {
+    if (USE_MOCKS) {
+      await sleep(120);
+      return mockSiteSurveys;
+    }
+    const { data } = await api.get<SiteSurveyRecord[]>("/operations/site-surveys", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getFaultWorkflowTickets(tenantId: string, token?: string): Promise<FaultWorkflowTicket[]> {
+    if (USE_MOCKS) {
+      await sleep(120);
+      return mockFaultWorkflowTickets;
+    }
+    const { data } = await api.get<FaultWorkflowTicket[]>("/operations/fault-workflow", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getOutageMaintenance(tenantId: string, token?: string): Promise<OutageMaintenanceRecord[]> {
+    if (USE_MOCKS) {
+      await sleep(120);
+      return mockOutages;
+    }
+    const { data } = await api.get<OutageMaintenanceRecord[]>("/operations/outages", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getCommunicationTemplates(tenantId: string, token?: string): Promise<CommunicationTemplateRecord[]> {
+    if (USE_MOCKS) {
+      await sleep(120);
+      return mockCommunicationTemplates;
+    }
+    const { data } = await api.get<CommunicationTemplateRecord[]>("/operations/communication-templates", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getKnowledgeBase(tenantId: string, token?: string): Promise<KnowledgeBaseArticle[]> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockKnowledgeBase;
+    }
+    const { data } = await api.get<KnowledgeBaseArticle[]>("/operations/knowledge-base", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getApprovalRequests(tenantId: string, token?: string): Promise<ApprovalWorkflowRecord[]> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockApprovalRequests;
+    }
+    const { data } = await api.get<ApprovalWorkflowRecord[]>("/operations/approvals", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getDiscountPromos(tenantId: string, token?: string): Promise<DiscountPromoRecord[]> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockDiscountPromos;
+    }
+    const { data } = await api.get<DiscountPromoRecord[]>("/operations/promos", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getCommissionRecords(tenantId: string, token?: string): Promise<CommissionRecord[]> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockCommissionRecords;
+    }
+    const { data } = await api.get<CommissionRecord[]>("/operations/commissions", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getChurnRetention(tenantId: string, token?: string): Promise<ChurnRetentionRecord[]> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockChurnRetention;
+    }
+    const { data } = await api.get<ChurnRetentionRecord[]>("/operations/churn-retention", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getImportValidationSummaries(tenantId: string, token?: string): Promise<ImportValidationSummary[]> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockImportValidation;
+    }
+    const { data } = await api.get<ImportValidationSummary[]>("/operations/import-validation", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getDemoModeSettings(tenantId: string, token?: string): Promise<DemoModeSettings> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockDemoMode;
+    }
+    const { data } = await api.get<DemoModeSettings>("/operations/demo-mode", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getSecurityControls(tenantId: string, token?: string): Promise<SecurityControlSettings> {
+    if (USE_MOCKS) {
+      await sleep(100);
+      return mockSecurityControls;
+    }
+    const { data } = await api.get<SecurityControlSettings>("/operations/security-controls", {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;

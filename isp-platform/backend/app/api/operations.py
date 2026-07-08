@@ -145,6 +145,139 @@ class OnboardingChecklist(BaseModel):
     completed: bool
 
 
+class InstallationWorkflowRecord(BaseModel):
+    id: str
+    customerName: str
+    stage: str
+    assignedTo: Optional[str] = None
+    dueDate: Optional[datetime] = None
+    notes: Optional[str] = None
+
+
+class SiteSurveyRecord(BaseModel):
+    id: str
+    leadName: str
+    location: str
+    buildingType: str
+    distanceFromNodeMeters: int
+    signalReading: Optional[str] = None
+    powerReading: Optional[str] = None
+    requiredMaterials: List[str]
+    installationDifficulty: str
+    photos: int
+    recommendation: str
+
+
+class FaultWorkflowTicket(BaseModel):
+    id: str
+    customerName: str
+    category: str
+    priority: str
+    affectedService: str
+    assignedTechnician: Optional[str] = None
+    faultLocation: str
+    diagnosis: Optional[str] = None
+    materialsUsed: List[str]
+    resolutionNote: Optional[str] = None
+    customerConfirmation: str
+    closureTime: Optional[datetime] = None
+
+
+class OutageMaintenanceRecord(BaseModel):
+    id: str
+    type: str
+    title: str
+    affectedAreas: List[str]
+    affectedCustomers: int
+    startTime: datetime
+    endTime: Optional[datetime] = None
+    customerNotice: str
+    completionReport: Optional[str] = None
+    status: str
+
+
+class CommunicationTemplateRecord(BaseModel):
+    id: str
+    channel: str
+    name: str
+    subject: Optional[str] = None
+    message: str
+    active: bool
+
+
+class KnowledgeBaseArticle(BaseModel):
+    id: str
+    category: str
+    title: str
+    summary: str
+    audience: str
+
+
+class ApprovalWorkflowRecord(BaseModel):
+    id: str
+    type: str
+    requester: str
+    target: str
+    amount: Optional[Decimal] = None
+    status: str
+    requestedAt: datetime
+
+
+class DiscountPromoRecord(BaseModel):
+    id: str
+    code: str
+    type: str
+    amount: Decimal
+    expiryDate: datetime
+    eligiblePlans: List[str]
+    approvalStatus: str
+    usageCount: int
+
+
+class CommissionRecord(BaseModel):
+    id: str
+    partnerName: str
+    leadSource: str
+    convertedCustomer: str
+    planValue: Decimal
+    commissionAmount: Decimal
+    approvalStatus: str
+    payoutStatus: str
+
+
+class ChurnRetentionRecord(BaseModel):
+    id: str
+    customerName: str
+    riskLevel: str
+    cancellationRequested: bool
+    reasonForLeaving: Optional[str] = None
+    retentionAction: Optional[str] = None
+    winBackStatus: str
+
+
+class ImportValidationSummary(BaseModel):
+    module: str
+    totalRows: int
+    validRows: int
+    invalidRows: int
+    sampleErrors: List[str]
+
+
+class DemoModeSettings(BaseModel):
+    enabled: bool
+    hideSensitiveSettings: bool
+    preventDestructiveActions: bool
+    sampleDatasetName: str
+
+
+class SecurityControlSettings(BaseModel):
+    passwordResetFlow: str
+    twoFactorPlaceholder: bool
+    sessionTimeoutMinutes: int
+    sensitiveActionConfirmation: bool
+    auditTrailEnabled: bool
+
+
 @router.get("/operations/sites", response_model=List[SiteManagementRecord])
 async def get_site_management(
     db: AsyncSession = Depends(get_db),
@@ -534,3 +667,387 @@ async def get_onboarding_checklist(
             completed=clients_count > 0,
         ),
     ]
+
+
+@router.get("/operations/installations", response_model=List[InstallationWorkflowRecord])
+async def get_installation_workflow(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    clients_result = await db.execute(select(Client).limit(3))
+    clients = clients_result.scalars().all()
+    names = [client.name for client in clients] or ["Greenwood Estate HOA", "Amina Bello", "Favour Clinic"]
+    return [
+        InstallationWorkflowRecord(
+            id="install-1",
+            customerName=names[0],
+            stage="quotation",
+            assignedTo="Tosin A.",
+            dueDate=datetime.utcnow() + timedelta(days=2),
+            notes="Dedicated service quotation awaiting approval.",
+        ),
+        InstallationWorkflowRecord(
+            id="install-2",
+            customerName=names[1 if len(names) > 1 else 0],
+            stage="installation_assigned",
+            assignedTo="Kunle O.",
+            dueDate=datetime.utcnow() + timedelta(days=1),
+            notes="Materials issued and field team scheduled.",
+        ),
+        InstallationWorkflowRecord(
+            id="install-3",
+            customerName=names[-1],
+            stage="testing",
+            assignedTo="Musa J.",
+            dueDate=datetime.utcnow() + timedelta(hours=12),
+            notes="Awaiting final activation and handover.",
+        ),
+    ]
+
+
+@router.get("/operations/site-surveys", response_model=List[SiteSurveyRecord])
+async def get_site_surveys(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return [
+        SiteSurveyRecord(
+            id="survey-1",
+            leadName="Greenwood Estate HOA",
+            location="Greenwood Estate Main Gate",
+            buildingType="estate",
+            distanceFromNodeMeters=180,
+            signalReading="-18.2 dBm",
+            powerReading="Stable mains + inverter",
+            requiredMaterials=["1 Core Drop Cable", "ONU", "Router", "8 Port MST Closure"],
+            installationDifficulty="medium",
+            photos=6,
+            recommendation="approved",
+        ),
+        SiteSurveyRecord(
+            id="survey-2",
+            leadName="Favour Clinic",
+            location="3rd Avenue, Gwarinpa",
+            buildingType="commercial",
+            distanceFromNodeMeters=95,
+            signalReading="-21.0 dBm",
+            powerReading="UPS available",
+            requiredMaterials=["ONU", "Router", "Patch Cord"],
+            installationDifficulty="low",
+            photos=4,
+            recommendation="approved",
+        ),
+    ]
+
+
+@router.get("/operations/fault-workflow", response_model=List[FaultWorkflowTicket])
+async def get_fault_workflow(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return [
+        FaultWorkflowTicket(
+            id="ft-1",
+            customerName="The Annex Workspace",
+            category="degraded_signal",
+            priority="high",
+            affectedService="Business 50 Mbps",
+            assignedTechnician="Sade A.",
+            faultLocation="Admiralty Way distribution segment",
+            diagnosis="High splice loss near closure CL-17.",
+            materialsUsed=["Pigtail", "Splice protector"],
+            resolutionNote="Respliced affected core and restored RX levels.",
+            customerConfirmation="confirmed",
+            closureTime=datetime.utcnow() - timedelta(minutes=35),
+        ),
+        FaultWorkflowTicket(
+            id="ft-2",
+            customerName="Amina Bello",
+            category="no_internet",
+            priority="medium",
+            affectedService="20 Mbps Home",
+            assignedTechnician="Kunle O.",
+            faultLocation="Drop cable from MST-04",
+            diagnosis="Outdoor connector damaged by weather exposure.",
+            materialsUsed=["Fast connector"],
+            customerConfirmation="pending",
+        ),
+    ]
+
+
+@router.get("/operations/outages", response_model=List[OutageMaintenanceRecord])
+async def get_outages(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return [
+        OutageMaintenanceRecord(
+            id="out-1",
+            type="planned_maintenance",
+            title="Lekki POP battery maintenance",
+            affectedAreas=["Lekki Phase 1", "Admiralty Way"],
+            affectedCustomers=48,
+            startTime=datetime.utcnow() + timedelta(hours=18),
+            endTime=datetime.utcnow() + timedelta(hours=20),
+            customerNotice="Brief maintenance window to improve site power resilience.",
+            status="scheduled",
+        ),
+        OutageMaintenanceRecord(
+            id="out-2",
+            type="unplanned_outage",
+            title="Distribution fibre cut near Chevron axis",
+            affectedAreas=["Chevron"],
+            affectedCustomers=21,
+            startTime=datetime.utcnow() - timedelta(hours=4),
+            customerNotice="Emergency outage response underway.",
+            completionReport="Temporary reroute restored services pending permanent civil fix.",
+            status="completed",
+        ),
+    ]
+
+
+@router.get("/operations/communication-templates", response_model=List[CommunicationTemplateRecord])
+async def get_communication_templates(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return [
+        CommunicationTemplateRecord(
+            id="tpl-1",
+            channel="whatsapp",
+            name="payment_reminder",
+            message="Hello {{name}}, your invoice of {{amount}} is due on {{due_date}}.",
+            active=True,
+        ),
+        CommunicationTemplateRecord(
+            id="tpl-2",
+            channel="email",
+            name="welcome_message",
+            subject="Welcome to {{isp_name}}",
+            message="Your service is now active. Plan: {{plan}}, username: {{username}}.",
+            active=True,
+        ),
+        CommunicationTemplateRecord(
+            id="tpl-3",
+            channel="sms",
+            name="outage_notice",
+            message="We are working on a service issue in your area. Updates will follow shortly.",
+            active=True,
+        ),
+    ]
+
+
+@router.get("/operations/knowledge-base", response_model=List[KnowledgeBaseArticle])
+async def get_knowledge_base(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return [
+        KnowledgeBaseArticle(
+            id="kb-1",
+            category="troubleshooting",
+            title="Weak optical power triage checklist",
+            summary="Validate ONU levels, inspect closure splices, check bends, and compare recent degradation pattern before dispatch.",
+            audience="noc",
+        ),
+        KnowledgeBaseArticle(
+            id="kb-2",
+            category="installation",
+            title="Standard FTTH installation handover procedure",
+            summary="Verify light levels, document router and ONU assets, confirm Wi-Fi, and collect signed completion acknowledgment.",
+            audience="engineer",
+        ),
+        KnowledgeBaseArticle(
+            id="kb-3",
+            category="responses",
+            title="Customer outage response script",
+            summary="Acknowledge complaints professionally, explain outage context, and set expectation on the next update window.",
+            audience="support",
+        ),
+    ]
+
+
+@router.get("/operations/approvals", response_model=List[ApprovalWorkflowRecord])
+async def get_approval_requests(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return [
+        ApprovalWorkflowRecord(
+            id="apr-1",
+            type="discount",
+            requester="Finance Desk",
+            target="Greenwood Estate HOA onboarding discount",
+            amount=Decimal("150000"),
+            status="pending",
+            requestedAt=datetime.utcnow() - timedelta(hours=3),
+        ),
+        ApprovalWorkflowRecord(
+            id="apr-2",
+            type="large_expense",
+            requester="Operations Manager",
+            target="POP Alpha battery replacement",
+            amount=Decimal("880000"),
+            status="approved",
+            requestedAt=datetime.utcnow() - timedelta(hours=12),
+        ),
+    ]
+
+
+@router.get("/operations/promos", response_model=List[DiscountPromoRecord])
+async def get_discount_promos(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return [
+        DiscountPromoRecord(
+            id="promo-1",
+            code="ESTATE100",
+            type="fixed",
+            amount=Decimal("100000"),
+            expiryDate=datetime.utcnow() + timedelta(days=21),
+            eligiblePlans=["Dedicated 100 Mbps", "Business 50 Mbps"],
+            approvalStatus="approved",
+            usageCount=3,
+        ),
+        DiscountPromoRecord(
+            id="promo-2",
+            code="WELCOME10",
+            type="percentage",
+            amount=Decimal("10"),
+            expiryDate=datetime.utcnow() + timedelta(days=14),
+            eligiblePlans=["20 Mbps Home", "25 Mbps Home"],
+            approvalStatus="pending",
+            usageCount=0,
+        ),
+    ]
+
+
+@router.get("/operations/commissions", response_model=List[CommissionRecord])
+async def get_commissions(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return [
+        CommissionRecord(
+            id="com-1",
+            partnerName="Tosin A.",
+            leadSource="Referral",
+            convertedCustomer="Favour Clinic",
+            planValue=Decimal("125000"),
+            commissionAmount=Decimal("25000"),
+            approvalStatus="approved",
+            payoutStatus="processing",
+        ),
+        CommissionRecord(
+            id="com-2",
+            partnerName="PrimeNet Reseller Desk",
+            leadSource="Estate campaign",
+            convertedCustomer="Greenwood Estate HOA",
+            planValue=Decimal("850000"),
+            commissionAmount=Decimal("95000"),
+            approvalStatus="pending",
+            payoutStatus="pending",
+        ),
+    ]
+
+
+@router.get("/operations/churn-retention", response_model=List[ChurnRetentionRecord])
+async def get_churn_retention(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return [
+        ChurnRetentionRecord(
+            id="ch-1",
+            customerName="Amina Bello",
+            riskLevel="high",
+            cancellationRequested=False,
+            reasonForLeaving="Repeated service instability",
+            retentionAction="Offer temporary service credit and fast-track field intervention.",
+            winBackStatus="in_progress",
+        ),
+        ChurnRetentionRecord(
+            id="ch-2",
+            customerName="Legacy Prints",
+            riskLevel="medium",
+            cancellationRequested=True,
+            reasonForLeaving="Budget pressure",
+            retentionAction="Proposed downgrade with promo support.",
+            winBackStatus="in_progress",
+        ),
+    ]
+
+
+@router.get("/operations/import-validation", response_model=List[ImportValidationSummary])
+async def get_import_validation(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return [
+        ImportValidationSummary(
+            module="customers",
+            totalRows=120,
+            validRows=114,
+            invalidRows=6,
+            sampleErrors=["Duplicate PPPoE username on row 17", "Missing phone number on row 43"],
+        ),
+        ImportValidationSummary(
+            module="inventory",
+            totalRows=42,
+            validRows=39,
+            invalidRows=3,
+            sampleErrors=["Negative stock value on row 9", "Unknown supplier code on row 16"],
+        ),
+    ]
+
+
+@router.get("/operations/demo-mode", response_model=DemoModeSettings)
+async def get_demo_mode(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return DemoModeSettings(
+        enabled=True,
+        hideSensitiveSettings=True,
+        preventDestructiveActions=True,
+        sampleDatasetName="WestLink Commercial Demo Pack",
+    )
+
+
+@router.get("/operations/security-controls", response_model=SecurityControlSettings)
+async def get_security_controls(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ = db
+    _ = current_user
+    return SecurityControlSettings(
+        passwordResetFlow="email_link",
+        twoFactorPlaceholder=True,
+        sessionTimeoutMinutes=30,
+        sensitiveActionConfirmation=True,
+        auditTrailEnabled=True,
+    )

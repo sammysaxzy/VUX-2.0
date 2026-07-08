@@ -585,6 +585,210 @@ export interface OnboardingChecklist {
   completed: boolean;
 }
 
+export interface InstallationWorkflowRecord {
+  id: string;
+  customerName: string;
+  stage:
+    | "lead"
+    | "site_survey"
+    | "quotation"
+    | "payment"
+    | "installation_assigned"
+    | "materials_issued"
+    | "installation_completed"
+    | "testing"
+    | "activation"
+    | "handover";
+  assignedTo?: string;
+  dueDate?: string;
+  notes?: string;
+}
+
+export interface SiteSurveyRecord {
+  id: string;
+  leadName: string;
+  location: string;
+  buildingType: "residential" | "commercial" | "estate" | "mixed_use";
+  distanceFromNodeMeters: number;
+  signalReading?: string;
+  powerReading?: string;
+  requiredMaterials: string[];
+  installationDifficulty: "low" | "medium" | "high";
+  photos: number;
+  recommendation: "approved" | "revise_quote" | "not_feasible";
+}
+
+export interface FaultWorkflowTicket {
+  id: string;
+  customerName: string;
+  category: "no_internet" | "slow_speed" | "billing" | "degraded_signal" | "outage";
+  priority: "low" | "medium" | "high" | "critical";
+  affectedService: string;
+  assignedTechnician?: string;
+  faultLocation: string;
+  diagnosis?: string;
+  materialsUsed: string[];
+  resolutionNote?: string;
+  customerConfirmation: "pending" | "confirmed";
+  closureTime?: string;
+}
+
+export interface OutageMaintenanceRecord {
+  id: string;
+  type: "planned_maintenance" | "unplanned_outage";
+  title: string;
+  affectedAreas: string[];
+  affectedCustomers: number;
+  startTime: string;
+  endTime?: string;
+  customerNotice: string;
+  completionReport?: string;
+  status: "scheduled" | "in_progress" | "completed";
+}
+
+export interface CommunicationTemplateRecord {
+  id: string;
+  channel: "whatsapp" | "sms" | "email" | "in_app";
+  name:
+    | "payment_reminder"
+    | "welcome_message"
+    | "installation_update"
+    | "outage_notice"
+    | "maintenance_notice"
+    | "complaint_received"
+    | "ticket_resolved"
+    | "service_suspension";
+  subject?: string;
+  message: string;
+  active: boolean;
+}
+
+export interface DeviceAssignmentRecord {
+  id: string;
+  deviceType: "onu" | "router" | "power_adapter";
+  model: string;
+  serialNumber: string;
+  macAddress?: string;
+  status: "assigned" | "removed" | "replaced" | "faulty" | "returned" | "damaged";
+  assignedAt: string;
+  removedAt?: string;
+  notes?: string;
+}
+
+export interface PlanChangeRecord {
+  id: string;
+  oldPlan: string;
+  newPlan: string;
+  priceDifference: number;
+  effectiveDate: string;
+  paymentAdjustment: string;
+  approvalStatus: "pending" | "approved" | "rejected";
+  reason?: string;
+}
+
+export interface SuspensionWorkflowRecord {
+  id: string;
+  reason: string;
+  suspendedBy: string;
+  suspensionDate: string;
+  paymentStatus: "paid" | "pending" | "overdue";
+  reactivationDate?: string;
+  reactivatedBy?: string;
+}
+
+export interface ContractRenewalRecord {
+  id: string;
+  contractStartDate: string;
+  contractEndDate: string;
+  renewalReminderDate: string;
+  renewalStatus: "upcoming" | "renewed" | "expired";
+  signedAgreement: boolean;
+  accountManager: string;
+}
+
+export interface CustomerFeedbackRecord {
+  id: string;
+  source: "installation" | "support" | "maintenance";
+  rating: number;
+  comment: string;
+  complaint?: string;
+  satisfactionScore: number;
+  createdAt: string;
+}
+
+export interface KnowledgeBaseArticle {
+  id: string;
+  category: "troubleshooting" | "installation" | "responses" | "escalation" | "fault_solutions";
+  title: string;
+  summary: string;
+  audience: "support" | "engineer" | "noc" | "all";
+}
+
+export interface ApprovalWorkflowRecord {
+  id: string;
+  type: "refund" | "discount" | "plan_price_change" | "customer_deletion" | "device_write_off" | "large_expense" | "enterprise_change";
+  requester: string;
+  target: string;
+  amount?: number;
+  status: "pending" | "approved" | "rejected";
+  requestedAt: string;
+}
+
+export interface DiscountPromoRecord {
+  id: string;
+  code: string;
+  type: "percentage" | "fixed";
+  amount: number;
+  expiryDate: string;
+  eligiblePlans: string[];
+  approvalStatus: "pending" | "approved" | "rejected";
+  usageCount: number;
+}
+
+export interface CommissionRecord {
+  id: string;
+  partnerName: string;
+  leadSource: string;
+  convertedCustomer: string;
+  planValue: number;
+  commissionAmount: number;
+  approvalStatus: "pending" | "approved" | "rejected";
+  payoutStatus: "pending" | "processing" | "paid";
+}
+
+export interface ChurnRetentionRecord {
+  id: string;
+  customerName: string;
+  riskLevel: "low" | "medium" | "high";
+  cancellationRequested: boolean;
+  reasonForLeaving?: string;
+  retentionAction?: string;
+  winBackStatus: "none" | "in_progress" | "recovered" | "lost";
+}
+
+export interface ImportValidationSummary {
+  module: "customers" | "inventory" | "invoices" | "assets";
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  sampleErrors: string[];
+}
+
+export interface DemoModeSettings {
+  enabled: boolean;
+  hideSensitiveSettings: boolean;
+  preventDestructiveActions: boolean;
+  sampleDatasetName: string;
+}
+
+export interface SecurityControlSettings {
+  passwordResetFlow: "email_link" | "admin_only" | "disabled";
+  twoFactorPlaceholder: boolean;
+  sessionTimeoutMinutes: number;
+  sensitiveActionConfirmation: boolean;
+  auditTrailEnabled: boolean;
+}
+
 export interface Customer {
   id: string;
   tenantId: string;
@@ -662,6 +866,11 @@ export interface Customer {
   kyc?: CustomerKycRecord;
   documents?: CustomerDocument[];
   slaMetrics?: CustomerSlaMetrics;
+  deviceAssignments?: DeviceAssignmentRecord[];
+  planChangeHistory?: PlanChangeRecord[];
+  suspensionHistory?: SuspensionWorkflowRecord[];
+  contractRenewals?: ContractRenewalRecord[];
+  feedback?: CustomerFeedbackRecord[];
 }
 
 export type CustomerPortalStatus = "active" | "suspended";
