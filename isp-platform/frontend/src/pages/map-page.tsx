@@ -22,6 +22,7 @@ import {
   useUpsertClosureSplice,
 } from "@/hooks/api/use-network";
 import { usePermissionRoles } from "@/hooks/api/use-settings";
+import { getFaultImpact } from "@/lib/isp";
 import type { ClosureBox, Customer, FibreCable, Fault, NetworkNode } from "@/types";
 import { MapComponent } from "@/components/map/map-component";
 import { Badge } from "@/components/ui/badge";
@@ -102,6 +103,8 @@ export function MapPage() {
   );
 
   const focusCustomerId = searchParams.get("customer") ?? undefined;
+  const activeFaults = faults?.filter((fault) => fault.status !== "resolved") ?? [];
+  const affectedCustomerCount = activeFaults.reduce((sum, fault) => sum + getFaultImpact(fault, localCustomers).length, 0);
 
   const activeFaultCableIds = useMemo(() => {
     if (!faults) return new Set<string>();
@@ -368,6 +371,39 @@ export function MapPage() {
           </div>
           <span>{faults?.length ?? 0} faults</span>
         </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Network Nodes</CardTitle>
+          </CardHeader>
+          <CardContent className="text-2xl font-semibold">{localNodes.length}</CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Fibre Routes</CardTitle>
+          </CardHeader>
+          <CardContent className="text-2xl font-semibold">{localCables.length}</CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Closures</CardTitle>
+          </CardHeader>
+          <CardContent className="text-2xl font-semibold">{localClosures.length}</CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Open Outages</CardTitle>
+          </CardHeader>
+          <CardContent className="text-2xl font-semibold text-danger">{activeFaults.length}</CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Affected Customers</CardTitle>
+          </CardHeader>
+          <CardContent className="text-2xl font-semibold text-warning">{affectedCustomerCount}</CardContent>
+        </Card>
       </div>
 
       <MapComponent
@@ -793,7 +829,7 @@ export function MapPage() {
         canAssignClient={mapAccess.canAssignClient}
       />
 
-      <div className="grid gap-4">
+      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <Card>
           <CardHeader>
             <CardTitle>Current Fault Highlights</CardTitle>
@@ -830,6 +866,20 @@ export function MapPage() {
               </div>
             ))}
             {(faults ?? []).length === 0 ? <p className="text-muted-foreground">No active faults.</p> : null}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Field Work Log</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {workHistory.slice(0, 8).map((entry) => (
+              <div key={entry.id} className="rounded-xl border border-border/70 bg-background/60 p-3">
+                <p className="font-medium">{entry.message}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{entry.timestamp}</p>
+              </div>
+            ))}
+            {!workHistory.length ? <p className="text-muted-foreground">Map operations and route changes will appear here.</p> : null}
           </CardContent>
         </Card>
       </div>

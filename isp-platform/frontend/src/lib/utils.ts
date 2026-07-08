@@ -18,6 +18,29 @@ export function formatDateOnly(dateIso: string) {
   }).format(new Date(dateIso));
 }
 
+export function formatCurrency(amount: number, currency = "NGN") {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+export function formatDateTimeOrDash(dateIso?: string) {
+  if (!dateIso) return "Not available";
+  return formatRelativeDate(dateIso);
+}
+
+export function formatDateOrDash(dateIso?: string) {
+  if (!dateIso) return "Not available";
+  return formatDateOnly(dateIso);
+}
+
+export function formatNumberOrDash(value?: number | null, suffix = "") {
+  if (value === undefined || value === null || Number.isNaN(value)) return "Not available";
+  return `${numberWithCommas(value)}${suffix}`;
+}
+
 export function toDateTimeLocalValue(dateIso: string) {
   const date = new Date(dateIso);
   const offset = date.getTimezoneOffset();
@@ -44,6 +67,14 @@ export function isReminderPending(expirationDate: string, reminderDays: number, 
 
 export function numberWithCommas(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
+}
+
+export function titleCase(value: string) {
+  return value
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 export function randomId(prefix = "id") {

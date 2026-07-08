@@ -1,20 +1,26 @@
-import { Activity, TowerControl } from "lucide-react";
+import { Activity, Layers3, ShieldCheck, TowerControl } from "lucide-react";
 import { useDashboardData } from "@/hooks/api/use-dashboard";
 import { useFinanceSummary } from "@/hooks/api/use-finance";
-import { useInventorySummary } from "@/hooks/api/use-inventory";
+import { useInventorySummary, useWorkOrders } from "@/hooks/api/use-inventory";
+import { useFaults } from "@/hooks/api/use-faults";
+import { getRoleLabel } from "@/lib/isp";
+import { formatCurrency, titleCase } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 import { AlertsPanel } from "@/components/dashboard/alerts-panel";
 import { KpiCards } from "@/components/dashboard/kpi-cards";
 import { ActivityTimeline } from "@/components/field/activity-timeline";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
-import { Badge } from "@/components/ui/badge";
 
 export function DashboardPage() {
   const { data, isLoading, isError, refetch } = useDashboardData();
   const financeSummary = useFinanceSummary();
   const inventorySummary = useInventorySummary();
+  const workOrders = useWorkOrders();
+  const faults = useFaults();
   const branding = useAppStore((state) => state.branding);
+  const currentUser = useAppStore((state) => state.user);
   const realtimeKpis = useAppStore((state) => state.realtimeKpis);
   const realtimeAlerts = useAppStore((state) => state.realtimeAlerts);
   const realtimeActivity = useAppStore((state) => state.recentActivity);
@@ -37,54 +43,83 @@ export function DashboardPage() {
   const kpis = { ...data.kpis, ...realtimeKpis };
   const alerts = [...realtimeAlerts, ...data.alerts];
   const activity = [...realtimeActivity, ...data.activities];
+  const pendingWorkOrders = (workOrders.data ?? []).filter((entry) => entry.status !== "completed").slice(0, 4);
+  const activeFaults = (faults.data ?? []).filter((fault) => fault.status !== "resolved");
 
   return (
     <div className="space-y-5 animate-fade-up">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">NOC Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Live tenant view for {branding?.ispName ?? "your network"}.</p>
+          <h1 className="text-2xl font-semibold">Commercial ISP Control Center</h1>
+          <p className="text-sm text-muted-foreground">
+            Operational overview for {branding?.ispName ?? "your network"} across CRM, billing, inventory, support, and field operations.
+          </p>
         </div>
-        <Badge variant="outline" className="gap-1">
-          <TowerControl className="h-3.5 w-3.5" />
-          tenant: {branding?.tenantId}
-        </Badge>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline" className="gap-1">
+            <TowerControl className="h-3.5 w-3.5" />
+            Tenant: {branding?.tenantId}
+          </Badge>
+          <Badge variant="outline" className="gap-1">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Role: {getRoleLabel(currentUser?.role)}
+          </Badge>
+        </div>
       </div>
 
       <KpiCards kpis={kpis} />
 
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr_0.8fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Expense Windows</CardTitle>
+            <CardTitle>Commercial Readiness Snapshot</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p>Today: <span className="font-medium">NGN {(financeSummary.data?.expenses_today ?? 0).toLocaleString()}</span></p>
-            <p>This Week: <span className="font-medium">NGN {(financeSummary.data?.expenses_this_week ?? 0).toLocaleString()}</span></p>
-            <p>This Month: <span className="font-medium">NGN {(financeSummary.data?.expenses_this_month ?? 0).toLocaleString()}</span></p>
+          <CardContent className="grid gap-3 md:grid-cols-2">
+            <DashboardFact label="Total Income" value={formatCurrency(financeSummary.data?.total_income ?? 0)} />
+            <DashboardFact label="Total Expenses" value={formatCurrency(financeSummary.data?.total_expenses ?? 0)} />
+            <DashboardFact label="Cash Flow" value={formatCurrency(financeSummary.data?.cash_flow ?? 0)} />
+            <DashboardFact label="Inventory Value" value={formatCurrency(inventorySummary.data?.inventory_value ?? 0)} />
+            <DashboardFact label="Low Stock Items" value={`${inventorySummary.data?.low_stock_items ?? 0}`} />
+            <DashboardFact label="Pending Usage Approvals" value={`${inventorySummary.data?.pending_approvals ?? 0}`} />
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader>
-            <CardTitle>Most Used Materials</CardTitle>
+            <CardTitle>Network Risk</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            {(inventorySummary.data?.most_used_items ?? []).slice(0, 4).map((item) => (
-              <p key={item.item_id}>
-                {item.name}: <span className="font-medium">{item.quantity_used}</span>
-              </p>
+          <CardContent className="space-y-3 text-sm">
+            <p className="rounded-2xl border border-border/70 p-3">
+              Open faults: <span className="font-semibold">{activeFaults.length}</span>
+            </p>
+            <p className="rounded-2xl border border-border/70 p-3">
+              Realtime alerts: <span className="font-semibold">{alerts.length}</span>
+            </p>
+            <p className="rounded-2xl border border-border/70 p-3">
+              Customer risk posture:
+              <span className="ml-1 font-semibold">{activeFaults.length > 0 ? "Needs intervention" : "Stable"}</span>
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Field Operations</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {pendingWorkOrders.map((workOrder) => (
+              <div key={workOrder.id} className="rounded-2xl border border-border/70 p-3">
+                <p className="font-medium">{workOrder.title}</p>
+                <p className="text-xs text-muted-foreground">{workOrder.work_order_code}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Badge variant={workOrder.status === "in_progress" ? "warning" : "outline"}>{titleCase(workOrder.status)}</Badge>
+                  <Badge variant={workOrder.priority === "critical" ? "danger" : "outline"}>
+                    {titleCase(workOrder.priority ?? "medium")}
+                  </Badge>
+                </div>
+              </div>
             ))}
-            {!(inventorySummary.data?.most_used_items?.length ?? 0) ? <p className="text-muted-foreground">No material usage yet.</p> : null}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Stock Workflow</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p>Low Stock Items: <span className="font-medium">{inventorySummary.data?.low_stock_items ?? 0}</span></p>
-            <p>Pending Usage Approvals: <span className="font-medium">{inventorySummary.data?.pending_approvals ?? 0}</span></p>
-            <p>Recent Inventory Movements: <span className="font-medium">{inventorySummary.data?.recent_movements.length ?? 0}</span></p>
+            {!pendingWorkOrders.length ? <p className="text-sm text-muted-foreground">No open field jobs.</p> : null}
           </CardContent>
         </Card>
       </div>
@@ -103,6 +138,29 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Layers3 className="h-4 w-4 text-primary" />
+            Selling Points for Demo Sessions
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-3 text-sm">
+          <p className="rounded-2xl border border-border/70 p-4">CRM records combine service, billing, optical, and field ownership in one profile.</p>
+          <p className="rounded-2xl border border-border/70 p-4">Technician work orders, inventory deductions, and finance records now support a cleaner commercial operations story.</p>
+          <p className="rounded-2xl border border-border/70 p-4">Paystack, WhatsApp, and backend automations remain API-ready with placeholders instead of fake live integrations.</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function DashboardFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-border/70 p-4">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="mt-1 text-xl font-semibold">{value}</p>
     </div>
   );
 }

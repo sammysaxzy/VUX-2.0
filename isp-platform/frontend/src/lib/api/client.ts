@@ -150,11 +150,273 @@ function authHeaders(token?: string) {
 const sleep = (ms = 350) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let mockInventorySuppliers: Supplier[] = [
-  { id: 1, name: "Main FTTH Supplier", contact_person: "Procurement Desk", phone: "08000000000" },
+  { id: 1, name: "Main FTTH Supplier", contact_person: "Procurement Desk", phone: "08000000000", email: "supply@westlink.ng" },
+  { id: 2, name: "Metro Fiber Depot", contact_person: "Ade Martins", phone: "08031234567", email: "procurement@metrofiber.ng" },
 ];
-let mockInventoryItems: InventoryItem[] = [];
-let mockInventoryMovements: InventoryMovement[] = [];
-let mockFinanceTransactions: FinancialTransaction[] = [];
+let mockInventoryItems: InventoryItem[] = [
+  {
+    id: 1,
+    sku: "ONU-ZTE-F660",
+    name: "ZTE F660 ONU",
+    category: "device",
+    description: "Residential ONU for FTTH activations",
+    unit_of_measure: "unit",
+    quantity_in_stock: 24,
+    unit_cost: 28500,
+    selling_price: 38000,
+    minimum_stock_level: 10,
+    supplier_id: 1,
+    is_active: true,
+  },
+  {
+    id: 2,
+    sku: "RTR-HUA-AX3",
+    name: "Huawei AX3 Router",
+    category: "device",
+    description: "Dual-band customer premises router",
+    unit_of_measure: "unit",
+    quantity_in_stock: 9,
+    unit_cost: 22000,
+    selling_price: 30000,
+    minimum_stock_level: 12,
+    supplier_id: 1,
+    is_active: true,
+  },
+  {
+    id: 3,
+    sku: "CAB-1CORE-DROP",
+    name: "1 Core Drop Cable",
+    category: "cable",
+    description: "Last-mile drop cable for residential installs",
+    unit_of_measure: "meter",
+    quantity_in_stock: 1850,
+    unit_cost: 320,
+    selling_price: 500,
+    minimum_stock_level: 500,
+    supplier_id: 2,
+    core_type: 1,
+    length_meters: 1850,
+    is_active: true,
+  },
+  {
+    id: 4,
+    sku: "MST-1X8-BOX",
+    name: "8 Port MST Closure",
+    category: "infrastructure",
+    description: "Outdoor MST for distribution zones",
+    unit_of_measure: "unit",
+    quantity_in_stock: 3,
+    unit_cost: 98000,
+    selling_price: 130000,
+    minimum_stock_level: 4,
+    supplier_id: 2,
+    is_active: true,
+  },
+  {
+    id: 5,
+    sku: "SPL-1X8-PLC",
+    name: "1x8 PLC Splitter",
+    category: "accessory",
+    description: "Balanced splitter for GPON branch distribution",
+    unit_of_measure: "unit",
+    quantity_in_stock: 18,
+    unit_cost: 12500,
+    selling_price: 18000,
+    minimum_stock_level: 8,
+    supplier_id: 2,
+    is_active: true,
+  },
+];
+let mockInventoryMovements: InventoryMovement[] = [
+  {
+    id: 1,
+    item_id: 3,
+    movement_type: "usage",
+    quantity: 80,
+    unit_cost: 320,
+    total_cost: 25600,
+    reference_type: "customer_installation",
+    reference_id: "cust-1003",
+    job_reference: "WO-240731",
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 20).toISOString(),
+  },
+  {
+    id: 2,
+    item_id: 1,
+    movement_type: "purchase",
+    quantity: 10,
+    unit_cost: 28500,
+    total_cost: 285000,
+    reference_type: "inventory_purchase",
+    reference_id: "PUR-240720",
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 50).toISOString(),
+  },
+];
+let mockFinanceTransactions: FinancialTransaction[] = [
+  {
+    id: 1,
+    transaction_code: "TXN-240701",
+    entry_type: "income",
+    category: "subscription",
+    amount: 12000,
+    description: "Adebayo Tech Hub monthly broadband renewal",
+    reference_type: "subscription",
+    reference_id: "inv-cust-1001",
+    client_id: 1,
+    payment_id: 1,
+    transaction_date: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+  },
+  {
+    id: 2,
+    transaction_code: "TXN-240702",
+    entry_type: "income",
+    category: "installation",
+    amount: 35000,
+    description: "New installation fee for Demo Customer",
+    reference_type: "customer_installation",
+    reference_id: "cust-demo",
+    transaction_date: new Date(Date.now() - 1000 * 60 * 60 * 24 * 8).toISOString(),
+  },
+  {
+    id: 3,
+    transaction_code: "TXN-240703",
+    entry_type: "expense",
+    category: "inventory_purchase",
+    amount: 285000,
+    description: "ONU replenishment purchase batch",
+    reference_type: "inventory_purchase",
+    reference_id: "PUR-240720",
+    transaction_date: new Date(Date.now() - 1000 * 60 * 60 * 24 * 6).toISOString(),
+  },
+  {
+    id: 4,
+    transaction_code: "TXN-240704",
+    entry_type: "expense",
+    category: "logistics",
+    amount: 28000,
+    description: "Field dispatch fuel and transport",
+    reference_type: "logistics",
+    reference_id: "OPS-TRIP-09",
+    transaction_date: new Date(Date.now() - 1000 * 60 * 60 * 18).toISOString(),
+  },
+];
+let mockWorkOrders: WorkOrder[] = [
+  {
+    id: 1,
+    work_order_code: "WO-240731",
+    work_type: "installation",
+    status: "scheduled",
+    inventory_deduction_mode: "automatic",
+    approval_status: "not_required",
+    title: "Install and activate Korede Residential",
+    description: "Final drop deployment, ONU install, and Wi-Fi setup",
+    customer_name: "Korede Residential",
+    service_address: "Block C24, Ikate Elegushi",
+    client_id: 1003,
+    assigned_engineer_user_id: 21,
+    onu_serial: "NOK001ABB12",
+    router_mac: "80:6D:97:23:11:AA",
+    installation_fee: 35000,
+    priority: "high",
+    scheduled_at: new Date(Date.now() + 1000 * 60 * 60 * 16).toISOString(),
+    due_date: new Date(Date.now() + 1000 * 60 * 60 * 30).toISOString(),
+    notes: "Customer requested evening installation window.",
+    photos: [],
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
+    materials: [
+      {
+        id: 1,
+        item_id: 1,
+        quantity_planned: 1,
+        quantity_used: 1,
+        unit_cost: 28500,
+        total_cost: 28500,
+        serial_number: "NOK001ABB12",
+      },
+      {
+        id: 2,
+        item_id: 3,
+        quantity_planned: 80,
+        quantity_used: 80,
+        unit_cost: 320,
+        total_cost: 25600,
+        cable_length_used: 80,
+      },
+    ],
+  },
+  {
+    id: 2,
+    work_order_code: "WO-240732",
+    work_type: "repair",
+    status: "in_progress",
+    inventory_deduction_mode: "manual_approval",
+    approval_status: "pending",
+    title: "Restore Marina View Offices outage",
+    description: "Investigate high loss on cab-2 and replace damaged drop if needed",
+    customer_name: "Marina View Offices",
+    service_address: "11 Prince Yesufu Abiodun, Oniru",
+    client_id: 1002,
+    assigned_engineer_user_id: 22,
+    installation_fee: 0,
+    priority: "critical",
+    scheduled_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+    due_date: new Date(Date.now() + 1000 * 60 * 60 * 4).toISOString(),
+    escalation_reason: "VIP business customer currently offline.",
+    notes: "Escalated from customer care to NOC and field team.",
+    photos: [],
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 10).toISOString(),
+    materials: [
+      {
+        id: 3,
+        item_id: 3,
+        quantity_planned: 40,
+        quantity_used: 25,
+        unit_cost: 320,
+        total_cost: 8000,
+        cable_length_used: 25,
+      },
+    ],
+  },
+  {
+    id: 3,
+    work_order_code: "WO-240733",
+    work_type: "maintenance",
+    status: "completed",
+    inventory_deduction_mode: "automatic",
+    approval_status: "approved",
+    title: "Quarterly inspection of MST Lekki Phase 1",
+    customer_name: "Network Segment",
+    service_address: "Lekki Phase 1",
+    installation_fee: 0,
+    priority: "medium",
+    completed_at: new Date(Date.now() - 1000 * 60 * 60 * 30).toISOString(),
+    completion_notes: "All ports audited and enclosure cleaned.",
+    notes: "Preventive maintenance completed.",
+    photos: [],
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
+    materials: [],
+  },
+];
+let mockInventoryPurchases: InventoryPurchase[] = [
+  {
+    id: 1,
+    purchase_code: "PUR-240720",
+    supplier_id: 1,
+    purchase_date: new Date(Date.now() - 1000 * 60 * 60 * 24 * 6).toISOString(),
+    total_cost: 285000,
+    notes: "Restock ONUs for August installations",
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 6).toISOString(),
+    lines: [
+      {
+        id: 1,
+        item_id: 1,
+        quantity: 10,
+        unit_cost: 28500,
+        total_cost: 285000,
+      },
+    ],
+  },
+];
 
 type DashboardPayload = {
   kpis: KpiSnapshot;
@@ -215,14 +477,34 @@ export const apiClient = {
   async getDashboard(tenantId: string, token?: string): Promise<DashboardPayload> {
     if (USE_MOCKS) {
       await sleep(300);
+      const revenue = mockFinanceTransactions
+        .filter((entry) => entry.entry_type === "income")
+        .reduce((sum, entry) => sum + entry.amount, 0);
+      const expenses = mockFinanceTransactions
+        .filter((entry) => entry.entry_type === "expense")
+        .reduce((sum, entry) => sum + entry.amount, 0);
       return {
         kpis: {
           ...buildKpis(),
-          inventoryValue: 0,
-          totalIncome: 0,
-          totalExpenses: 0,
-          netProfit: 0,
-          lowStockItems: 0,
+          totalCustomers: mockCustomers.length,
+          activeCustomers: mockCustomers.filter((customer) => customer.accountStatus === "active").length,
+          suspendedCustomers: mockCustomers.filter((customer) => customer.accountStatus === "suspended").length,
+          offlineCustomers: mockCustomers.filter((customer) => !customer.online).length,
+          revenue,
+          overdueInvoices: mockCustomers.filter((customer) => customer.paymentStatus === "overdue").length,
+          openTickets: mockCustomers.reduce(
+            (sum, customer) =>
+              sum +
+              (customer.history?.filter((entry) => entry.type === "support" && entry.status !== "closed").length ?? 0),
+            0,
+          ),
+          networkFaults: mockFaults.filter((fault) => fault.status !== "resolved").length,
+          technicianJobs: mockWorkOrders.filter((workOrder) => workOrder.status !== "completed").length,
+          inventoryValue: mockInventoryItems.reduce((sum, item) => sum + item.quantity_in_stock * item.unit_cost, 0),
+          totalIncome: revenue,
+          totalExpenses: expenses,
+          netProfit: revenue - expenses,
+          lowStockItems: mockInventoryItems.filter((item) => item.quantity_in_stock <= item.minimum_stock_level).length,
         },
         alerts: mockAlerts,
         activities: mockActivities,
@@ -1162,14 +1444,29 @@ export const apiClient = {
   async getInventorySummary(tenantId: string, token?: string): Promise<InventorySummary> {
     if (USE_MOCKS) {
       await sleep(180);
+      const usageByItem = mockInventoryMovements
+        .filter((movement) => movement.movement_type === "usage")
+        .reduce<Record<number, number>>((acc, movement) => {
+          acc[movement.item_id] = (acc[movement.item_id] ?? 0) + movement.quantity;
+          return acc;
+        }, {});
       return {
         total_items: mockInventoryItems.length,
         low_stock_items: mockInventoryItems.filter((item) => item.quantity_in_stock <= item.minimum_stock_level).length,
         total_stock_units: mockInventoryItems.reduce((sum, item) => sum + item.quantity_in_stock, 0),
         inventory_value: mockInventoryItems.reduce((sum, item) => sum + item.quantity_in_stock * item.unit_cost, 0),
         recent_movements: mockInventoryMovements.slice(0, 10),
-        most_used_items: [],
-        pending_approvals: 0,
+        most_used_items: Object.entries(usageByItem)
+          .map(([itemId, quantity]) => {
+            const item = mockInventoryItems.find((entry) => entry.id === Number(itemId));
+            return {
+              item_id: Number(itemId),
+              name: item?.name ?? `Item ${itemId}`,
+              quantity_used: String(quantity),
+            };
+          })
+          .slice(0, 5),
+        pending_approvals: mockWorkOrders.filter((entry) => entry.approval_status === "pending").length,
       };
     }
     const { data } = await api.get<InventorySummary>("/api/inventory/summary", {
@@ -1282,7 +1579,7 @@ export const apiClient = {
   async getInventoryPurchases(tenantId: string, token?: string): Promise<InventoryPurchase[]> {
     if (USE_MOCKS) {
       await sleep(150);
-      return [];
+      return mockInventoryPurchases;
     }
     const { data } = await api.get<InventoryPurchase[]>("/api/inventory/purchases", {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
@@ -1321,6 +1618,25 @@ export const apiClient = {
           notes: line.notes,
         })),
       };
+      mockInventoryPurchases = [purchase, ...mockInventoryPurchases];
+      payload.lines.forEach((line) => {
+        const item = mockInventoryItems.find((entry) => entry.id === line.item_id);
+        if (item) item.quantity_in_stock += line.quantity;
+      });
+      mockFinanceTransactions = [
+        {
+          id: Date.now(),
+          transaction_code: `TXN-${Date.now()}`,
+          entry_type: "expense",
+          category: "inventory_purchase",
+          amount: total_cost,
+          description: `Purchase ${purchase.purchase_code}`,
+          reference_type: "inventory_purchase",
+          reference_id: purchase.purchase_code,
+          transaction_date: purchase.purchase_date,
+        },
+        ...mockFinanceTransactions,
+      ];
       return purchase;
     }
     const { data } = await api.post<InventoryPurchase>("/api/inventory/purchases", payload, {
@@ -1332,7 +1648,7 @@ export const apiClient = {
   async getWorkOrders(tenantId: string, token?: string): Promise<WorkOrder[]> {
     if (USE_MOCKS) {
       await sleep(150);
-      return [];
+      return mockWorkOrders;
     }
     const { data } = await api.get<WorkOrder[]>("/api/inventory/work-orders", {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
@@ -1378,7 +1694,7 @@ export const apiClient = {
   ): Promise<WorkOrder> {
     if (USE_MOCKS) {
       await sleep(180);
-      return {
+      const workOrder: WorkOrder = {
         id: Date.now(),
         work_order_code: `WO-${Date.now()}`,
         work_type: payload.work_type,
@@ -1397,6 +1713,7 @@ export const apiClient = {
         onu_mac: payload.onu_mac,
         router_mac: payload.router_mac,
         installation_fee: payload.installation_fee ?? 0,
+        priority: "medium",
         latitude: payload.latitude,
         longitude: payload.longitude,
         map_reference: payload.map_reference,
@@ -1417,6 +1734,8 @@ export const apiClient = {
           notes: material.notes,
         })),
       };
+      mockWorkOrders = [workOrder, ...mockWorkOrders];
+      return workOrder;
     }
     const { data } = await api.post<WorkOrder>("/api/inventory/work-orders", payload, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
@@ -1461,7 +1780,15 @@ export const apiClient = {
   async approveWorkOrderUsage(workOrderId: number, approval_notes: string | undefined, tenantId: string, token?: string): Promise<WorkOrder> {
     if (USE_MOCKS) {
       await sleep(180);
-      throw new Error("Mock approval is not implemented yet.");
+      const workOrder = mockWorkOrders.find((entry) => entry.id === workOrderId);
+      if (!workOrder) throw new Error("Work order not found.");
+      workOrder.approval_status = "approved";
+      workOrder.notes = [workOrder.notes, approval_notes].filter(Boolean).join("\n");
+      workOrder.materials.forEach((material) => {
+        const item = mockInventoryItems.find((entry) => entry.id === material.item_id);
+        if (item) item.quantity_in_stock = Math.max(0, item.quantity_in_stock - material.quantity_used);
+      });
+      return workOrder;
     }
     const { data } = await api.post<WorkOrder>(
       `/api/inventory/work-orders/${workOrderId}/approve-usage`,
@@ -1480,6 +1807,18 @@ export const apiClient = {
       const total_expenses = mockFinanceTransactions
         .filter((entry) => entry.entry_type === "expense")
         .reduce((sum, entry) => sum + entry.amount, 0);
+      const now = Date.now();
+      const oneDay = 1000 * 60 * 60 * 24;
+      const oneWeek = oneDay * 7;
+      const oneMonth = oneDay * 30;
+      const expenseTotalWithin = (windowMs: number) =>
+        mockFinanceTransactions
+          .filter(
+            (entry) =>
+              entry.entry_type === "expense" &&
+              now - new Date(entry.transaction_date).getTime() <= windowMs,
+          )
+          .reduce((sum, entry) => sum + entry.amount, 0);
       return {
         total_income,
         total_expenses,
@@ -1488,9 +1827,9 @@ export const apiClient = {
         inventory_value: mockInventoryItems.reduce((sum, item) => sum + item.quantity_in_stock * item.unit_cost, 0),
         transaction_count: mockFinanceTransactions.length,
         recent_transactions: mockFinanceTransactions.slice(0, 10),
-        expenses_today: 0,
-        expenses_this_week: 0,
-        expenses_this_month: 0,
+        expenses_today: expenseTotalWithin(oneDay),
+        expenses_this_week: expenseTotalWithin(oneWeek),
+        expenses_this_month: expenseTotalWithin(oneMonth),
       };
     }
     const { data } = await api.get<FinanceSummary>("/api/finance/summary", {

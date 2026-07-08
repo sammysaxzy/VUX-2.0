@@ -1,6 +1,9 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { LineChart, RefreshCcw, Wallet } from "lucide-react";
 import { useCreateFinancialTransaction, useFinanceSummary, useFinancialTransactions, useSyncBillingIncome } from "@/hooks/api/use-finance";
+import { useCustomers } from "@/hooks/api/use-customers";
+import { buildInvoiceFromCustomer, getInvoiceSummary } from "@/lib/isp";
+import { formatCurrency, formatDateOrDash, titleCase } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +30,7 @@ const referenceTypes: ReferenceType[] = [
 export function FinancePage() {
   const summary = useFinanceSummary();
   const transactions = useFinancialTransactions();
+  const customers = useCustomers();
   const createTransaction = useCreateFinancialTransaction();
   const syncBilling = useSyncBillingIncome();
   const [form, setForm] = useState({
@@ -43,14 +47,19 @@ export function FinancePage() {
     transaction_date: new Date().toISOString().slice(0, 16),
   });
 
-  if (summary.isLoading || transactions.isLoading) return <PageSkeleton />;
+  const invoices = useMemo(() => (customers.data ?? []).map(buildInvoiceFromCustomer), [customers.data]);
+  const invoiceSummary = useMemo(() => getInvoiceSummary(invoices), [invoices]);
+
+  if (summary.isLoading || transactions.isLoading || customers.isLoading) return <PageSkeleton />;
 
   return (
     <div className="space-y-5 animate-fade-up">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Finance & Bookkeeping</h1>
-          <p className="text-sm text-muted-foreground">Track income, expenses, cash flow, and operating margin in one place.</p>
+          <h1 className="text-2xl font-semibold">Billing, Payments & Finance</h1>
+          <p className="text-sm text-muted-foreground">
+            Track invoices, customer balances, payment collection, renewals, and operating ledger activity in one view.
+          </p>
         </div>
         <Badge variant="outline" className="gap-1">
           <Wallet className="h-3.5 w-3.5" />
@@ -59,32 +68,86 @@ export function FinancePage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard title="Total Income" value={`NGN ${(summary.data?.total_income ?? 0).toLocaleString()}`} subtitle="Subscriptions, installs, device sales" />
-        <MetricCard title="Total Expenses" value={`NGN ${(summary.data?.total_expenses ?? 0).toLocaleString()}`} subtitle="Purchases, salaries, logistics, maintenance" />
-        <MetricCard title="Net Profit" value={`NGN ${(summary.data?.net_profit ?? 0).toLocaleString()}`} subtitle="Simple P&L for the MVP phase" />
-        <MetricCard title="Cash Flow" value={`NGN ${(summary.data?.cash_flow ?? 0).toLocaleString()}`} subtitle="Income minus expenses" />
-        <MetricCard title="Inventory Value" value={`NGN ${(summary.data?.inventory_value ?? 0).toLocaleString()}`} subtitle="Closing stock value at cost" />
+        <MetricCard title="Revenue" value={formatCurrency(summary.data?.total_income ?? 0)} subtitle="Recognized collections and installation income" />
+        <MetricCard title="Expenses" value={formatCurrency(summary.data?.total_expenses ?? 0)} subtitle="Purchases, dispatch, maintenance, and operating costs" />
+        <MetricCard title="Outstanding Balance" value={formatCurrency(invoiceSummary.outstandingAmount)} subtitle="Receivables awaiting payment" />
+        <MetricCard title="Overdue Invoices" value={`${invoiceSummary.overdue}`} subtitle="Customers who need renewal or collection follow-up" />
+        <MetricCard title="Cash Flow" value={formatCurrency(summary.data?.cash_flow ?? 0)} subtitle="High-level business health snapshot" />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard title="Expenses Today" value={`NGN ${(summary.data?.expenses_today ?? 0).toLocaleString()}`} subtitle="Daily operating outflow" />
-        <MetricCard title="Expenses This Week" value={`NGN ${(summary.data?.expenses_this_week ?? 0).toLocaleString()}`} subtitle="Weekly purchasing and field spend" />
-        <MetricCard title="Expenses This Month" value={`NGN ${(summary.data?.expenses_this_month ?? 0).toLocaleString()}`} subtitle="Monthly cost trend for operations" />
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <CardTitle>Transaction History</CardTitle>
-                <CardDescription>Central bookkeeping log for operating income and expenses.</CardDescription>
+                <CardTitle>Invoice & Renewal Queue</CardTitle>
+                <CardDescription>Commercial billing posture across active customer accounts.</CardDescription>
               </div>
               <Button variant="outline" onClick={() => syncBilling.mutate()} disabled={syncBilling.isPending}>
                 <RefreshCcw className="mr-2 h-4 w-4" />
                 Sync Billing Income
               </Button>
             </div>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Reference</TableHead>
+                  <TableHead>Plan</TableHead>
+                  <TableHead>Due Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Balance</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {invoices.map((invoice) => (
+                  <TableRow key={invoice.id}>
+                    <TableCell className="font-medium">{invoice.customerName}</TableCell>
+                    <TableCell>{invoice.reference}</TableCell>
+                    <TableCell>{invoice.planName}</TableCell>
+                    <TableCell>{formatDateOrDash(invoice.dueDate)}</TableCell>
+                    <TableCell>
+                      <Badge variant={invoice.status === "paid" ? "success" : invoice.status === "overdue" ? "danger" : "warning"}>
+                        {titleCase(invoice.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{formatCurrency(invoice.balance)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Paystack Readiness</CardTitle>
+            <CardDescription>Production payment flow should stay backend-driven and environment-based.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="rounded-2xl border border-border/70 p-4">
+              <p className="font-medium">Required environment variables</p>
+              <p className="mt-2 text-muted-foreground">`PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `PAYSTACK_WEBHOOK_SECRET`, `PAYSTACK_CALLBACK_URL`</p>
+            </div>
+            <div className="rounded-2xl border border-border/70 p-4">
+              <p className="font-medium">Production notes</p>
+              <p className="mt-2 text-muted-foreground">Initialize transactions on the backend, verify callbacks server-side, and never expose secret keys in the frontend.</p>
+            </div>
+            <div className="rounded-2xl border border-border/70 p-4">
+              <p className="font-medium">Plan renewal flow</p>
+              <p className="mt-2 text-muted-foreground">Issue invoice, start Paystack checkout, verify webhook, then update account/payment status and renewal dates.</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Transaction History</CardTitle>
+            <CardDescription>Central bookkeeping log for operating income and expenses.</CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <Table>
@@ -106,9 +169,9 @@ export function FinancePage() {
                       <Badge variant={transaction.entry_type === "income" ? "success" : "outline"}>{transaction.entry_type}</Badge>
                     </TableCell>
                     <TableCell className="capitalize">{transaction.category}</TableCell>
-                    <TableCell>NGN {transaction.amount.toLocaleString()}</TableCell>
+                    <TableCell>{formatCurrency(transaction.amount)}</TableCell>
                     <TableCell>{transaction.description}</TableCell>
-                    <TableCell>{new Date(transaction.transaction_date).toLocaleString()}</TableCell>
+                    <TableCell>{formatDateOrDash(transaction.transaction_date)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -120,9 +183,9 @@ export function FinancePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <LineChart className="h-4 w-4 text-primary" />
-              Record Transaction
+              Record Manual Transaction
             </CardTitle>
-            <CardDescription>Use this for expenses, installation fees, purchases, fuel, salaries, and one-off sales.</CardDescription>
+            <CardDescription>Use this for verified expenses, installation fees, logistics, and one-off service income.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
             <div className="grid gap-3 md:grid-cols-2">

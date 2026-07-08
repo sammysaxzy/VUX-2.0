@@ -3,12 +3,16 @@ export type Role =
   | "tenant_admin"
   | "isp_admin"
   | "admin"
+  | "manager"
   | "support"
+  | "customer_care"
   | "noc"
   | "noc_viewer"
   | "noc_engineer"
   | "field_engineer"
+  | "engineer"
   | "accountant"
+  | "finance"
   | "store_manager";
 export type NodeType = "olt" | "odf" | "cabinet" | "mst" | "pole" | "closure" | "customer";
 export type SessionStatus = "online" | "offline";
@@ -62,10 +66,17 @@ export interface AuthResponse {
 }
 
 export interface KpiSnapshot {
+  totalCustomers?: number;
   activeCustomers: number;
+  suspendedCustomers?: number;
   offlineCustomers: number;
   totalOlts: number;
   activeRadiusSessions: number;
+  revenue?: number;
+  overdueInvoices?: number;
+  openTickets?: number;
+  networkFaults?: number;
+  technicianJobs?: number;
   inventoryValue?: number;
   totalIncome?: number;
   totalExpenses?: number;
@@ -321,7 +332,9 @@ export interface Customer {
   name: string;
   email: string;
   phone: string;
+  alternatePhone?: string;
   address: string;
+  serviceLocation?: string;
   location: GeoPoint;
   mstId?: string;
   splitterPort?: number;
@@ -330,7 +343,12 @@ export interface Customer {
   onuVendor?: string;
   onuModel?: string;
   onuSerial: string;
+  onuMac?: string;
   routerBrand?: string;
+  routerModel?: string;
+  routerSerial?: string;
+  routerMac?: string;
+  wifiName?: string;
   routerType?: "standard" | "upgraded";
   deviceStatus?: "online" | "offline";
   lastSeenAt?: string;
@@ -347,10 +365,45 @@ export interface Customer {
   assignedEngineer?: string;
   lastLogin?: string;
   slaTier?: "gold" | "silver" | "bronze";
+  planName?: string;
+  monthlyFee?: number;
+  paymentStatus?: "paid" | "pending" | "overdue";
+  balance?: number;
+  customerSince?: string;
+  nextInvoiceDate?: string;
+  lastPaymentDate?: string;
+  paymentReference?: string;
+  installationFee?: number;
+  supportStatus?: "stable" | "watch" | "needs_attention";
+  tags?: string[];
+  notes?: Array<{
+    id: string;
+    author: string;
+    message: string;
+    createdAt: string;
+  }>;
+  history?: Array<{
+    id: string;
+    title: string;
+    description: string;
+    createdAt: string;
+    type: "billing" | "support" | "installation" | "network" | "account";
+    status?: string;
+  }>;
+  installationRecords?: Array<{
+    id: string;
+    title: string;
+    technician: string;
+    scheduledAt?: string;
+    completedAt?: string;
+    status: "pending" | "scheduled" | "completed";
+    materials: string[];
+    notes?: string;
+  }>;
 }
 
 export type CustomerPortalStatus = "active" | "suspended";
-export type CustomerTicketStatus = "open" | "in_progress" | "resolved";
+export type CustomerTicketStatus = "open" | "in_progress" | "escalated" | "resolved" | "closed";
 export type CustomerTicketCategory = "slow speed" | "no internet" | "billing" | "other";
 export type NotificationSeverity = "info" | "warning" | "critical";
 export type PaymentStatus = "pending" | "success" | "failed";
@@ -452,7 +505,7 @@ export interface Fault {
   location: GeoPoint;
   affectedNodeId?: string;
   affectedCableId?: string;
-  status: "open" | "investigating" | "resolved";
+  status: "open" | "investigating" | "escalated" | "resolved";
   createdAt: string;
 }
 
@@ -617,6 +670,25 @@ export interface FinancialTransaction {
   updated_at?: string;
 }
 
+export type BillingInvoiceStatus = "draft" | "issued" | "partial" | "paid" | "overdue";
+
+export interface BillingInvoice {
+  id: string;
+  customerId: string;
+  customerName: string;
+  planName: string;
+  amount: number;
+  balance: number;
+  status: BillingInvoiceStatus;
+  issuedAt: string;
+  dueDate: string;
+  paidAt?: string;
+  reference: string;
+  paymentMethod?: "bank_transfer" | "cash" | "paystack" | "card";
+  paymentGateway?: "paystack";
+  notes?: string;
+}
+
 export interface FinanceSummary {
   total_income: number;
   total_expenses: number;
@@ -692,6 +764,7 @@ export interface WorkOrder {
   onu_mac?: string;
   router_mac?: string;
   installation_fee: number;
+  priority?: "low" | "medium" | "high" | "critical";
   latitude?: number;
   longitude?: number;
   map_reference?: string;
@@ -703,5 +776,8 @@ export interface WorkOrder {
   created_by_user_id?: number;
   created_at?: string;
   updated_at?: string;
+  due_date?: string;
+  escalation_reason?: string;
+  completion_notes?: string;
   materials: WorkOrderMaterial[];
 }

@@ -2,12 +2,14 @@
 
 import { Bell, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getRoleLabel } from "@/lib/isp";
 import { useAppStore } from "@/store/app-store";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 export function Topbar() {
   const logout = useAppStore((state) => state.logout);
   const user = useAppStore((state) => state.user);
+  const branding = useAppStore((state) => state.branding);
   const liveAlerts = useAppStore((state) => state.realtimeAlerts);
 
   return (
@@ -15,6 +17,7 @@ export function Topbar() {
       <div>
         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">NOC Command</p>
         <span className="text-sm font-medium">{user?.fullName || "User"}</span>
+        <p className="text-xs text-muted-foreground">{getRoleLabel(user?.role)} • {branding?.tenantId ?? "tenant"}</p>
       </div>
       <div className="flex items-center gap-2">
         <Button variant="outline" size="icon" className="relative">
