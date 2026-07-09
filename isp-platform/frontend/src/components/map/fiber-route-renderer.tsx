@@ -17,7 +17,8 @@ export function FiberRouteRenderer({ cables, highlightedCableId, resolvedTheme }
       features: cables.map((cable) => {
         const cablePath = cable.geometry?.length ? cable.geometry : cable.coordinates;
         const usedCores = cable.cores.filter((core) => core.status === "used").length;
-        const freeCores = Math.max(cable.coreCount - usedCores, 0);
+        const freeCores = cable.cores.filter((core) => core.status === "free").length;
+        const reservedCores = cable.cores.filter((core) => core.status === "reserved").length;
         return {
           type: "Feature",
           id: cable.id,
@@ -28,12 +29,15 @@ export function FiberRouteRenderer({ cables, highlightedCableId, resolvedTheme }
             coreCount: cable.coreCount,
             usedCores,
             freeCores,
+            reservedCores,
             segmentType: cable.segmentType ?? "distribution",
             flowDirection: cable.segmentType === "drop" ? "drop" : "outgoing",
+            routeStatus: cable.routeStatus ?? "existing",
+            installationMethod: cable.installationMethod ?? "underground",
             label:
               cable.segmentType === "drop"
                 ? `${cable.coreUsed ?? "Drop"} • Port ${cable.splitterPort ?? "-"}`
-                : `${cable.coreCount}-core`,
+                : `${cable.coreCount}-core • ${cable.routeStatus ?? "existing"}`,
           },
           geometry: {
             type: "LineString",
@@ -67,6 +71,12 @@ export function FiberRouteRenderer({ cables, highlightedCableId, resolvedTheme }
             "#F97316",
             ["boolean", ["get", "faulted"], false],
             "#EF4444",
+            ["==", ["get", "routeStatus"], "planned"],
+            "#2563EB",
+            ["==", ["get", "routeStatus"], "temporary"],
+            "#D97706",
+            ["==", ["get", "routeStatus"], "maintenance"],
+            "#7C3AED",
             ["==", ["get", "segmentType"], "drop"],
             "#2563EB",
             ["==", ["get", "flowDirection"], "incoming"],
@@ -76,6 +86,16 @@ export function FiberRouteRenderer({ cables, highlightedCableId, resolvedTheme }
             "#2DD4BF",
           ],
           "line-opacity": 0.9,
+          "line-dasharray": [
+            "case",
+            ["==", ["get", "routeStatus"], "planned"],
+            ["literal", [2, 1.5]],
+            ["==", ["get", "routeStatus"], "temporary"],
+            ["literal", [0.8, 1.2]],
+            ["==", ["get", "installationMethod"], "aerial"],
+            ["literal", [3, 1]],
+            ["literal", [1, 0]],
+          ],
         }}
       />
       <Layer

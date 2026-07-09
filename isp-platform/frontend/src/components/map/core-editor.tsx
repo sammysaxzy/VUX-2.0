@@ -12,7 +12,7 @@ type CoreEditorProps = {
   onSetCoreState: (payload: {
     cableId: string;
     coreId: string;
-    status: "free" | "used";
+    status: "free" | "used" | "reserved";
     fromMstId?: string;
     toMstId?: string;
     usagePath?: string;
@@ -20,7 +20,7 @@ type CoreEditorProps = {
   }) => void;
 };
 
-type CoreAction = "assign" | "free" | "reroute";
+type CoreAction = "assign" | "free" | "reroute" | "reserve" | "release_reservation";
 
 export function CoreEditor({ cable, disabled = false, onSetCoreState }: CoreEditorProps) {
   const [action, setAction] = useState<CoreAction>("assign");
@@ -31,7 +31,13 @@ export function CoreEditor({ cable, disabled = false, onSetCoreState }: CoreEdit
 
   const freeCores = useMemo(() => cable.cores.filter((core) => core.status === "free"), [cable.cores]);
   const usedCores = useMemo(() => cable.cores.filter((core) => core.status === "used"), [cable.cores]);
-  const options = action === "assign" ? freeCores : usedCores;
+  const reservedCores = useMemo(() => cable.cores.filter((core) => core.status === "reserved"), [cable.cores]);
+  const options =
+    action === "assign" || action === "reserve"
+      ? freeCores
+      : action === "release_reservation"
+        ? reservedCores
+        : usedCores;
   const selectedCore = options.find((core) => core.id === coreId);
 
   return (
@@ -39,8 +45,10 @@ export function CoreEditor({ cable, disabled = false, onSetCoreState }: CoreEdit
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Core Editor</p>
       <Select value={action} disabled={disabled} onChange={(event) => setAction(event.target.value as CoreAction)}>
         <option value="assign">Assign Free Core</option>
+        <option value="reserve">Reserve Free Core</option>
         <option value="free">Free Used Core</option>
         <option value="reroute">Re-route Used Core</option>
+        <option value="release_reservation">Release Reserved Core</option>
       </Select>
       <Select value={coreId} disabled={disabled} onChange={(event) => setCoreId(event.target.value)}>
         <option value="">Select core</option>
@@ -51,7 +59,7 @@ export function CoreEditor({ cable, disabled = false, onSetCoreState }: CoreEdit
         ))}
       </Select>
 
-      {action !== "free" ? (
+      {action !== "free" && action !== "release_reservation" ? (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <Input value={fromEndpoint} disabled={disabled} onChange={(event) => setFromEndpoint(event.target.value)} placeholder="From (MST/Client)" />
           <Input value={toEndpoint} disabled={disabled} onChange={(event) => setToEndpoint(event.target.value)} placeholder="To (MST/Client)" />
@@ -66,6 +74,25 @@ export function CoreEditor({ cable, disabled = false, onSetCoreState }: CoreEdit
           if (!selectedCore) return;
           if (action === "free") {
             onSetCoreState({ cableId: cable.id, coreId: selectedCore.id, status: "free" });
+            setCoreId("");
+            setNote("");
+            return;
+          }
+          if (action === "release_reservation") {
+            onSetCoreState({ cableId: cable.id, coreId: selectedCore.id, status: "free" });
+            setCoreId("");
+            setNote("");
+            return;
+          }
+          if (action === "reserve") {
+            onSetCoreState({
+              cableId: cable.id,
+              coreId: selectedCore.id,
+              status: "reserved",
+              fromMstId: fromEndpoint,
+              toMstId: toEndpoint,
+              usagePath: note.trim().length ? note : `${selectedCore.label} is reserved from ${fromEndpoint || "-"} to ${toEndpoint || "-"}`,
+            });
             setCoreId("");
             setNote("");
             return;
@@ -88,7 +115,15 @@ export function CoreEditor({ cable, disabled = false, onSetCoreState }: CoreEdit
           setNote("");
         }}
       >
-        {action === "assign" ? "Assign Core" : action === "free" ? "Free Core" : "Apply Re-route"}
+        {action === "assign"
+          ? "Assign Core"
+          : action === "reserve"
+            ? "Reserve Core"
+            : action === "release_reservation"
+              ? "Release Reservation"
+              : action === "free"
+                ? "Free Core"
+                : "Apply Re-route"}
       </Button>
     </div>
   );

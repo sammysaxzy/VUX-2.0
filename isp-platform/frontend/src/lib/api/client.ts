@@ -28,6 +28,7 @@ import type {
   FinanceSummary,
   Fault,
   FiberCoreManagementSnapshot,
+  FibreCoreCount,
   FinancialTransaction,
   FibreCable,
   BackupStatus,
@@ -1758,7 +1759,7 @@ export const apiClient = {
     });
     return data.map((cable) => ({
       ...hydrateCableRoute(cable),
-      coreCount: cable.coreCount ?? (cable.core_count as 2 | 4 | 8 | 12 | 24) ?? (cable.cores.length as 2 | 4 | 8 | 12 | 24),
+      coreCount: cable.coreCount ?? (cable.core_count as FibreCoreCount) ?? (cable.cores.length as FibreCoreCount),
     }));
   },
 
@@ -1767,7 +1768,7 @@ export const apiClient = {
       startMstId: string;
       endMstId: string;
       geometry: { lat: number; lng: number }[];
-      coreCount: 2 | 4 | 8 | 12 | 24;
+      coreCount: FibreCoreCount;
     },
     tenantId: string,
     token?: string,
@@ -1808,7 +1809,7 @@ export const apiClient = {
     payload: {
       cableId: string;
       coreId: string;
-      status: "free" | "used";
+      status: "free" | "used" | "reserved";
       fromMstId?: string;
       toMstId?: string;
       usagePath?: string;

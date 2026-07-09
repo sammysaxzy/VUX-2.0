@@ -13,13 +13,13 @@ const schema = z.object({
   name: z.string().min(3, "Name is required"),
   latitude: z.coerce.number().min(-90).max(90),
   longitude: z.coerce.number().min(-180).max(180),
-  type: z.enum(["mst", "closure"]),
+  type: z.enum(["mst", "closure", "olt", "pop", "pole", "manhole"]),
 });
 
 type FormValues = z.infer<typeof schema>;
 
 type AddNodeFormProps = {
-  onSubmit: (payload: { name: string; type: "mst" | "closure"; location: GeoPoint }) => void;
+  onSubmit: (payload: { name: string; type: "mst" | "closure" | "olt" | "pop" | "pole" | "manhole"; location: GeoPoint }) => void;
 };
 
 export function AddNodeForm({ onSubmit }: AddNodeFormProps) {
@@ -80,6 +80,10 @@ export function AddNodeForm({ onSubmit }: AddNodeFormProps) {
         <Select id="node-type" {...form.register("type")}>
           <option value="mst">MST</option>
           <option value="closure">Closure</option>
+          <option value="olt">OLT</option>
+          <option value="pop">POP</option>
+          <option value="pole">Pole</option>
+          <option value="manhole">Manhole / Handhole</option>
         </Select>
       </div>
 

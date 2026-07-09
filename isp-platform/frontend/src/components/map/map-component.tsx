@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Map, { Marker, Popup, type MapMouseEvent, type MapRef, type ViewState } from "react-map-gl/mapbox";
-import { Box, GitMerge, Home, MapPinPlusInside, Menu, Network, Search, Server, TriangleAlert } from "lucide-react";
+import Map, { Layer, Marker, Popup, Source, type MapMouseEvent, type MapRef, type ViewState } from "react-map-gl/mapbox";
+import { Box, GitMerge, Home, MapPinPlusInside, Menu, Mountain, Network, Ruler, Search, Server, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { AddFiberForm } from "@/components/map/add-fiber-form";
 import { AddNodeForm } from "@/components/map/add-node-form";
@@ -16,11 +16,11 @@ import { MSTDetailsPanel } from "@/components/map/mst-details-panel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { formatCableDistance } from "@/lib/fibre-routing";
+import { calculatePolylineDistanceMeters, formatCableDistance } from "@/lib/fibre-routing";
 import { cn, randomId } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 import { useThemeStore } from "@/store/theme-store";
-import type { ClosureBox, Customer, FibreCable, Fault, GeoPoint, NetworkNode } from "@/types";
+import type { ClosureBox, Customer, FibreCable, FibreCoreCount, Fault, GeoPoint, NetworkNode } from "@/types";
 
 const mapToken = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
 
@@ -33,20 +33,36 @@ type Props = {
   className?: string;
   onInfrastructureAdded?: (node: NetworkNode) => void;
   onUpdateNode?: (node: NetworkNode) => void;
+  onUpdateClosure?: (closure: ClosureBox) => void;
   onSeedFault?: () => void;
   onCreateFiber?: (payload: {
     name?: string;
     start: GeoPoint;
     end: GeoPoint;
-    coreCount: 2 | 4 | 8 | 12 | 24;
-    startMstId?: string;
-    endMstId?: string;
+    geometry?: GeoPoint[];
+    coreCount: FibreCoreCount;
+    cableType?: string;
+    owner?: string;
+    routeStatus: FibreCable["routeStatus"];
+    routeType: FibreCable["routeType"];
+    installationMethod: FibreCable["installationMethod"];
+    installDate?: string;
+    depthMeters?: number;
+    heightMeters?: number;
+    notes?: string;
+    startNodeId?: string;
+    endNodeId?: string;
+    startAssetType?: NetworkNode["type"];
+    startAssetName?: string;
+    endAssetType?: NetworkNode["type"];
+    endAssetName?: string;
+    creationMode: "asset" | "coordinates" | "draw";
   }) => void | Promise<void>;
   onAssignCore?: (payload: { cableId: string; coreId: string }) => void;
   onSetCoreState?: (payload: {
     cableId: string;
     coreId: string;
-    status: "free" | "used";
+    status: "free" | "used" | "reserved";
     fromMstId?: string;
     toMstId?: string;
     usagePath?: string;
@@ -130,6 +146,24 @@ function parseCoordinateSearch(input: string): GeoPoint | null {
   return { lat, lng };
 }
 
+function projectPoint(point: GeoPoint) {
+  const latFactor = 111320;
+  const lngFactor = Math.cos((point.lat * Math.PI) / 180) * 111320;
+  return { x: point.lng * lngFactor, y: point.lat * latFactor };
+}
+
+function calculateAreaMeters(points: GeoPoint[]) {
+  if (points.length < 3) return 0;
+  const projected = points.map(projectPoint);
+  let sum = 0;
+  for (let index = 0; index < projected.length; index += 1) {
+    const current = projected[index];
+    const next = projected[(index + 1) % projected.length];
+    sum += current.x * next.y - next.x * current.y;
+  }
+  return Math.abs(sum / 2);
+}
+
 export function MapComponent({
   nodes,
   cables,
@@ -141,6 +175,7 @@ export function MapComponent({
   focusCustomerId,
   onInfrastructureAdded,
   onUpdateNode,
+  onUpdateClosure,
   onSeedFault,
   onCreateFiber,
   onAssignCore,
@@ -174,6 +209,11 @@ export function MapComponent({
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   const [hoveredNode, setHoveredNode] = useState<NetworkNode | null>(null);
   const [flowView, setFlowView] = useState(false);
+  const [mapStyleMode, setMapStyleMode] = useState<"street" | "satellite" | "dark">("street");
+  const [isDrawingRoute, setIsDrawingRoute] = useState(false);
+  const [drawnRoutePoints, setDrawnRoutePoints] = useState<GeoPoint[]>([]);
+  const [measurementMode, setMeasurementMode] = useState<"off" | "distance" | "area" | "offset">("off");
+  const [measurementPoints, setMeasurementPoints] = useState<GeoPoint[]>([]);
 
   const selectedMSTId = useAppStore((state) => state.selectedMSTId);
   const selectedFiberId = useAppStore((state) => state.selectedFiberId);
@@ -220,6 +260,19 @@ export function MapComponent({
     [selectedClosureId, workHistory],
   );
   const activeFaults = faults.filter((fault) => fault.status !== "resolved");
+  const measurementDistance = useMemo(
+    () => (measurementPoints.length >= 2 ? formatCableDistance(calculatePolylineDistanceMeters(measurementPoints)) : "0 m"),
+    [measurementPoints],
+  );
+  const measurementArea = useMemo(() => {
+    if (measurementMode !== "area" || measurementPoints.length < 3) return "0 m2";
+    const area = calculateAreaMeters(measurementPoints);
+    return area > 1000000 ? `${(area / 1000000).toFixed(2)} km2` : `${Math.round(area)} m2`;
+  }, [measurementMode, measurementPoints]);
+  const measurementOffset = useMemo(() => {
+    if (measurementMode !== "offset" || measurementPoints.length < 2) return "0 m";
+    return formatCableDistance(calculatePolylineDistanceMeters([measurementPoints[0], measurementPoints[measurementPoints.length - 1]]));
+  }, [measurementMode, measurementPoints]);
   const hoveredNodeSummary = useMemo(() => {
     if (!hoveredNode) return "";
     if (hoveredNode.type === "mst") {
@@ -316,11 +369,13 @@ export function MapComponent({
           type="button"
           className={cn(
             "grid h-7 w-7 place-content-center rounded-full border-2 text-white shadow-lg transition hover:scale-110",
+            node.type === "pop" && "border-sky-100 bg-sky-700",
             node.type === "olt" && "border-cyan-100 bg-cyan-600",
             node.type === "odf" && "border-indigo-100 bg-indigo-600",
             node.type === "cabinet" && "border-amber-100 bg-amber-600",
             node.type === "mst" && mstColorClass,
-            node.type === "pole" && "border-amber-100 bg-amber-600",
+            node.type === "pole" && "border-orange-100 bg-orange-700",
+            node.type === "manhole" && "border-stone-100 bg-stone-700",
             node.type === "closure" && "border-fuchsia-100 bg-fuchsia-600",
             node.type === "customer" && "border-blue-100 bg-blue-600",
             node.status === "fault" && "animate-pulse border-red-100 bg-red-600",
@@ -385,12 +440,18 @@ export function MapComponent({
             }
           }}
         >
-          {node.type === "odf" ? (
+          {node.type === "pop" ? (
+            <Server className="h-4 w-4" />
+          ) : node.type === "odf" ? (
             <Server className="h-4 w-4" />
           ) : node.type === "cabinet" ? (
             <Box className="h-4 w-4" />
           ) : node.type === "mst" ? (
             <Network className="h-4 w-4" />
+          ) : node.type === "pole" ? (
+            <MapPinPlusInside className="h-4 w-4" />
+          ) : node.type === "manhole" ? (
+            <Box className="h-4 w-4" />
           ) : node.type === "closure" ? (
             <GitMerge className="h-4 w-4" />
           ) : node.type === "customer" ? (
@@ -490,7 +551,12 @@ export function MapComponent({
   }, [nodes]);
 
   const resolvedTheme = resolveTheme(theme);
-  const mapStyle = resolvedTheme === "dark" ? "mapbox://styles/mapbox/dark-v11" : "mapbox://styles/mapbox/light-v11";
+  const mapStyle =
+    mapStyleMode === "satellite"
+      ? "mapbox://styles/mapbox/satellite-streets-v12"
+      : mapStyleMode === "dark" || resolvedTheme === "dark" && mapStyleMode === "street"
+        ? "mapbox://styles/mapbox/dark-v11"
+        : "mapbox://styles/mapbox/light-v11";
 
   const searchResults = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -621,7 +687,7 @@ export function MapComponent({
   }, [placeResults, searchResults]);
 
   const addInfrastructure = (payload: {
-    type: "odf" | "cabinet" | "mst" | "closure" | "customer";
+    type: "pop" | "olt" | "odf" | "cabinet" | "mst" | "pole" | "manhole" | "closure" | "customer";
     name: string;
     location: GeoPoint;
   }) => {
@@ -798,6 +864,17 @@ export function MapComponent({
       return;
     }
 
+    if (measurementMode !== "off") {
+      setMeasurementPoints((prev) => [...prev, { lat: event.lngLat.lat, lng: event.lngLat.lng }]);
+      return;
+    }
+
+    if (isDrawingRoute) {
+      const nextPoint = { lat: event.lngLat.lat, lng: event.lngLat.lng };
+      setDrawnRoutePoints((prev) => [...prev, nextPoint]);
+      return;
+    }
+
     const lineFeature = event.features?.find((feature) => {
       if (feature.layer.id === "fibre-lines" || feature.layer.id === "fibre-labels" || feature.layer.id === "fault-glow") {
         return true;
@@ -868,6 +945,96 @@ export function MapComponent({
           resolvedTheme={resolvedTheme}
         />
 
+        {drawnRoutePoints.length >= 2 ? (
+          <Source
+            id="route-draft-source"
+            type="geojson"
+            data={{
+              type: "FeatureCollection",
+              features: [
+                {
+                  type: "Feature",
+                  geometry: {
+                    type: "LineString",
+                    coordinates: drawnRoutePoints.map((point) => [point.lng, point.lat]),
+                  },
+                  properties: {},
+                },
+              ],
+            } as GeoJSON.FeatureCollection}
+          >
+            <Layer
+              id="route-draft-line"
+              type="line"
+              paint={{
+                "line-color": "#F59E0B",
+                "line-width": 4,
+                "line-dasharray": [1.2, 1.2],
+              }}
+            />
+          </Source>
+        ) : null}
+
+        {drawnRoutePoints.map((point, index) => (
+          <Marker key={`draft-point-${index}`} longitude={point.lng} latitude={point.lat} anchor="center">
+            <div className="grid h-5 w-5 place-content-center rounded-full border border-amber-100 bg-amber-500 text-[10px] font-semibold text-white shadow-lg">
+              {index + 1}
+            </div>
+          </Marker>
+        ))}
+
+        {measurementPoints.length >= 2 ? (
+          <Source
+            id="measurement-source"
+            type="geojson"
+            data={{
+              type: "FeatureCollection",
+              features: [
+                {
+                  type: "Feature",
+                  geometry: {
+                    type: measurementMode === "area" && measurementPoints.length >= 3 ? "Polygon" : "LineString",
+                    coordinates:
+                      measurementMode === "area" && measurementPoints.length >= 3
+                        ? [[...measurementPoints.map((point) => [point.lng, point.lat]), [measurementPoints[0].lng, measurementPoints[0].lat]]]
+                        : measurementPoints.map((point) => [point.lng, point.lat]),
+                  },
+                  properties: {},
+                },
+              ],
+            } as GeoJSON.FeatureCollection}
+          >
+            {measurementMode === "area" && measurementPoints.length >= 3 ? (
+              <Layer
+                id="measurement-fill"
+                type="fill"
+                paint={{
+                  "fill-color": "#22C55E",
+                  "fill-opacity": 0.18,
+                }}
+              />
+            ) : (
+              <Layer
+                id="measurement-line"
+                type="line"
+                paint={{
+                  "line-color": "#22C55E",
+                  "line-width": 3,
+                  "line-dasharray": [1, 1],
+                }}
+              />
+            )}
+          </Source>
+        ) : null}
+
+        {measurementPoints.map((point, index) => (
+          <Marker key={`measurement-point-${index}`} longitude={point.lng} latitude={point.lat} anchor="center">
+            <div className="grid h-4.5 w-4.5 place-content-center rounded-full border border-green-100 bg-green-500 text-[9px] font-semibold text-white shadow">
+              {index + 1}
+            </div>
+          </Marker>
+        ))}
+
         {filteredNodes.map((node) => renderNodeMarker(node))}
 
         {!flowView &&
@@ -931,11 +1098,28 @@ export function MapComponent({
           </div>
           {!flowView ? (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <Button type="button" size="sm" variant={mapStyleMode === "street" ? "default" : "outline"} onClick={() => setMapStyleMode("street")}>
+                Street
+              </Button>
+              <Button type="button" size="sm" variant={mapStyleMode === "satellite" ? "default" : "outline"} onClick={() => setMapStyleMode("satellite")}>
+                Satellite
+              </Button>
+              <Button type="button" size="sm" variant={mapStyleMode === "dark" ? "default" : "outline"} onClick={() => setMapStyleMode("dark")}>
+                <Mountain className="mr-1 h-3.5 w-3.5" />
+                Dark
+              </Button>
+            </div>
+          ) : null}
+          {!flowView ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
               {[
                 { label: "MST", value: "mst" },
+                { label: "Pole", value: "pole" },
+                { label: "Manhole", value: "manhole" },
                 { label: "Cabinet", value: "cabinet" },
                 { label: "ODF", value: "odf" },
                 { label: "Closure", value: "closure" },
+                { label: "OLT", value: "olt" },
                 { label: "Client", value: "customer" },
               ].map((filter) => {
                 const isActive = activeFilters.has(filter.value);
@@ -1028,7 +1212,23 @@ export function MapComponent({
               <div className="rounded-xl border border-border/70 bg-background/70 p-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step 2: Connect Infrastructure</p>
                 <AddFiberForm
-                  mstNodes={mstNodes}
+                  nodes={nodes}
+                  drawnPoints={drawnRoutePoints}
+                  isDrawingRoute={isDrawingRoute}
+                  onStartDrawing={() => {
+                    setDrawnRoutePoints([]);
+                    setIsDrawingRoute(true);
+                    toast.info("Route drawing started. Click on the map to add each route point.");
+                  }}
+                  onStopDrawing={() => {
+                    setIsDrawingRoute(false);
+                    toast.success("Route drawing paused. Review the captured points or continue editing.");
+                  }}
+                  onClearDrawing={() => {
+                    setDrawnRoutePoints([]);
+                    setIsDrawingRoute(false);
+                    toast.info("Draft route cleared.");
+                  }}
                   onSubmit={(payload) => {
                     if (!canAdd) {
                       toast.error("Your role is read-only on the map.");
@@ -1066,7 +1266,51 @@ export function MapComponent({
                 </Button>
               </div>
               <div className="rounded-xl border border-border/70 bg-background/70 p-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step 4: Assign Clients</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step 4: Field Measurement</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {[
+                    { label: "Distance", value: "distance" as const },
+                    { label: "Area", value: "area" as const },
+                    { label: "Offset", value: "offset" as const },
+                  ].map((item) => (
+                    <Button
+                      key={item.value}
+                      type="button"
+                      size="sm"
+                      variant={measurementMode === item.value ? "default" : "outline"}
+                      onClick={() => {
+                        const nextMode = measurementMode === item.value ? "off" : item.value;
+                        setMeasurementMode(nextMode);
+                        setMeasurementPoints([]);
+                        toast.info(nextMode === "off" ? "Measurement mode cleared." : `${item.label} measurement started. Click on the map to add points.`);
+                      }}
+                    >
+                      <Ruler className="mr-1 h-3.5 w-3.5" />
+                      {item.label}
+                    </Button>
+                  ))}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setMeasurementMode("off");
+                      setMeasurementPoints([]);
+                    }}
+                  >
+                    Clear
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {measurementMode === "area"
+                    ? `Area: ${measurementArea}`
+                    : measurementMode === "offset"
+                      ? `Offset: ${measurementOffset}`
+                      : `Distance: ${measurementDistance}`}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-background/70 p-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step 5: Assign Clients</p>
                 <p className="mt-1 text-xs text-muted-foreground">Click an MST, then use Assign Client to draw a drop line.</p>
               </div>
             </div>
@@ -1092,6 +1336,18 @@ export function MapComponent({
         <div className="mt-1 flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
           <span>Client drop</span>
+        </div>
+        <div className="mt-1 flex items-center gap-2">
+          <span className="h-2.5 w-6 rounded-full border border-dashed border-blue-500" />
+          <span>Planned route</span>
+        </div>
+        <div className="mt-1 flex items-center gap-2">
+          <span className="h-2.5 w-6 rounded-full border border-dashed border-amber-500" />
+          <span>Temporary route</span>
+        </div>
+        <div className="mt-1 flex items-center gap-2">
+          <span className="grid h-4 w-4 place-content-center rounded-full bg-amber-500 text-[9px] font-semibold text-white">1</span>
+          <span>Manual route draft point</span>
         </div>
         </div>
       ) : null}
@@ -1124,6 +1380,12 @@ export function MapComponent({
         historyEntries={mstHistory}
         nodeLookup={nodeLookup}
         onAddNote={onAddNote}
+        onSavePhotos={({ nodeId, photos }) => {
+          const targetNode = nodes.find((node) => node.id === nodeId);
+          if (!targetNode) return;
+          onUpdateNode?.({ ...targetNode, photos });
+          toast.success("Photo slots saved for this asset.");
+        }}
         canAddNote={canEdit}
         pickedClientLocation={pickedClientLocation}
         isPickingClientLocation={isPickingClientLocation}
@@ -1170,6 +1432,12 @@ export function MapComponent({
         historyEntries={odfHistory}
         nodeLookup={nodeLookup}
         onAddNote={onAddNote}
+        onSavePhotos={({ nodeId, photos }) => {
+          const targetNode = nodes.find((node) => node.id === nodeId);
+          if (!targetNode) return;
+          onUpdateNode?.({ ...targetNode, photos });
+          toast.success("Photo slots saved for this asset.");
+        }}
         canAddNote={canEdit}
         canEdit={canEdit}
         canDelete={canDelete}
@@ -1228,6 +1496,12 @@ export function MapComponent({
         historyEntries={cabinetHistory}
         nodeLookup={nodeLookup}
         onAddNote={onAddNote}
+        onSavePhotos={({ nodeId, photos }) => {
+          const targetNode = nodes.find((node) => node.id === nodeId);
+          if (!targetNode) return;
+          onUpdateNode?.({ ...targetNode, photos });
+          toast.success("Photo slots saved for this asset.");
+        }}
         canAddNote={canEdit}
         canEdit={canEdit}
         canDelete={canDelete}
@@ -1309,11 +1583,18 @@ export function MapComponent({
         open={modalType === "closure-details"}
         closure={selectedClosure}
         cables={cables}
+        customers={customers}
         canEdit={canEdit}
         canDelete={canDelete}
         historyEntries={closureHistory}
         onAddNote={onAddNote}
         canAddNote={canEdit}
+        onSavePhotos={({ closureId, photos }) => {
+          const targetClosure = closures.find((closure) => closure.id === closureId);
+          if (!targetClosure) return;
+          onUpdateClosure?.({ ...targetClosure, photos });
+          toast.success("Closure photos saved.");
+        }}
         onSave={onSaveSplice ?? (() => undefined)}
         onDelete={onDeleteSplice}
         onDeleteClosure={(payload) => {

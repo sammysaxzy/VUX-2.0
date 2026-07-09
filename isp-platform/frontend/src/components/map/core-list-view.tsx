@@ -6,6 +6,14 @@ type CoreListViewProps = {
 };
 
 export function CoreListView({ cores }: CoreListViewProps) {
+  const resolveVariant = (status: FibreCore["status"]) => {
+    if (status === "used") return "warning";
+    if (status === "faulty" || status === "damaged") return "danger";
+    if (status === "reserved") return "info";
+    if (status === "dark") return "outline";
+    return "success";
+  };
+
   return (
     <div className="space-y-2">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Core Breakdown</p>
@@ -17,7 +25,7 @@ export function CoreListView({ cores }: CoreListViewProps) {
                 <span className="h-3 w-3 rounded-full border border-black/15" style={{ backgroundColor: core.color }} />
                 <p className="font-semibold">{core.label}</p>
               </div>
-              <Badge variant={core.status === "used" ? "warning" : core.status === "faulty" ? "danger" : "success"}>
+              <Badge variant={resolveVariant(core.status)}>
                 {core.status}
               </Badge>
             </div>

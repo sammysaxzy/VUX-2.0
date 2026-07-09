@@ -298,7 +298,7 @@ export const mockNodes: NetworkNode[] = [
 ];
 
 const buildCores = (
-  coreCount: 2 | 4 | 8 | 12 | 24,
+  coreCount: FibreCable["coreCount"],
   used = 4,
   faultIndex?: number,
   fromMstId?: string,
@@ -1302,7 +1302,7 @@ export function createMockMstConnection(payload: {
   startMstId: string;
   endMstId: string;
   geometry: { lat: number; lng: number }[];
-  coreCount: 2 | 4 | 8 | 12 | 24;
+  coreCount: FibreCable["coreCount"];
 }) {
   const startNode = mockNodes.find((node) => node.id === payload.startMstId);
   const endNode = mockNodes.find((node) => node.id === payload.endMstId);
@@ -1453,7 +1453,7 @@ function releaseCustomerCoreAssignments(customerId: string) {
 export function setMockCableCoreState(payload: {
   cableId: string;
   coreId: string;
-  status: "free" | "used";
+  status: "free" | "used" | "reserved";
   fromMstId?: string;
   toMstId?: string;
   usagePath?: string;
@@ -1468,11 +1468,23 @@ export function setMockCableCoreState(payload: {
     if (core.status === "used" && core.assignedToCustomerId !== payload.assignedToCustomerId) {
       throw new Error("Selected core is already assigned.");
     }
+    if (core.status === "reserved" && core.assignedToCustomerId !== payload.assignedToCustomerId) {
+      throw new Error("Selected core is reserved and cannot be allocated.");
+    }
     core.status = "used";
     core.assignedToCustomerId = payload.assignedToCustomerId;
     core.fromMstId = payload.fromMstId ?? cable.startMstId ?? cable.fromNodeId;
     core.toMstId = payload.toMstId ?? cable.endMstId ?? cable.toNodeId;
     core.usagePath = payload.usagePath ?? `${core.label} core is used from ${core.fromMstId ?? "-"} to ${core.toMstId ?? "-"}`;
+  } else if (payload.status === "reserved") {
+    if (core.status === "used") {
+      throw new Error("Used core cannot be reserved.");
+    }
+    core.status = "reserved";
+    core.assignedToCustomerId = undefined;
+    core.fromMstId = payload.fromMstId ?? cable.startMstId ?? cable.fromNodeId;
+    core.toMstId = payload.toMstId ?? cable.endMstId ?? cable.toNodeId;
+    core.usagePath = payload.usagePath ?? `${core.label} is reserved from ${core.fromMstId ?? "-"} to ${core.toMstId ?? "-"}`;
   } else {
     core.status = "free";
     core.assignedToCustomerId = undefined;

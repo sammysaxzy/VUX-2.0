@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { MapPinned } from "lucide-react";
 import { toast } from "sonner";
@@ -23,19 +23,23 @@ import {
 } from "@/hooks/api/use-network";
 import { usePermissionRoles } from "@/hooks/api/use-settings";
 import { getFaultImpact } from "@/lib/isp";
-import type { ClosureBox, Customer, FibreCable, Fault, NetworkNode } from "@/types";
+import type { ClosureBox, Customer, FibreCable, FibreCoreCount, Fault, NetworkNode } from "@/types";
 import { MapComponent } from "@/components/map/map-component";
+import { NetworkGisWorkbench } from "@/components/map/network-gis-workbench";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
-import { formatCableDistance, getPreferredFibreRoute, hydrateCableRoute } from "@/lib/fibre-routing";
+import { calculatePolylineDistanceMeters, formatCableDistance, getPreferredFibreRoute, hydrateCableRoute } from "@/lib/fibre-routing";
 import { resolveMapAccess } from "@/lib/map-permissions";
+import { cn } from "@/lib/utils";
 import { randomId } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 
 export function MapPage() {
   const [searchParams] = useSearchParams();
   const currentUser = useAppStore((state) => state.user);
+  const selectedFiberId = useAppStore((state) => state.selectedFiberId);
+  const selectedClientId = useAppStore((state) => state.selectedClientId);
   const { data: nodes, isLoading: nodesLoading } = useNetworkNodes();
   const { data: cables, isLoading: cableLoading } = useFibreCables();
   const { data: closures, isLoading: closureLoading } = useClosures();
@@ -59,6 +63,9 @@ export function MapPage() {
   const [localClosures, setLocalClosures] = useState<ClosureBox[]>([]);
   const [localCustomers, setLocalCustomers] = useState<Customer[]>([]);
   const [workHistory, setWorkHistory] = useState<Array<{ id: string; nodeId?: string; message: string; timestamp: string }>>([]);
+  const [activeMapCard, setActiveMapCard] = useState<"nodes" | "routes" | "closures" | "outages" | "customers" | null>(null);
+  const workbenchRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<HTMLDivElement | null>(null);
   const mapAccess = useMemo(() => resolveMapAccess(currentUser, permissionRoles ?? []), [currentUser, permissionRoles]);
 
   const logWork = (message: string, nodeId?: string) => {
@@ -82,6 +89,17 @@ export function MapPage() {
 
   const addNodeNote = (nodeId: string, note: string) => {
     logWork(`Field note: ${note}`, nodeId);
+  };
+
+  const focusSection = (
+    target: "workbench" | "map",
+    card: "nodes" | "routes" | "closures" | "outages" | "customers",
+    message: string,
+  ) => {
+    setActiveMapCard(card);
+    const section = target === "workbench" ? workbenchRef.current : mapRef.current;
+    section?.scrollIntoView({ behavior: "smooth", block: "start" });
+    toast.info(message);
   };
 
   useEffect(() => {
@@ -126,7 +144,7 @@ export function MapPage() {
     );
   }, [activeFaultCableIds, faults, localCables.length]);
 
-  const buildFreshCores = (coreCount: 2 | 4 | 8 | 12 | 24): FibreCable["cores"] =>
+  const buildFreshCores = (coreCount: FibreCoreCount): FibreCable["cores"] =>
     Array.from({ length: coreCount }, (_, index) => {
       const color = FIBRE_CORE_PALETTE[index % FIBRE_CORE_PALETTE.length];
       return {
@@ -313,11 +331,40 @@ export function MapPage() {
 
   const announceRouteResult = (cable: FibreCable) => {
     const message = `${cable.name} | ${formatCableDistance(cable.distanceMeters)}`;
+    if (cable.routeSource === "seeded") {
+      toast.success(`Custom fibre route saved. ${message}`);
+      return;
+    }
     if (cable.routeMode === "road") {
       toast.success(`Road-following fibre route ready. ${message}`);
       return;
     }
     toast.warning(`Directions unavailable, straight-line fallback used. ${message}`);
+  };
+
+  const validateDraftRoute = (payload: {
+    start: { lat: number; lng: number };
+    end: { lat: number; lng: number };
+    geometry?: Array<{ lat: number; lng: number }>;
+    startAssetType?: string;
+    endAssetType?: string;
+  }) => {
+    const geometry = payload.geometry?.length ? payload.geometry : [payload.start, payload.end];
+    if (geometry.length < 2) return "Route must contain at least two points.";
+    if ((payload.startAssetType === "closure" || payload.endAssetType === "closure") && geometry.length < 2) {
+      return "A closure route needs a valid connected geometry.";
+    }
+    const totalDistance = calculatePolylineDistanceMeters(geometry);
+    if (totalDistance < 5) return "Route distance is too short to publish.";
+    const impossibleBend = geometry.slice(1, -1).some((point, index) => {
+      const previous = geometry[index];
+      const next = geometry[index + 2];
+      const segmentA = calculatePolylineDistanceMeters([previous, point]);
+      const segmentB = calculatePolylineDistanceMeters([point, next]);
+      return segmentA > 0 && segmentB > 0 && (segmentA < 2 || segmentB < 2);
+    });
+    if (impossibleBend) return "Route contains an impossible bend or collapsed segment.";
+    return null;
   };
 
   const detachCablesFromClosures = (removedCableIds: string[]) => {
@@ -357,9 +404,9 @@ export function MapPage() {
     <div className="space-y-4 animate-fade-up">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Interactive Fibre Map</h1>
+          <h1 className="text-2xl font-semibold">Interactive Fibre GIS</h1>
           <p className="text-sm text-muted-foreground">
-            Extend the live network map with role-aware admin controls, MST client assignment, and road-following fibre drops.
+            Enterprise mapping workspace for planning, topology, outage impact, route design, and field operations.
           </p>
         </div>
         <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground">
@@ -374,31 +421,101 @@ export function MapPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <Card>
+        <Card
+          role="button"
+          tabIndex={0}
+          onClick={() => focusSection("map", "nodes", "Jumped to the live network map for node review.")}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              focusSection("map", "nodes", "Jumped to the live network map for node review.");
+            }
+          }}
+          className={cn(
+            "cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+            activeMapCard === "nodes" && "border-primary/70 ring-2 ring-primary/20",
+          )}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Network Nodes</CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">{localNodes.length}</CardContent>
         </Card>
-        <Card>
+        <Card
+          role="button"
+          tabIndex={0}
+          onClick={() => focusSection("map", "routes", "Jumped to the map to inspect fibre routes.")}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              focusSection("map", "routes", "Jumped to the map to inspect fibre routes.");
+            }
+          }}
+          className={cn(
+            "cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+            activeMapCard === "routes" && "border-primary/70 ring-2 ring-primary/20",
+          )}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Fibre Routes</CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">{localCables.length}</CardContent>
         </Card>
-        <Card>
+        <Card
+          role="button"
+          tabIndex={0}
+          onClick={() => focusSection("map", "closures", "Jumped to the map to inspect closures and splice points.")}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              focusSection("map", "closures", "Jumped to the map to inspect closures and splice points.");
+            }
+          }}
+          className={cn(
+            "cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+            activeMapCard === "closures" && "border-primary/70 ring-2 ring-primary/20",
+          )}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Closures</CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">{localClosures.length}</CardContent>
         </Card>
-        <Card>
+        <Card
+          role="button"
+          tabIndex={0}
+          onClick={() => focusSection("workbench", "outages", "Opened outage and impact analysis cards below.")}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              focusSection("workbench", "outages", "Opened outage and impact analysis cards below.");
+            }
+          }}
+          className={cn(
+            "cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+            activeMapCard === "outages" && "border-primary/70 ring-2 ring-primary/20",
+          )}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Open Outages</CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold text-danger">{activeFaults.length}</CardContent>
         </Card>
-        <Card>
+        <Card
+          role="button"
+          tabIndex={0}
+          onClick={() => focusSection("workbench", "customers", "Opened customer impact and service path views below.")}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              focusSection("workbench", "customers", "Opened customer impact and service path views below.");
+            }
+          }}
+          className={cn(
+            "cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+            activeMapCard === "customers" && "border-primary/70 ring-2 ring-primary/20",
+          )}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Affected Customers</CardTitle>
           </CardHeader>
@@ -406,15 +523,27 @@ export function MapPage() {
         </Card>
       </div>
 
-      <MapComponent
-        nodes={localNodes}
-        cables={localCables}
-        closures={localClosures}
-        customers={localCustomers}
-        focusCustomerId={focusCustomerId}
-        faults={faults ?? []}
-        highlightedCableId={highlightedCableId}
-        onInfrastructureAdded={(node) => {
+      <div ref={workbenchRef}>
+        <NetworkGisWorkbench
+          nodes={localNodes}
+          cables={localCables}
+          customers={localCustomers}
+          faults={faults ?? []}
+          selectedCable={localCables.find((cable) => cable.id === selectedFiberId)}
+          selectedCustomer={localCustomers.find((customer) => customer.id === selectedClientId)}
+        />
+      </div>
+
+      <div ref={mapRef}>
+        <MapComponent
+          nodes={localNodes}
+          cables={localCables}
+          closures={localClosures}
+          customers={localCustomers}
+          focusCustomerId={focusCustomerId}
+          faults={faults ?? []}
+          highlightedCableId={highlightedCableId}
+          onInfrastructureAdded={(node) => {
           setLocalNodes((prev) => [node, ...prev]);
           if (node.type === "closure") {
             setLocalClosures((prev) => [
@@ -434,6 +563,10 @@ export function MapPage() {
           setLocalNodes((prev) => prev.map((node) => (node.id === updatedNode.id ? updatedNode : node)));
           logWork(`${updatedNode.type.toUpperCase()} updated`, updatedNode.id);
         }}
+        onUpdateClosure={(updatedClosure) => {
+          setLocalClosures((prev) => prev.map((closure) => (closure.id === updatedClosure.id ? updatedClosure : closure)));
+          logWork(`CLOSURE updated`, updatedClosure.id);
+        }}
         onSeedFault={() => {
           const targetCable =
             localCables.find((cable) => cable.cores.some((core) => core.status === "used")) ?? localCables[0];
@@ -443,18 +576,64 @@ export function MapPage() {
           }
           reportFault.mutate(buildFaultPayload(targetCable));
         }}
-        onCreateFiber={async ({ name, start, end, coreCount, startMstId, endMstId }) => {
-          const route = await getPreferredFibreRoute(start, end);
-          if (route.routeMode !== "road") {
-            toast.error("Road-following routing is required for fibre deployment. Check the coordinates or Mapbox routing.");
+        onCreateFiber={async ({
+          name,
+          cableType,
+          owner,
+          geometry,
+          routeStatus,
+          routeType,
+          installationMethod,
+          installDate,
+          depthMeters,
+          heightMeters,
+          notes,
+          start,
+          end,
+          coreCount,
+          startNodeId,
+          endNodeId,
+          startAssetType,
+          startAssetName,
+          endAssetType,
+          endAssetName,
+          creationMode,
+        }) => {
+          const validationError = validateDraftRoute({
+            start,
+            end,
+            geometry,
+            startAssetType,
+            endAssetType,
+          });
+          if (validationError) {
+            toast.error(validationError);
             return;
           }
 
-          if (startMstId && endMstId) {
+          const directGeometry = geometry?.length && geometry.length >= 2 ? geometry : undefined;
+          const route = directGeometry
+            ? {
+                start: directGeometry[0],
+                end: directGeometry[directGeometry.length - 1],
+                geometry: directGeometry,
+                distanceMeters: calculatePolylineDistanceMeters(directGeometry),
+                routeMode: "straight" as const,
+                routeSource: "seeded" as const,
+                routeFallbackReason: creationMode === "draw" ? "Drawn manually on map." : "Provided by coordinate sequence.",
+              }
+            : await getPreferredFibreRoute(start, end);
+
+          if (!directGeometry && route.routeMode !== "road") {
+            toast.error("Road-following routing is required for direct asset routing. Use coordinate or manual drawing if you need custom bends.");
+            return;
+          }
+
+          if (startAssetType === "mst" && endAssetType === "mst" && startNodeId && endNodeId) {
             createMstConnection.mutate(
               {
-                startMstId,
-                endMstId,
+                startMstId: startNodeId,
+                endMstId: endNodeId,
                 geometry: route.geometry,
                 coreCount,
               },
@@ -463,6 +642,19 @@ export function MapPage() {
                   const nextCable = hydrateCableRoute({
                     ...createdCable,
                     name: name?.trim() || createdCable.name,
+                    cableType: cableType ?? createdCable.cableType ?? `${coreCount}-core`,
+                    owner,
+                    routeStatus,
+                    routeType,
+                    installationMethod,
+                    installDate,
+                    depthMeters,
+                    heightMeters,
+                    notes,
+                    startAssetType,
+                    startAssetName,
+                    endAssetType,
+                    endAssetName,
                     start: route.start,
                     end: route.end,
                     geometry: route.geometry,
@@ -497,8 +689,21 @@ export function MapPage() {
             id: randomId("cab"),
             name: name?.trim() || `Coordinate Fibre ${localCables.length + 1}`,
             coreCount,
-            fromNodeId: startNode?.id ?? randomId("coord-start"),
-            toNodeId: endNode?.id ?? randomId("coord-end"),
+            cableType: cableType ?? `${coreCount}-core`,
+            owner,
+            routeStatus,
+            routeType,
+            installationMethod,
+            installDate,
+            depthMeters,
+            heightMeters,
+            notes,
+            fromNodeId: startNodeId ?? startNode?.id ?? randomId("coord-start"),
+            toNodeId: endNodeId ?? endNode?.id ?? randomId("coord-end"),
+            startAssetType: startAssetType ?? startNode?.type,
+            startAssetName: startAssetName ?? startNode?.name,
+            endAssetType: endAssetType ?? endNode?.type,
+            endAssetName: endAssetName ?? endNode?.name,
             startMstId: startNode?.type === "mst" ? startNode.id : undefined,
             endMstId: endNode?.type === "mst" ? endNode.id : undefined,
             start: route.start,
@@ -651,6 +856,16 @@ export function MapPage() {
                       routeFallbackReason: route.routeFallbackReason,
                     }),
                 );
+                nextDropCable.slackLoops = [
+                  {
+                    id: randomId("slack"),
+                    lengthMeters: 15,
+                    location: `${mstNode.name} pole base`,
+                    loopCount: 2,
+                    coilDiameterMeters: 0.6,
+                    note: "Drop slack reserved for maintenance reroute.",
+                  },
+                ];
                 const resolvedCustomer = { ...nextCustomer, dropCableId: nextDropCable.id };
                 setLocalCustomers((prev) => {
                   const index = prev.findIndex((entry) => entry.id === resolvedCustomer.id);
@@ -826,8 +1041,9 @@ export function MapPage() {
         canAdd={mapAccess.canAdd}
         canEdit={mapAccess.canEdit}
         canDelete={mapAccess.canDelete}
-        canAssignClient={mapAccess.canAssignClient}
-      />
+          canAssignClient={mapAccess.canAssignClient}
+        />
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <Card>

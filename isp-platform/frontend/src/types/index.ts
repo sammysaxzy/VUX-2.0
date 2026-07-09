@@ -14,11 +14,14 @@ export type Role =
   | "accountant"
   | "finance"
   | "store_manager";
-export type NodeType = "olt" | "odf" | "cabinet" | "mst" | "pole" | "closure" | "customer";
+export type NodeType = "pop" | "olt" | "odf" | "cabinet" | "mst" | "pole" | "manhole" | "closure" | "customer";
 export type SessionStatus = "online" | "offline";
 export type FaultSeverity = "minor" | "major" | "critical";
 export type AccountStatus = "active" | "suspended";
 export type SplitterType = "1/2" | "1/4" | "1/8" | "1/16";
+export type FibreCoreCount = 2 | 4 | 8 | 12 | 24 | 48 | 96 | 144 | 288;
+export type FibreInstallationMethod = "underground" | "aerial" | "duct" | "indoor";
+export type FibreRouteStatus = "existing" | "planned" | "temporary" | "maintenance";
 export type MapAccessRole = "admin" | "engineer" | "viewer";
 export type MemberRole = "admin" | "support" | "noc";
 export type PrivilegeModel = "Role Based" | "Approval Based" | "Hybrid";
@@ -120,6 +123,15 @@ export interface GeoPoint {
   lng: number;
 }
 
+export interface AssetPhotoSlot {
+  id: string;
+  label: "before_installation" | "after_installation" | "current_condition";
+  title: string;
+  url?: string;
+  note?: string;
+  capturedAt?: string;
+}
+
 export type FibreRouteMode = "road" | "straight";
 export type FibreRouteSource = "mapbox-directions" | "seeded" | "straight-line-fallback";
 
@@ -128,7 +140,7 @@ export interface FibreCore {
   index: number;
   label: string;
   color: string;
-  status: "free" | "used" | "faulty";
+  status: "free" | "used" | "reserved" | "faulty" | "damaged" | "dark";
   fromMstId?: string;
   toMstId?: string;
   usagePath?: string;
@@ -159,9 +171,13 @@ export interface SpliceRecord {
 export interface FibreCable {
   id: string;
   name: string;
-  coreCount: 2 | 4 | 8 | 12 | 24;
+  coreCount: FibreCoreCount;
   fromNodeId: string;
   toNodeId: string;
+  startAssetType?: NodeType;
+  startAssetName?: string;
+  endAssetType?: NodeType;
+  endAssetName?: string;
   startMstId?: string;
   endMstId?: string;
   start?: GeoPoint;
@@ -173,7 +189,24 @@ export interface FibreCable {
   routeSource?: FibreRouteSource;
   routeFallbackReason?: string;
   segmentType?: "backbone" | "distribution" | "drop";
+  routeType?: "backbone" | "distribution" | "drop" | "feeder" | "access";
   flowDirection?: "incoming" | "outgoing" | "drop";
+  routeStatus?: FibreRouteStatus;
+  installationMethod?: FibreInstallationMethod;
+  owner?: string;
+  cableType?: string;
+  installDate?: string;
+  depthMeters?: number;
+  heightMeters?: number;
+  notes?: string;
+  slackLoops?: Array<{
+    id: string;
+    lengthMeters: number;
+    location: string;
+    loopCount: number;
+    coilDiameterMeters: number;
+    note?: string;
+  }>;
   clientId?: string;
   splitterPort?: number;
   assignedCoreId?: string;
@@ -199,6 +232,7 @@ export interface ClosureBox {
   location: GeoPoint;
   connectedCableIds: string[];
   splices: ClosureSplice[];
+  photos?: AssetPhotoSlot[];
 }
 
 export interface NetworkNode {
@@ -208,6 +242,7 @@ export interface NetworkNode {
   name: string;
   location: GeoPoint;
   status: "healthy" | "warning" | "fault";
+  photos?: AssetPhotoSlot[];
   splitterType?: SplitterType;
   splitterPorts?: SplitterPort[];
   clients?: MSTClient[];
@@ -1182,7 +1217,7 @@ export interface MstConnectionDraft {
   endMstId: string;
   start: GeoPoint;
   end: GeoPoint;
-  coreCount: 2 | 4 | 8 | 12 | 24;
+  coreCount: FibreCoreCount;
 }
 
 export interface CustomersQuery {

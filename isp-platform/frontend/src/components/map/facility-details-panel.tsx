@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { FacilityCableLink, FacilitySplice, FibreCable, NetworkNode } from "@/types";
+import type { AssetPhotoSlot, FacilityCableLink, FacilitySplice, FibreCable, NetworkNode } from "@/types";
 import { buildBufferGroups } from "@/lib/fibre-buffers";
 import { formatCableDistance } from "@/lib/fibre-routing";
 import { CoreEditor } from "@/components/map/core-editor";
@@ -22,6 +22,7 @@ type FacilityDetailsPanelProps = {
   historyEntries?: Array<{ id: string; message: string; timestamp: string }>;
   nodeLookup?: Record<string, string>;
   onAddNote?: (payload: { nodeId: string; note: string }) => void;
+  onSavePhotos?: (payload: { nodeId: string; photos: AssetPhotoSlot[] }) => void;
   canAddNote?: boolean;
   onOpenChange: (open: boolean) => void;
   onAttachCable: (payload: { nodeId: string; link: FacilityCableLink }) => void;
@@ -32,7 +33,7 @@ type FacilityDetailsPanelProps = {
   onSetCoreState: (payload: {
     cableId: string;
     coreId: string;
-    status: "free" | "used";
+    status: "free" | "used" | "reserved";
     fromMstId?: string;
     toMstId?: string;
     usagePath?: string;
@@ -51,6 +52,7 @@ export function FacilityDetailsPanel({
   historyEntries,
   nodeLookup,
   onAddNote,
+  onSavePhotos,
   canAddNote = true,
   onOpenChange,
   onAttachCable,
@@ -107,10 +109,12 @@ export function FacilityDetailsPanel({
               name: node.name,
               location: node.location,
               type: node.type,
+              photos: node.photos,
             }
           : undefined
       }
       cables={cables}
+      onSavePhotos={(payload) => onSavePhotos?.(payload)}
       title={title}
       description={description}
     >

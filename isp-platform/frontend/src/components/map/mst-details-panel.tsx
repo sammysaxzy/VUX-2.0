@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Customer, FibreCable, GeoPoint, NetworkNode, SplitterType } from "@/types";
+import type { AssetPhotoSlot, Customer, FibreCable, GeoPoint, NetworkNode, SplitterType } from "@/types";
 import { ClientAssignmentForm, type AssignmentCoreOption } from "@/components/map/client-assignment-form";
 import { CoreListView } from "@/components/map/core-list-view";
 import { NodeDetailsDrawer } from "@/components/map/node-details-drawer";
@@ -19,6 +19,7 @@ type MSTDetailsPanelProps = {
   historyEntries?: Array<{ id: string; message: string; timestamp: string }>;
   nodeLookup?: Record<string, string>;
   onAddNote?: (payload: { nodeId: string; note: string }) => void;
+  onSavePhotos?: (payload: { nodeId: string; photos: AssetPhotoSlot[] }) => void;
   canAddNote?: boolean;
   onOpenChange: (open: boolean) => void;
   onStartClientLocationPick?: () => void;
@@ -50,6 +51,7 @@ export function MSTDetailsPanel({
   historyEntries,
   nodeLookup,
   onAddNote,
+  onSavePhotos,
   canAddNote = true,
   onOpenChange,
   onStartClientLocationPick,
@@ -119,10 +121,12 @@ export function MSTDetailsPanel({
               name: node.name,
               location: node.location,
               type: node.type,
+              photos: node.photos,
             }
           : undefined
       }
       cables={cables}
+      onSavePhotos={(payload) => onSavePhotos?.(payload)}
       title={node ? node.name : "MST Details"}
       description="Simple MST workflow: splitter, ports, and client drops"
     >

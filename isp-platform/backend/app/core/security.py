@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -75,6 +75,10 @@ async def get_current_user_dependency(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    tenant_id = payload.get("tenant_id")
+    if tenant_id:
+        setattr(user, "tenant_id", tenant_id)
+
     return user
 
 
@@ -84,3 +88,26 @@ async def get_current_user(
 ) -> User:
     """Compatibility alias used by route modules."""
     return await get_current_user_dependency(credentials, db)
+
+
+async def get_current_tenant_id(
+    current_user: User = Depends(get_current_user_dependency),
+    x_tenant_id: Optional[str] = Header(default=None, alias="x-tenant-id"),
+) -> str:
+    """Resolve the active tenant from the request header and token context."""
+    token_tenant_id = getattr(current_user, "tenant_id", None)
+    tenant_id = x_tenant_id or token_tenant_id
+
+    if not tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant ID is required",
+        )
+
+    if x_tenant_id and token_tenant_id and x_tenant_id != token_tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant mismatch between token and request",
+        )
+
+    return tenant_id

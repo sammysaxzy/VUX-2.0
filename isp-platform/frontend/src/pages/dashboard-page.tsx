@@ -1,11 +1,12 @@
-import { Activity, Layers3, ShieldCheck, TowerControl } from "lucide-react";
+import { Activity, ArrowRight, Layers3, ShieldCheck, TowerControl } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useDashboardData } from "@/hooks/api/use-dashboard";
 import { useFinanceSummary } from "@/hooks/api/use-finance";
 import { useInventorySummary, useWorkOrders } from "@/hooks/api/use-inventory";
 import { useFaults } from "@/hooks/api/use-faults";
 import { useBusinessIntelligence, useEnterpriseSlaReports, useNocAlerts, useSystemHealth, useUsageAnalytics } from "@/hooks/api/use-operations";
 import { getRoleLabel } from "@/lib/isp";
-import { formatCurrency, titleCase } from "@/lib/utils";
+import { cn, formatCurrency, titleCase } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 import { AlertsPanel } from "@/components/dashboard/alerts-panel";
 import { KpiCards } from "@/components/dashboard/kpi-cards";
@@ -15,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 
 export function DashboardPage() {
+  const navigate = useNavigate();
   const { data, isLoading, isError, refetch } = useDashboardData();
   const financeSummary = useFinanceSummary();
   const inventorySummary = useInventorySummary();
@@ -52,6 +54,20 @@ export function DashboardPage() {
   const pendingWorkOrders = (workOrders.data ?? []).filter((entry) => entry.status !== "completed").slice(0, 4);
   const activeFaults = (faults.data ?? []).filter((fault) => fault.status !== "resolved");
   const breachedSla = (slaReports.data ?? []).filter((report) => report.breachStatus === "breached").length;
+  const getCardProps = (href: string) => ({
+    role: "button" as const,
+    tabIndex: 0,
+    onClick: () => navigate(href),
+    onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        navigate(href);
+      }
+    },
+    className: cn(
+      "cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+    ),
+  });
 
   return (
     <div className="space-y-5 animate-fade-up">
@@ -77,23 +93,35 @@ export function DashboardPage() {
       <KpiCards kpis={kpis} />
 
       <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr_0.8fr]">
-        <Card>
+        <Card {...getCardProps("/finance")}>
           <CardHeader>
-            <CardTitle>Commercial Readiness Snapshot</CardTitle>
+            <CardTitle className="flex items-center justify-between gap-2">
+              <span>Commercial Readiness Snapshot</span>
+              <span className="flex items-center text-xs font-medium text-primary">
+                Open
+                <ArrowRight className="ml-1 h-3.5 w-3.5" />
+              </span>
+            </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2">
-            <DashboardFact label="Total Income" value={formatCurrency(financeSummary.data?.total_income ?? 0)} />
-            <DashboardFact label="Total Expenses" value={formatCurrency(financeSummary.data?.total_expenses ?? 0)} />
-            <DashboardFact label="Cash Flow" value={formatCurrency(financeSummary.data?.cash_flow ?? 0)} />
-            <DashboardFact label="Inventory Value" value={formatCurrency(inventorySummary.data?.inventory_value ?? 0)} />
-            <DashboardFact label="Low Stock Items" value={`${inventorySummary.data?.low_stock_items ?? 0}`} />
-            <DashboardFact label="Pending Usage Approvals" value={`${inventorySummary.data?.pending_approvals ?? 0}`} />
+            <DashboardFact label="Total Income" value={formatCurrency(financeSummary.data?.total_income ?? 0)} href="/finance" />
+            <DashboardFact label="Total Expenses" value={formatCurrency(financeSummary.data?.total_expenses ?? 0)} href="/finance" />
+            <DashboardFact label="Cash Flow" value={formatCurrency(financeSummary.data?.cash_flow ?? 0)} href="/finance" />
+            <DashboardFact label="Inventory Value" value={formatCurrency(inventorySummary.data?.inventory_value ?? 0)} href="/inventory" />
+            <DashboardFact label="Low Stock Items" value={`${inventorySummary.data?.low_stock_items ?? 0}`} href="/inventory" />
+            <DashboardFact label="Pending Usage Approvals" value={`${inventorySummary.data?.pending_approvals ?? 0}`} href="/approvals" />
           </CardContent>
         </Card>
 
-        <Card>
+        <Card {...getCardProps("/network-intelligence")}>
           <CardHeader>
-            <CardTitle>Network Risk</CardTitle>
+            <CardTitle className="flex items-center justify-between gap-2">
+              <span>Network Risk</span>
+              <span className="flex items-center text-xs font-medium text-primary">
+                Open
+                <ArrowRight className="ml-1 h-3.5 w-3.5" />
+              </span>
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <p className="rounded-2xl border border-border/70 p-3">
@@ -109,13 +137,35 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card {...getCardProps("/field")}>
           <CardHeader>
-            <CardTitle>Field Operations</CardTitle>
+            <CardTitle className="flex items-center justify-between gap-2">
+              <span>Field Operations</span>
+              <span className="flex items-center text-xs font-medium text-primary">
+                Open
+                <ArrowRight className="ml-1 h-3.5 w-3.5" />
+              </span>
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {pendingWorkOrders.map((workOrder) => (
-              <div key={workOrder.id} className="rounded-2xl border border-border/70 p-3">
+              <div
+                key={workOrder.id}
+                role="button"
+                tabIndex={0}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  navigate("/field");
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    navigate("/field");
+                  }
+                }}
+                className="rounded-2xl border border-border/70 p-3 transition hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+              >
                 <p className="font-medium">{workOrder.title}</p>
                 <p className="text-xs text-muted-foreground">{workOrder.work_order_code}</p>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -132,8 +182,10 @@ export function DashboardPage() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
-        <AlertsPanel alerts={alerts} />
-        <Card>
+        <div {...getCardProps("/faults")}>
+          <AlertsPanel alerts={alerts} />
+        </div>
+        <Card {...getCardProps("/field")}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Activity className="h-4 w-4 text-primary" />
@@ -151,32 +203,36 @@ export function DashboardPage() {
           title="SLA Breaches"
           value={`${breachedSla}`}
           note="Enterprise and dedicated customers outside target uptime."
+          href="/network-intelligence"
         />
         <DashboardFactCard
           title="Peak Usage"
           value={`${usageAnalytics.data?.peakUsageMbps ?? 0} Mbps`}
           note={`Peak window ${usageAnalytics.data?.peakHourWindow ?? "pending analytics"}`}
+          href="/network-intelligence"
         />
         <DashboardFactCard
           title="Critical NOC Alerts"
           value={`${(nocAlerts.data ?? []).filter((item) => item.severity === "critical").length}`}
           note="Weak optical power, latency, packet loss, and device events."
+          href="/ai-noc"
         />
         <DashboardFactCard
           title="System Health"
           value={titleCase(systemHealth.data?.serverStatus ?? "unknown")}
           note={`Failed jobs: ${systemHealth.data?.failedJobs ?? 0} | Queue: ${systemHealth.data?.queueStatus ?? "unknown"}`}
+          href="/system-health"
         />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-4">
-        <DashboardFactCard title="MRR" value={formatCurrency(businessIntelligence.data?.mrr ?? 0)} note="Monthly recurring revenue" />
-        <DashboardFactCard title="ARR" value={formatCurrency(businessIntelligence.data?.arr ?? 0)} note="Annual recurring revenue" />
-        <DashboardFactCard title="ARPU" value={formatCurrency(businessIntelligence.data?.arpu ?? 0)} note="Average revenue per user" />
-        <DashboardFactCard title="Churn Rate" value={`${businessIntelligence.data?.churnRate ?? 0}%`} note="Current churn exposure" />
+        <DashboardFactCard title="MRR" value={formatCurrency(businessIntelligence.data?.mrr ?? 0)} note="Monthly recurring revenue" href="/enterprise-readiness" />
+        <DashboardFactCard title="ARR" value={formatCurrency(businessIntelligence.data?.arr ?? 0)} note="Annual recurring revenue" href="/enterprise-readiness" />
+        <DashboardFactCard title="ARPU" value={formatCurrency(businessIntelligence.data?.arpu ?? 0)} note="Average revenue per user" href="/enterprise-readiness" />
+        <DashboardFactCard title="Churn Rate" value={`${businessIntelligence.data?.churnRate ?? 0}%`} note="Current churn exposure" href="/customers" />
       </div>
 
-      <Card>
+      <Card {...getCardProps("/enterprise-readiness")}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Layers3 className="h-4 w-4 text-primary" />
@@ -193,11 +249,30 @@ export function DashboardPage() {
   );
 }
 
-function DashboardFactCard({ title, value, note }: { title: string; value: string; note: string }) {
+function DashboardFactCard({ title, value, note, href }: { title: string; value: string; note: string; href: string }) {
+  const navigate = useNavigate();
+
   return (
-    <Card>
+    <Card
+      role="button"
+      tabIndex={0}
+      onClick={() => navigate(href)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          navigate(href);
+        }
+      }}
+      className="cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+    >
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">{title}</CardTitle>
+        <CardTitle className="flex items-center justify-between gap-2 text-base">
+          <span>{title}</span>
+          <span className="flex items-center text-xs font-medium text-primary">
+            Open
+            <ArrowRight className="ml-1 h-3.5 w-3.5" />
+          </span>
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <p className="text-2xl font-semibold">{value}</p>
@@ -207,10 +282,33 @@ function DashboardFactCard({ title, value, note }: { title: string; value: strin
   );
 }
 
-function DashboardFact({ label, value }: { label: string; value: string }) {
+function DashboardFact({ label, value, href }: { label: string; value: string; href: string }) {
+  const navigate = useNavigate();
+
   return (
-    <div className="rounded-2xl border border-border/70 p-4">
-      <p className="text-sm text-muted-foreground">{label}</p>
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={(event) => {
+        event.stopPropagation();
+        navigate(href);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          event.stopPropagation();
+          navigate(href);
+        }
+      }}
+      className="rounded-2xl border border-border/70 p-4 transition hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <span className="flex items-center text-[11px] font-medium text-primary">
+          Open
+          <ArrowRight className="ml-1 h-3 w-3" />
+        </span>
+      </div>
       <p className="mt-1 text-xl font-semibold">{value}</p>
     </div>
   );

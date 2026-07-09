@@ -171,18 +171,22 @@ class TimestampMixin(BaseModel):
 # User Schemas
 class UserBase(BaseModel):
     email: EmailStr
-    username: str
+    username: Optional[str] = None
     full_name: Optional[str] = None
     role: UserRole = UserRole.FIELD_ENGINEER
+    tenant_id: Optional[str] = None
 
 
 class UserCreate(UserBase):
     password: str
+    isp_name: Optional[str] = None
 
 
 class UserLogin(BaseModel):
-    username: str
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
     password: str
+    tenant_id: Optional[str] = None
 
 
 class User(UserBase, TimestampMixin):

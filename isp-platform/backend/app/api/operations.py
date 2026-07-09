@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db
-from ..core.security import get_current_user_dependency as get_current_user
+from ..core.security import get_current_tenant_id, get_current_user_dependency as get_current_user
 from ..models import (
     ActivityLog,
     BillingPayment,
@@ -450,6 +450,14 @@ def _record_key(module: str, record_id: str) -> str:
     return f"{module}:{record_id}"
 
 
+def _tenant_module_key(tenant_id: str, module: str) -> str:
+    return f"{tenant_id}:{module}"
+
+
+def _tenant_setting_key(tenant_id: str, setting_key: str) -> str:
+    return f"{tenant_id}:{setting_key}"
+
+
 def _activity_payload(payload: BaseModel | dict[str, Any]) -> dict[str, Any]:
     if isinstance(payload, BaseModel):
         return payload.model_dump(mode="json")
@@ -477,11 +485,13 @@ async def _log_activity(
 async def _seed_module_records(
     db: AsyncSession,
     *,
+    tenant_id: str,
     module: str,
     model_cls,
     defaults: list[BaseModel],
 ):
-    existing = await db.execute(select(func.count(OperationRecord.id)).where(OperationRecord.module == module))
+    scoped_module = _tenant_module_key(tenant_id, module)
+    existing = await db.execute(select(func.count(OperationRecord.id)).where(OperationRecord.module == scoped_module))
     if (existing.scalar() or 0) > 0:
         return
     for default in defaults:
@@ -489,11 +499,11 @@ async def _seed_module_records(
         record_id = str(payload["id"])
         db.add(
             OperationRecord(
-                module=module,
-                record_key=_record_key(module, record_id),
+                module=scoped_module,
+                record_key=_record_key(scoped_module, record_id),
                 title=payload.get("title") or payload.get("name") or payload.get("customerName"),
                 status=payload.get("status") or payload.get("approvalStatus") or payload.get("active"),
-                payload=payload,
+                payload={"tenantId": tenant_id, **payload},
             )
         )
     await db.flush()
@@ -502,19 +512,22 @@ async def _seed_module_records(
 async def _list_module_records(
     db: AsyncSession,
     *,
+    tenant_id: str,
     module: str,
     model_cls,
     defaults: list[BaseModel],
 ):
-    await _seed_module_records(db, module=module, model_cls=model_cls, defaults=defaults)
-    result = await db.execute(select(OperationRecord).where(OperationRecord.module == module).order_by(OperationRecord.created_at.desc()))
+    scoped_module = _tenant_module_key(tenant_id, module)
+    await _seed_module_records(db, tenant_id=tenant_id, module=module, model_cls=model_cls, defaults=defaults)
+    result = await db.execute(select(OperationRecord).where(OperationRecord.module == scoped_module).order_by(OperationRecord.created_at.desc()))
     rows = result.scalars().all()
-    return [model_cls.model_validate(row.payload) for row in rows]
+    return [model_cls.model_validate({key: value for key, value in row.payload.items() if key != "tenantId"}) for row in rows]
 
 
 async def _create_module_record(
     db: AsyncSession,
     *,
+    tenant_id: str,
     module: str,
     payload: BaseModel,
     current_user_id: int,
@@ -523,15 +536,16 @@ async def _create_module_record(
 ):
     data = payload.model_dump(mode="json")
     record_id = str(data["id"])
-    existing = await db.execute(select(OperationRecord).where(OperationRecord.record_key == _record_key(module, record_id)))
+    scoped_module = _tenant_module_key(tenant_id, module)
+    existing = await db.execute(select(OperationRecord).where(OperationRecord.record_key == _record_key(scoped_module, record_id)))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Record ID already exists")
     record = OperationRecord(
-        module=module,
-        record_key=_record_key(module, record_id),
+        module=scoped_module,
+        record_key=_record_key(scoped_module, record_id),
         title=data.get("title") or data.get("name") or data.get("customerName"),
         status=str(data.get("status") or data.get("approvalStatus") or data.get("active") or ""),
-        payload=data,
+        payload={"tenantId": tenant_id, **data},
         created_by_user_id=current_user_id,
         updated_by_user_id=current_user_id,
     )
@@ -550,6 +564,7 @@ async def _create_module_record(
 async def _update_module_record(
     db: AsyncSession,
     *,
+    tenant_id: str,
     module: str,
     record_id: str,
     payload: BaseModel,
@@ -557,7 +572,8 @@ async def _update_module_record(
     action_type: str,
     description: str,
 ):
-    result = await db.execute(select(OperationRecord).where(OperationRecord.record_key == _record_key(module, record_id)))
+    scoped_module = _tenant_module_key(tenant_id, module)
+    result = await db.execute(select(OperationRecord).where(OperationRecord.record_key == _record_key(scoped_module, record_id)))
     record = result.scalar_one_or_none()
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
@@ -565,7 +581,7 @@ async def _update_module_record(
     data["id"] = record_id
     record.title = data.get("title") or data.get("name") or data.get("customerName")
     record.status = str(data.get("status") or data.get("approvalStatus") or data.get("active") or "")
-    record.payload = data
+    record.payload = {"tenantId": tenant_id, **data}
     record.updated_by_user_id = current_user_id
     record.updated_at = datetime.utcnow()
     await db.flush()
@@ -582,36 +598,40 @@ async def _update_module_record(
 async def _get_or_seed_setting(
     db: AsyncSession,
     *,
+    tenant_id: str,
     setting_key: str,
     model_cls,
     default_payload: BaseModel,
 ):
-    result = await db.execute(select(OperationSetting).where(OperationSetting.setting_key == setting_key))
+    scoped_key = _tenant_setting_key(tenant_id, setting_key)
+    result = await db.execute(select(OperationSetting).where(OperationSetting.setting_key == scoped_key))
     setting = result.scalar_one_or_none()
     if not setting:
-        setting = OperationSetting(setting_key=setting_key, payload=default_payload.model_dump(mode="json"))
+        setting = OperationSetting(setting_key=scoped_key, payload={"tenantId": tenant_id, **default_payload.model_dump(mode="json")})
         db.add(setting)
         await db.flush()
-    return model_cls.model_validate(setting.payload)
+    return model_cls.model_validate({key: value for key, value in setting.payload.items() if key != "tenantId"})
 
 
 async def _update_setting(
     db: AsyncSession,
     *,
+    tenant_id: str,
     setting_key: str,
     payload: BaseModel,
     current_user_id: int,
     action_type: str,
     description: str,
 ):
-    result = await db.execute(select(OperationSetting).where(OperationSetting.setting_key == setting_key))
+    scoped_key = _tenant_setting_key(tenant_id, setting_key)
+    result = await db.execute(select(OperationSetting).where(OperationSetting.setting_key == scoped_key))
     setting = result.scalar_one_or_none()
     if not setting:
-        setting = OperationSetting(setting_key=setting_key, payload={})
+        setting = OperationSetting(setting_key=scoped_key, payload={})
         db.add(setting)
         await db.flush()
     data = payload.model_dump(mode="json")
-    setting.payload = data
+    setting.payload = {"tenantId": tenant_id, **data}
     setting.updated_by_user_id = current_user_id
     setting.updated_at = datetime.utcnow()
     await db.flush()
@@ -1284,10 +1304,15 @@ async def get_onboarding_checklist(
 
 
 @router.get("/operations/installations", response_model=List[InstallationWorkflowRecord])
-async def get_installation_workflow(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+async def get_installation_workflow(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
+):
     _ = current_user
     return await _list_module_records(
         db,
+        tenant_id=tenant_id,
         module=MODULE_INSTALLATIONS,
         model_cls=InstallationWorkflowRecord,
         defaults=_default_installations(),
@@ -1295,10 +1320,15 @@ async def get_installation_workflow(db: AsyncSession = Depends(get_db), current_
 
 
 @router.get("/operations/site-surveys", response_model=List[SiteSurveyRecord])
-async def get_site_surveys(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+async def get_site_surveys(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
+):
     _ = current_user
     return await _list_module_records(
         db,
+        tenant_id=tenant_id,
         module=MODULE_SITE_SURVEYS,
         model_cls=SiteSurveyRecord,
         defaults=_default_site_surveys(),
@@ -1306,10 +1336,15 @@ async def get_site_surveys(db: AsyncSession = Depends(get_db), current_user=Depe
 
 
 @router.get("/operations/fault-workflow", response_model=List[FaultWorkflowTicket])
-async def get_fault_workflow(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+async def get_fault_workflow(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
+):
     _ = current_user
     return await _list_module_records(
         db,
+        tenant_id=tenant_id,
         module=MODULE_FAULT_WORKFLOW,
         model_cls=FaultWorkflowTicket,
         defaults=_default_fault_workflow(),
@@ -1317,10 +1352,15 @@ async def get_fault_workflow(db: AsyncSession = Depends(get_db), current_user=De
 
 
 @router.get("/operations/outages", response_model=List[OutageMaintenanceRecord])
-async def get_outages(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+async def get_outages(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
+):
     _ = current_user
     return await _list_module_records(
         db,
+        tenant_id=tenant_id,
         module=MODULE_OUTAGES,
         model_cls=OutageMaintenanceRecord,
         defaults=_default_outages(),
@@ -1332,11 +1372,13 @@ async def create_outage(
     payload: OutageMaintenanceRecord,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
 ):
     if not payload.id:
         payload.id = f"out-{uuid4().hex[:8]}"
     return await _create_module_record(
         db,
+        tenant_id=tenant_id,
         module=MODULE_OUTAGES,
         payload=payload,
         current_user_id=current_user.id,
@@ -1351,9 +1393,11 @@ async def update_outage(
     payload: OutageMaintenanceRecord,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
 ):
     return await _update_module_record(
         db,
+        tenant_id=tenant_id,
         module=MODULE_OUTAGES,
         record_id=record_id,
         payload=payload,
@@ -1364,10 +1408,15 @@ async def update_outage(
 
 
 @router.get("/operations/communication-templates", response_model=List[CommunicationTemplateRecord])
-async def get_communication_templates(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+async def get_communication_templates(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
+):
     _ = current_user
     return await _list_module_records(
         db,
+        tenant_id=tenant_id,
         module=MODULE_COMMUNICATION_TEMPLATES,
         model_cls=CommunicationTemplateRecord,
         defaults=_default_communication_templates(),
@@ -1379,11 +1428,13 @@ async def create_communication_template(
     payload: CommunicationTemplateRecord,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
 ):
     if not payload.id:
         payload.id = f"tpl-{uuid4().hex[:8]}"
     return await _create_module_record(
         db,
+        tenant_id=tenant_id,
         module=MODULE_COMMUNICATION_TEMPLATES,
         payload=payload,
         current_user_id=current_user.id,
@@ -1398,9 +1449,11 @@ async def update_communication_template(
     payload: CommunicationTemplateRecord,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
 ):
     return await _update_module_record(
         db,
+        tenant_id=tenant_id,
         module=MODULE_COMMUNICATION_TEMPLATES,
         record_id=record_id,
         payload=payload,
@@ -1411,10 +1464,15 @@ async def update_communication_template(
 
 
 @router.get("/operations/knowledge-base", response_model=List[KnowledgeBaseArticle])
-async def get_knowledge_base(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+async def get_knowledge_base(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
+):
     _ = current_user
     return await _list_module_records(
         db,
+        tenant_id=tenant_id,
         module=MODULE_KNOWLEDGE_BASE,
         model_cls=KnowledgeBaseArticle,
         defaults=_default_knowledge_base(),
@@ -1426,11 +1484,13 @@ async def create_knowledge_base_article(
     payload: KnowledgeBaseArticle,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
 ):
     if not payload.id:
         payload.id = f"kb-{uuid4().hex[:8]}"
     return await _create_module_record(
         db,
+        tenant_id=tenant_id,
         module=MODULE_KNOWLEDGE_BASE,
         payload=payload,
         current_user_id=current_user.id,
@@ -1445,9 +1505,11 @@ async def update_knowledge_base_article(
     payload: KnowledgeBaseArticle,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
 ):
     return await _update_module_record(
         db,
+        tenant_id=tenant_id,
         module=MODULE_KNOWLEDGE_BASE,
         record_id=record_id,
         payload=payload,
@@ -1458,10 +1520,15 @@ async def update_knowledge_base_article(
 
 
 @router.get("/operations/approvals", response_model=List[ApprovalWorkflowRecord])
-async def get_approval_requests(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+async def get_approval_requests(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
+):
     _ = current_user
     return await _list_module_records(
         db,
+        tenant_id=tenant_id,
         module=MODULE_APPROVALS,
         model_cls=ApprovalWorkflowRecord,
         defaults=_default_approvals(),
@@ -1473,11 +1540,13 @@ async def create_approval_request(
     payload: ApprovalWorkflowRecord,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
 ):
     if not payload.id:
         payload.id = f"apr-{uuid4().hex[:8]}"
     return await _create_module_record(
         db,
+        tenant_id=tenant_id,
         module=MODULE_APPROVALS,
         payload=payload,
         current_user_id=current_user.id,
@@ -1492,9 +1561,11 @@ async def update_approval_request(
     payload: ApprovalWorkflowRecord,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
 ):
     return await _update_module_record(
         db,
+        tenant_id=tenant_id,
         module=MODULE_APPROVALS,
         record_id=record_id,
         payload=payload,
@@ -1505,10 +1576,15 @@ async def update_approval_request(
 
 
 @router.get("/operations/promos", response_model=List[DiscountPromoRecord])
-async def get_discount_promos(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+async def get_discount_promos(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
+):
     _ = current_user
     return await _list_module_records(
         db,
+        tenant_id=tenant_id,
         module=MODULE_PROMOS,
         model_cls=DiscountPromoRecord,
         defaults=_default_promos(),
@@ -1520,11 +1596,13 @@ async def create_discount_promo(
     payload: DiscountPromoRecord,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
 ):
     if not payload.id:
         payload.id = f"promo-{uuid4().hex[:8]}"
     return await _create_module_record(
         db,
+        tenant_id=tenant_id,
         module=MODULE_PROMOS,
         payload=payload,
         current_user_id=current_user.id,
@@ -1539,9 +1617,11 @@ async def update_discount_promo(
     payload: DiscountPromoRecord,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
 ):
     return await _update_module_record(
         db,
+        tenant_id=tenant_id,
         module=MODULE_PROMOS,
         record_id=record_id,
         payload=payload,
@@ -1552,10 +1632,15 @@ async def update_discount_promo(
 
 
 @router.get("/operations/commissions", response_model=List[CommissionRecord])
-async def get_commissions(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+async def get_commissions(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
+):
     _ = current_user
     return await _list_module_records(
         db,
+        tenant_id=tenant_id,
         module=MODULE_COMMISSIONS,
         model_cls=CommissionRecord,
         defaults=_default_commissions(),
@@ -1567,11 +1652,13 @@ async def create_commission_record(
     payload: CommissionRecord,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
 ):
     if not payload.id:
         payload.id = f"com-{uuid4().hex[:8]}"
     return await _create_module_record(
         db,
+        tenant_id=tenant_id,
         module=MODULE_COMMISSIONS,
         payload=payload,
         current_user_id=current_user.id,
@@ -1586,9 +1673,11 @@ async def update_commission_record(
     payload: CommissionRecord,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
 ):
     return await _update_module_record(
         db,
+        tenant_id=tenant_id,
         module=MODULE_COMMISSIONS,
         record_id=record_id,
         payload=payload,
@@ -1599,10 +1688,15 @@ async def update_commission_record(
 
 
 @router.get("/operations/churn-retention", response_model=List[ChurnRetentionRecord])
-async def get_churn_retention(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+async def get_churn_retention(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
+):
     _ = current_user
     return await _list_module_records(
         db,
+        tenant_id=tenant_id,
         module=MODULE_CHURN_RETENTION,
         model_cls=ChurnRetentionRecord,
         defaults=_default_churn_retention(),
@@ -1610,10 +1704,15 @@ async def get_churn_retention(db: AsyncSession = Depends(get_db), current_user=D
 
 
 @router.get("/operations/import-validation", response_model=List[ImportValidationSummary])
-async def get_import_validation(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+async def get_import_validation(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
+):
     _ = current_user
     return await _list_module_records(
         db,
+        tenant_id=tenant_id,
         module=MODULE_IMPORT_VALIDATION,
         model_cls=ImportValidationSummary,
         defaults=_default_import_validation(),
@@ -1621,10 +1720,15 @@ async def get_import_validation(db: AsyncSession = Depends(get_db), current_user
 
 
 @router.get("/operations/demo-mode", response_model=DemoModeSettings)
-async def get_demo_mode(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+async def get_demo_mode(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
+):
     _ = current_user
     return await _get_or_seed_setting(
         db,
+        tenant_id=tenant_id,
         setting_key=SETTING_DEMO_MODE,
         model_cls=DemoModeSettings,
         default_payload=_default_demo_mode(),
@@ -1636,9 +1740,11 @@ async def update_demo_mode(
     payload: DemoModeSettings,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
 ):
     return await _update_setting(
         db,
+        tenant_id=tenant_id,
         setting_key=SETTING_DEMO_MODE,
         payload=payload,
         current_user_id=current_user.id,
@@ -1648,10 +1754,15 @@ async def update_demo_mode(
 
 
 @router.get("/operations/security-controls", response_model=SecurityControlSettings)
-async def get_security_controls(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+async def get_security_controls(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
+):
     _ = current_user
     return await _get_or_seed_setting(
         db,
+        tenant_id=tenant_id,
         setting_key=SETTING_SECURITY_CONTROLS,
         model_cls=SecurityControlSettings,
         default_payload=_default_security_controls(),
@@ -1663,9 +1774,11 @@ async def update_security_controls(
     payload: SecurityControlSettings,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
+    tenant_id: str = Depends(get_current_tenant_id),
 ):
     return await _update_setting(
         db,
+        tenant_id=tenant_id,
         setting_key=SETTING_SECURITY_CONTROLS,
         payload=payload,
         current_user_id=current_user.id,

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api/client";
 import { useAppStore, useTenantId } from "@/store/app-store";
+import type { FibreCoreCount } from "@/types";
 
 export function useNetworkNodes() {
   const tenantId = useTenantId();
@@ -54,7 +55,7 @@ export function useCreateMstConnection() {
       startMstId: string;
       endMstId: string;
       geometry: { lat: number; lng: number }[];
-      coreCount: 2 | 4 | 8 | 12 | 24;
+      coreCount: FibreCoreCount;
     }) => apiClient.createMstConnection(payload, tenantId, token),
     onSuccess: () => {
       toast.success("MST-to-MST fibre connection created.");
@@ -87,7 +88,7 @@ export function useSetCableCoreState() {
     mutationFn: (payload: {
       cableId: string;
       coreId: string;
-      status: "free" | "used";
+      status: "free" | "used" | "reserved";
       fromMstId?: string;
       toMstId?: string;
       usagePath?: string;

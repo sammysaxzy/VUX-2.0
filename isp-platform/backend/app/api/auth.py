@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from datetime import timedelta
 
 from ..core.database import get_db
@@ -21,9 +21,11 @@ async def register(
     db: AsyncSession = Depends(get_db)
 ):
     """Register a new user"""
+    username = user_data.username or user_data.email.split("@")[0]
+
     # Check if username exists
     existing = await db.execute(
-        select(UserModel).where(UserModel.username == user_data.username)
+        select(UserModel).where(UserModel.username == username)
     )
     if existing.scalar_one_or_none():
         raise HTTPException(
@@ -44,11 +46,14 @@ async def register(
     # Create user
     user = UserModel(
         email=user_data.email,
-        username=user_data.username,
+        username=username,
         full_name=user_data.full_name,
         role=user_data.role,
         hashed_password=get_password_hash(user_data.password)
     )
+
+    if user_data.tenant_id:
+        setattr(user, "tenant_id", user_data.tenant_id)
     
     db.add(user)
     await db.commit()
@@ -64,8 +69,15 @@ async def login(
 ):
     """Login and get access token"""
     # Find user
+    identity = user_data.username or user_data.email
+    if not identity:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username or email is required",
+        )
+
     result = await db.execute(
-        select(UserModel).where(UserModel.username == user_data.username)
+        select(UserModel).where(or_(UserModel.username == identity, UserModel.email == identity))
     )
     user = result.scalar_one_or_none()
     
@@ -84,8 +96,16 @@ async def login(
     
     # Create access token
     access_token = create_access_token(
-        data={"sub": user.username, "user_id": user.id, "role": str(user.role)}
+        data={
+            "sub": user.username,
+            "user_id": user.id,
+            "role": str(user.role),
+            "tenant_id": user_data.tenant_id,
+        }
     )
+
+    if user_data.tenant_id:
+        setattr(user, "tenant_id", user_data.tenant_id)
     
     return Token(
         access_token=access_token,

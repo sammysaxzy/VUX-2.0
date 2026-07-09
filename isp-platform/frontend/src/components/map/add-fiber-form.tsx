@@ -1,269 +1,440 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import length from "@turf/length";
-import { lineString } from "@turf/helpers";
 import { useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import type { GeoPoint, NetworkNode } from "@/types";
+import type { FibreCoreCount, FibreInstallationMethod, FibreRouteStatus, GeoPoint, NetworkNode, NodeType } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { calculatePolylineDistanceMeters, formatCableDistance } from "@/lib/fibre-routing";
 
-const coreCountValues = [2, 4, 8, 12, 24] as const;
+const coreCountValues = [2, 4, 8, 12, 24, 48, 96, 144, 288] as const;
+const routeStatusValues = ["existing", "planned", "temporary", "maintenance"] as const;
+const installationMethodValues = ["underground", "aerial", "duct", "indoor"] as const;
+const routeTypeValues = ["backbone", "distribution", "drop", "feeder", "access"] as const;
+const builderModeValues = ["asset", "coordinates", "draw"] as const;
 
 const schema = z
   .object({
     name: z.string().optional(),
-    mode: z.enum(["mst", "manual"]),
-    startMstId: z.string().optional(),
-    endMstId: z.string().optional(),
-    startLat: z.coerce.number().optional(),
-    startLng: z.coerce.number().optional(),
-    endLat: z.coerce.number().optional(),
-    endLng: z.coerce.number().optional(),
+    cableType: z.string().optional(),
+    owner: z.string().optional(),
+    builderMode: z.enum(builderModeValues),
+    startAssetId: z.string().optional(),
+    endAssetId: z.string().optional(),
+    coordinateChain: z.string().optional(),
     coreCount: z.coerce.number().refine((value) => coreCountValues.includes(value as (typeof coreCountValues)[number])),
+    routeStatus: z.enum(routeStatusValues),
+    routeType: z.enum(routeTypeValues),
+    installationMethod: z.enum(installationMethodValues),
+    installDate: z.string().optional(),
+    depthMeters: z.coerce.number().optional(),
+    heightMeters: z.coerce.number().optional(),
+    notes: z.string().optional(),
   })
   .superRefine((values, context) => {
-    if (values.mode === "mst") {
-      if (!values.startMstId) {
-        context.addIssue({ code: z.ZodIssueCode.custom, path: ["startMstId"], message: "Select start MST" });
+    if (values.builderMode === "asset") {
+      if (!values.startAssetId) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ["startAssetId"], message: "Select start asset" });
       }
-      if (!values.endMstId) {
-        context.addIssue({ code: z.ZodIssueCode.custom, path: ["endMstId"], message: "Select end MST" });
+      if (!values.endAssetId) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ["endAssetId"], message: "Select end asset" });
       }
-      if (values.startMstId && values.endMstId && values.startMstId === values.endMstId) {
-        context.addIssue({ code: z.ZodIssueCode.custom, path: ["endMstId"], message: "MST endpoints must be different" });
+      if (values.startAssetId && values.endAssetId && values.startAssetId === values.endAssetId) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ["endAssetId"], message: "Start and end assets must be different" });
       }
-      return;
     }
 
-    const coordinateFields: Array<keyof Pick<typeof values, "startLat" | "startLng" | "endLat" | "endLng">> = [
-      "startLat",
-      "startLng",
-      "endLat",
-      "endLng",
-    ];
-    coordinateFields.forEach((field) => {
-      if (values[field] === undefined || Number.isNaN(values[field])) {
-        context.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: "Coordinate is required" });
+    if (values.builderMode === "coordinates") {
+      const lines = values.coordinateChain?.split(/\r?\n/).map((line) => line.trim()).filter(Boolean) ?? [];
+      if (lines.length < 2) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ["coordinateChain"], message: "Enter at least two coordinates" });
       }
-    });
+      lines.forEach((line, index) => {
+        if (!/^[-+]?\d+(?:\.\d+)?\s*,\s*[-+]?\d+(?:\.\d+)?$/.test(line)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["coordinateChain"],
+            message: `Coordinate ${index + 1} must be in "lat,lng" format`,
+          });
+        }
+      });
+    }
   });
 
 type FormValues = z.infer<typeof schema>;
 
 type AddFiberPayload = {
   name?: string;
+  cableType?: string;
+  owner?: string;
   start: GeoPoint;
   end: GeoPoint;
-  coreCount: 2 | 4 | 8 | 12 | 24;
-  startMstId?: string;
-  endMstId?: string;
+  geometry?: GeoPoint[];
+  coreCount: FibreCoreCount;
+  routeStatus: FibreRouteStatus;
+  routeType: "backbone" | "distribution" | "drop" | "feeder" | "access";
+  installationMethod: FibreInstallationMethod;
+  installDate?: string;
+  depthMeters?: number;
+  heightMeters?: number;
+  notes?: string;
+  startNodeId?: string;
+  endNodeId?: string;
+  startAssetType?: NodeType;
+  startAssetName?: string;
+  endAssetType?: NodeType;
+  endAssetName?: string;
+  creationMode: "asset" | "coordinates" | "draw";
 };
 
 type AddFiberFormProps = {
-  mstNodes: NetworkNode[];
+  nodes: NetworkNode[];
+  drawnPoints: GeoPoint[];
+  isDrawingRoute: boolean;
+  onStartDrawing: () => void;
+  onStopDrawing: () => void;
+  onClearDrawing: () => void;
   onSubmit: (payload: AddFiberPayload) => void;
 };
 
-export function AddFiberForm({ mstNodes, onSubmit }: AddFiberFormProps) {
+function parseCoordinateChain(value: string | undefined) {
+  const lines = value?.split(/\r?\n/).map((line) => line.trim()).filter(Boolean) ?? [];
+  return lines
+    .map((line) => {
+      const [latText, lngText] = line.split(",");
+      const lat = Number(latText);
+      const lng = Number(lngText);
+      if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+      return { lat, lng };
+    })
+    .filter((point): point is GeoPoint => Boolean(point));
+}
+
+export function AddFiberForm({
+  nodes,
+  drawnPoints,
+  isDrawingRoute,
+  onStartDrawing,
+  onStopDrawing,
+  onClearDrawing,
+  onSubmit,
+}: AddFiberFormProps) {
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       name: "",
-      mode: "mst",
-      startMstId: "",
-      endMstId: "",
-      startLat: 6.455,
-      startLng: 3.476,
-      endLat: 6.46,
-      endLng: 3.49,
-      coreCount: 12,
+      cableType: "",
+      owner: "VUX Fiber Ops",
+      builderMode: "asset",
+      startAssetId: "",
+      endAssetId: "",
+      coordinateChain: "6.455, 3.476\n6.457, 3.481",
+      coreCount: 24,
+      routeStatus: "planned",
+      routeType: "distribution",
+      installationMethod: "underground",
+      installDate: new Date().toISOString().slice(0, 10),
+      depthMeters: 0.9,
+      heightMeters: 5.5,
+      notes: "",
     },
   });
 
-  const mode = form.watch("mode");
-  const startMstId = form.watch("startMstId");
-  const endMstId = form.watch("endMstId");
-  const startLat = form.watch("startLat");
-  const startLng = form.watch("startLng");
-  const endLat = form.watch("endLat");
-  const endLng = form.watch("endLng");
+  const builderMode = form.watch("builderMode");
+  const startAssetId = form.watch("startAssetId");
+  const endAssetId = form.watch("endAssetId");
+  const coordinateChainValue = form.watch("coordinateChain");
+  const routeType = form.watch("routeType");
 
-  const previewDistance = useMemo(() => {
-    if (mode === "mst") {
-      const startNode = mstNodes.find((node) => node.id === startMstId);
-      const endNode = mstNodes.find((node) => node.id === endMstId);
-      if (!startNode || !endNode) return null;
-      return Math.round(
-        length(
-          lineString([
-            [startNode.location.lng, startNode.location.lat],
-            [endNode.location.lng, endNode.location.lat],
-          ]),
-          { units: "kilometers" },
-        ) * 1000,
-      );
+  const coordinatePoints = useMemo(() => parseCoordinateChain(coordinateChainValue), [coordinateChainValue]);
+  const supportedNodes = useMemo(
+    () =>
+      nodes.filter((node) =>
+        ["mst", "closure", "olt", "pop", "customer"].includes(node.type),
+      ),
+    [nodes],
+  );
+  const startAsset = supportedNodes.find((node) => node.id === startAssetId);
+  const endAsset = supportedNodes.find((node) => node.id === endAssetId);
+
+  const previewPoints = useMemo(() => {
+    if (builderMode === "asset") {
+      if (!startAsset || !endAsset) return [] as GeoPoint[];
+      return [startAsset.location, endAsset.location];
     }
-
-    if (
-      startLat === undefined ||
-      startLng === undefined ||
-      endLat === undefined ||
-      endLng === undefined ||
-      Number.isNaN(startLat) ||
-      Number.isNaN(startLng) ||
-      Number.isNaN(endLat) ||
-      Number.isNaN(endLng)
-    ) {
-      return null;
+    if (builderMode === "coordinates") {
+      return coordinatePoints;
     }
+    return drawnPoints;
+  }, [builderMode, coordinatePoints, drawnPoints, endAsset, startAsset]);
 
-    return Math.round(
-      length(
-        lineString([
-          [startLng, startLat],
-          [endLng, endLat],
-        ]),
-        { units: "kilometers" },
-      ) * 1000,
-    );
-  }, [endLat, endLng, endMstId, mode, mstNodes, startLat, startLng, startMstId]);
+  const previewDistance = useMemo(
+    () => (previewPoints.length >= 2 ? calculatePolylineDistanceMeters(previewPoints) : 0),
+    [previewPoints],
+  );
 
   const submit = form.handleSubmit((values) => {
-    if (values.mode === "mst") {
-      const startNode = mstNodes.find((node) => node.id === values.startMstId);
-      const endNode = mstNodes.find((node) => node.id === values.endMstId);
-      if (!startNode || !endNode) return;
+    const sharedPayload = {
+      name: values.name?.trim(),
+      cableType: values.cableType?.trim() || `${values.coreCount}-core`,
+      owner: values.owner?.trim() || undefined,
+      coreCount: values.coreCount as FibreCoreCount,
+      routeStatus: values.routeStatus,
+      routeType: values.routeType,
+      installationMethod: values.installationMethod,
+      installDate: values.installDate || undefined,
+      depthMeters: values.depthMeters,
+      heightMeters: values.heightMeters,
+      notes: values.notes?.trim() || undefined,
+    };
+
+    if (values.builderMode === "asset") {
+      if (!startAsset || !endAsset) return;
       onSubmit({
-        name: values.name?.trim(),
-        startMstId: startNode.id,
-        endMstId: endNode.id,
-        start: startNode.location,
-        end: endNode.location,
-        coreCount: values.coreCount as 2 | 4 | 8 | 12 | 24,
+        ...sharedPayload,
+        start: startAsset.location,
+        end: endAsset.location,
+        geometry: [startAsset.location, endAsset.location],
+        startNodeId: startAsset.id,
+        endNodeId: endAsset.id,
+        startAssetType: startAsset.type,
+        startAssetName: startAsset.name,
+        endAssetType: endAsset.type,
+        endAssetName: endAsset.name,
+        creationMode: "asset",
       });
       return;
     }
 
-    if (
-      values.startLat === undefined ||
-      values.startLng === undefined ||
-      values.endLat === undefined ||
-      values.endLng === undefined
-    ) {
+    if (values.builderMode === "coordinates") {
+      if (coordinatePoints.length < 2) return;
+      onSubmit({
+        ...sharedPayload,
+        start: coordinatePoints[0],
+        end: coordinatePoints[coordinatePoints.length - 1],
+        geometry: coordinatePoints,
+        startNodeId: startAsset?.id,
+        endNodeId: endAsset?.id,
+        startAssetType: startAsset?.type,
+        startAssetName: startAsset?.name,
+        endAssetType: endAsset?.type,
+        endAssetName: endAsset?.name,
+        creationMode: "coordinates",
+      });
       return;
     }
 
+    if (drawnPoints.length < 2) return;
     onSubmit({
-      name: values.name?.trim(),
-      start: { lat: values.startLat, lng: values.startLng },
-      end: { lat: values.endLat, lng: values.endLng },
-      coreCount: values.coreCount as 2 | 4 | 8 | 12 | 24,
+      ...sharedPayload,
+      start: drawnPoints[0],
+      end: drawnPoints[drawnPoints.length - 1],
+      geometry: drawnPoints,
+      startNodeId: startAsset?.id,
+      endNodeId: endAsset?.id,
+      startAssetType: startAsset?.type,
+      startAssetName: startAsset?.name,
+      endAssetType: endAsset?.type,
+      endAssetName: endAsset?.name,
+      creationMode: "draw",
     });
   });
 
   return (
     <form onSubmit={submit} className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Add Fibre (Coordinates)</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Add Fibre Route</p>
 
       <div>
         <Label htmlFor="fiber-name" className="text-xs">
-          Cable Name (Optional)
+          Route Name
         </Label>
-        <Input id="fiber-name" placeholder="MST-KUKA-001 to MST-KUKA-002" {...form.register("name")} />
+        <Input id="fiber-name" placeholder="Lekki POP to OLT West feeder" {...form.register("name")} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+        <div>
+          <Label htmlFor="fiber-type" className="text-xs">
+            Cable Type
+          </Label>
+          <Input id="fiber-type" placeholder="48-core feeder cable" {...form.register("cableType")} />
+        </div>
+        <div>
+          <Label htmlFor="fiber-owner" className="text-xs">
+            Owner
+          </Label>
+          <Input id="fiber-owner" placeholder="VUX Fiber Ops" {...form.register("owner")} />
+        </div>
       </div>
 
       <div>
-        <Label htmlFor="fiber-mode" className="text-xs">
-          Coordinate Source
+        <Label htmlFor="route-builder-mode" className="text-xs">
+          Drawing Method
         </Label>
-        <Select id="fiber-mode" {...form.register("mode")}>
-          <option value="mst">Select MST Markers</option>
-          <option value="manual">Manual Coordinates</option>
+        <Select id="route-builder-mode" {...form.register("builderMode")}>
+          <option value="asset">Asset To Asset</option>
+          <option value="coordinates">Coordinate Chain</option>
+          <option value="draw">Manual Drawing On Map</option>
         </Select>
       </div>
 
-      {mode === "mst" ? (
-        <div className="grid grid-cols-1 gap-2">
-          <div>
-            <Label htmlFor="fiber-start-mst" className="text-xs">
-              Start MST
-            </Label>
-            <Select id="fiber-start-mst" {...form.register("startMstId")}>
-              <option value="">Select start MST</option>
-              {mstNodes.map((node) => (
-                <option key={node.id} value={node.id}>
-                  {node.name}
-                </option>
-              ))}
-            </Select>
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+        <div>
+          <Label htmlFor="fiber-start-asset" className="text-xs">
+            Start Asset
+          </Label>
+          <Select id="fiber-start-asset" {...form.register("startAssetId")}>
+            <option value="">Select start asset</option>
+            {supportedNodes.map((node) => (
+              <option key={node.id} value={node.id}>
+                {node.name} ({node.type.toUpperCase()})
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="fiber-end-asset" className="text-xs">
+            End Asset
+          </Label>
+          <Select id="fiber-end-asset" {...form.register("endAssetId")}>
+            <option value="">Select end asset</option>
+            {supportedNodes.map((node) => (
+              <option key={node.id} value={node.id}>
+                {node.name} ({node.type.toUpperCase()})
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
+
+      {builderMode === "coordinates" ? (
+        <div>
+          <Label htmlFor="coordinate-chain" className="text-xs">
+            Coordinates
+          </Label>
+          <Textarea
+            id="coordinate-chain"
+            rows={5}
+            placeholder={"6.455, 3.476\n6.4562, 3.478\n6.4575, 3.481"}
+            {...form.register("coordinateChain")}
+          />
+          <p className="mt-1 text-[11px] text-muted-foreground">Enter one `lat,lng` pair per line. Add as many bends as needed.</p>
+        </div>
+      ) : null}
+
+      {builderMode === "draw" ? (
+        <div className="rounded-xl border border-border/70 bg-background/60 p-3 text-xs">
+          <p className="font-semibold uppercase tracking-[0.18em] text-muted-foreground">Manual Drawing</p>
+          <p className="mt-1 text-muted-foreground">Click points on the map to draw the route. Each click adds a bend or extension point.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button type="button" size="sm" onClick={isDrawingRoute ? onStopDrawing : onStartDrawing}>
+              {isDrawingRoute ? "Pause Drawing" : "Start Drawing"}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={onClearDrawing}>
+              Clear Points
+            </Button>
           </div>
-          <div>
-            <Label htmlFor="fiber-end-mst" className="text-xs">
-              End MST
-            </Label>
-            <Select id="fiber-end-mst" {...form.register("endMstId")}>
-              <option value="">Select end MST</option>
-              {mstNodes.map((node) => (
-                <option key={node.id} value={node.id}>
-                  {node.name}
-                </option>
-              ))}
-            </Select>
+          <p className="mt-2 text-[11px] text-muted-foreground">{drawnPoints.length} point(s) captured.</p>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+        <div>
+          <Label htmlFor="fiber-core-count" className="text-xs">
+            Core Count
+          </Label>
+          <Select id="fiber-core-count" {...form.register("coreCount")}>
+            {coreCountValues.map((count) => (
+              <option key={count} value={count}>
+                {count}-core
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="fiber-route-type" className="text-xs">
+            Route Type
+          </Label>
+          <Select id="fiber-route-type" {...form.register("routeType")}>
+            {routeTypeValues.map((value) => (
+              <option key={value} value={value}>
+                {value[0]?.toUpperCase()}
+                {value.slice(1)}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="fiber-route-status" className="text-xs">
+            Status
+          </Label>
+          <Select id="fiber-route-status" {...form.register("routeStatus")}>
+            {routeStatusValues.map((status) => (
+              <option key={status} value={status}>
+                {status[0]?.toUpperCase()}
+                {status.slice(1)}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+        <div>
+          <Label htmlFor="fiber-installation-method" className="text-xs">
+            Install Method
+          </Label>
+          <Select id="fiber-installation-method" {...form.register("installationMethod")}>
+            {installationMethodValues.map((method) => (
+              <option key={method} value={method}>
+                {method[0]?.toUpperCase()}
+                {method.slice(1)}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="fiber-install-date" className="text-xs">
+            Install Date
+          </Label>
+          <Input id="fiber-install-date" type="date" {...form.register("installDate")} />
+        </div>
+        <div>
+          <Label htmlFor="fiber-depth" className="text-xs">
+            Depth / Height
+          </Label>
+          <div className="grid grid-cols-2 gap-2">
+            <Input id="fiber-depth" type="number" step="0.1" placeholder="Depth m" {...form.register("depthMeters")} />
+            <Input id="fiber-height" type="number" step="0.1" placeholder="Height m" {...form.register("heightMeters")} />
           </div>
         </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <Label htmlFor="fiber-start-lat" className="text-xs">
-              Start Lat
-            </Label>
-            <Input id="fiber-start-lat" type="number" step="any" {...form.register("startLat")} />
-          </div>
-          <div>
-            <Label htmlFor="fiber-start-lng" className="text-xs">
-              Start Lng
-            </Label>
-            <Input id="fiber-start-lng" type="number" step="any" {...form.register("startLng")} />
-          </div>
-          <div>
-            <Label htmlFor="fiber-end-lat" className="text-xs">
-              End Lat
-            </Label>
-            <Input id="fiber-end-lat" type="number" step="any" {...form.register("endLat")} />
-          </div>
-          <div>
-            <Label htmlFor="fiber-end-lng" className="text-xs">
-              End Lng
-            </Label>
-            <Input id="fiber-end-lng" type="number" step="any" {...form.register("endLng")} />
-          </div>
-        </div>
-      )}
+      </div>
 
       <div>
-        <Label htmlFor="fiber-core-count" className="text-xs">
-          Core Count
+        <Label htmlFor="fiber-notes" className="text-xs">
+          Notes
         </Label>
-        <Select id="fiber-core-count" {...form.register("coreCount")}>
-          {coreCountValues.map((count) => (
-            <option key={count} value={count}>
-              {count}-core
-            </option>
-          ))}
-        </Select>
+        <Textarea id="fiber-notes" rows={3} placeholder="Route notes, field constraints, crossings, or installation remarks" {...form.register("notes")} />
       </div>
 
-      <p className="text-[11px] text-muted-foreground">
-        {previewDistance !== null ? `Distance: ${(previewDistance / 1000).toFixed(2)} km` : "Provide valid endpoints to preview distance"}
-      </p>
+      <div className="rounded-lg border border-border/70 bg-background/60 px-3 py-2 text-[11px] text-muted-foreground">
+        <p>Route type: {routeType}</p>
+        <p>Captured points: {previewPoints.length}</p>
+        <p>Total distance: {previewPoints.length >= 2 ? formatCableDistance(previewDistance) : "Add at least two points"}</p>
+        <p>
+          Start: {startAsset ? `${startAsset.name} (${startAsset.type.toUpperCase()})` : previewPoints[0] ? `${previewPoints[0].lat.toFixed(5)}, ${previewPoints[0].lng.toFixed(5)}` : "-"}
+        </p>
+        <p>
+          End: {endAsset ? `${endAsset.name} (${endAsset.type.toUpperCase()})` : previewPoints[previewPoints.length - 1] ? `${previewPoints[previewPoints.length - 1].lat.toFixed(5)}, ${previewPoints[previewPoints.length - 1].lng.toFixed(5)}` : "-"}
+        </p>
+      </div>
 
       <Button type="submit" size="sm" className="w-full">
-        Create Fibre Polyline
+        Create Fibre Route
       </Button>
     </form>
   );
