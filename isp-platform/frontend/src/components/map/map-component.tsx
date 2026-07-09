@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Map, { Layer, Marker, Popup, Source, type MapMouseEvent, type MapRef, type ViewState } from "react-map-gl/mapbox";
-import { Box, GitMerge, Home, MapPinPlusInside, Menu, Mountain, Network, Ruler, Search, Server, TriangleAlert } from "lucide-react";
+import { Box, GitMerge, GripVertical, Home, MapPinPlusInside, Menu, Mountain, Network, Ruler, Search, Server, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { AddFiberForm } from "@/components/map/add-fiber-form";
 import { AddNodeForm } from "@/components/map/add-node-form";
@@ -14,6 +14,7 @@ import { FiberDetailsPanel } from "@/components/map/fiber-details-panel";
 import { FiberRouteRenderer, FIBER_ROUTE_LAYER_IDS } from "@/components/map/fiber-route-renderer";
 import { MSTDetailsPanel } from "@/components/map/mst-details-panel";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { calculatePolylineDistanceMeters, formatCableDistance } from "@/lib/fibre-routing";
@@ -113,6 +114,8 @@ const defaultView: Partial<ViewState> = {
   zoom: 11.8,
 };
 
+type WorkflowStepStatus = "ready" | "in_progress" | "needs_setup";
+
 type SearchEntityType = "mst" | "closure" | "customer-node" | "customer" | "fibre" | "coordinate" | "node" | "place";
 
 type SearchResult = {
@@ -122,6 +125,19 @@ type SearchResult = {
   subtitle: string;
   location: GeoPoint;
   entityId?: string;
+};
+
+type WorkflowGuidance = {
+  step1Status: WorkflowStepStatus;
+  step1: string;
+  step2Status: WorkflowStepStatus;
+  step2: string;
+  step3Status: WorkflowStepStatus;
+  step3: string;
+  step4Status: WorkflowStepStatus;
+  step4: string;
+  step5Status: WorkflowStepStatus;
+  step5: string;
 };
 
 type PendingDeletion =
@@ -198,6 +214,7 @@ export function MapComponent({
 }: Props) {
   const theme = useThemeStore((state) => state.theme);
   const mapRef = useRef<MapRef | null>(null);
+  const panelResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const [hoveredCable, setHoveredCable] = useState<{ cable: FibreCable; point: GeoPoint } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [placeResults, setPlaceResults] = useState<SearchResult[]>([]);
@@ -214,6 +231,8 @@ export function MapComponent({
   const [drawnRoutePoints, setDrawnRoutePoints] = useState<GeoPoint[]>([]);
   const [measurementMode, setMeasurementMode] = useState<"off" | "distance" | "area" | "offset">("off");
   const [measurementPoints, setMeasurementPoints] = useState<GeoPoint[]>([]);
+  const [workflowPanelWidth, setWorkflowPanelWidth] = useState(560);
+  const [isResizingWorkflowPanel, setIsResizingWorkflowPanel] = useState(false);
 
   const selectedMSTId = useAppStore((state) => state.selectedMSTId);
   const selectedFiberId = useAppStore((state) => state.selectedFiberId);
@@ -283,6 +302,87 @@ export function MapComponent({
     }
     return `${hoveredNode.name} | ${hoveredNode.type.toUpperCase()}`;
   }, [hoveredNode]);
+  const workflowGuidance = useMemo<WorkflowGuidance>(() => {
+    const infrastructureCount = nodes.filter((node) => node.type !== "customer").length;
+    const facilityCount = nodes.filter((node) => node.type === "odf" || node.type === "cabinet").length;
+    const routeCount = cables.filter((cable) => cable.segmentType !== "drop").length;
+    const mstWithCapacity = mstNodes.filter((node) => (node.splitterPorts?.length ?? 0) > 0).length;
+    const measurementCaptured = measurementPoints.length > 0;
+    const routeDraftStarted = drawnRoutePoints.length > 0;
+
+    return {
+      step1Status: infrastructureCount === 0 ? "needs_setup" : infrastructureCount < 4 ? "in_progress" : "ready",
+      step1:
+        infrastructureCount === 0
+          ? "Recommended next step: create your first POP, OLT, ODF, cabinet, or MST."
+          : `Recommended next step: you have ${infrastructureCount} infrastructure assets. Add any missing POP, OLT, ODF, cabinet, MST, closure, pole, or manhole points.`,
+      step2Status: routeCount === 0 ? (routeDraftStarted ? "in_progress" : "needs_setup") : "ready",
+      step2:
+        routeCount === 0
+          ? "Recommended next step: connect the first two assets with a backbone or distribution route."
+          : `Recommended next step: ${routeCount} fibre route${routeCount === 1 ? "" : "s"} mapped. Continue linking closures, cabinets, MSTs, and customer areas.`,
+      step3Status: facilityCount === 0 ? "needs_setup" : "ready",
+      step3:
+        facilityCount === 0
+          ? "Recommended next step: add an ODF or cabinet to manage incoming and outgoing distribution flow."
+          : `Recommended next step: open an ODF or cabinet details panel to map facility cables and splice flow. ${facilityCount} facility asset${facilityCount === 1 ? "" : "s"} available.`,
+      step4Status: measurementMode === "off" ? (measurementCaptured ? "in_progress" : "needs_setup") : "in_progress",
+      step4:
+        measurementMode === "off"
+          ? "Recommended next step: use distance, area, or offset measurement before finalizing a route."
+          : "Recommended next step: click points on the map to complete the current field measurement.",
+      step5Status: mstWithCapacity === 0 ? "needs_setup" : "ready",
+      step5:
+        mstWithCapacity === 0
+          ? "Recommended next step: prepare an MST with splitter ports before assigning clients."
+          : `Recommended next step: select an MST and assign clients. ${mstWithCapacity} MST${mstWithCapacity === 1 ? "" : "s"} currently ready for drops.`,
+    };
+  }, [cables, drawnRoutePoints.length, measurementMode, measurementPoints.length, mstNodes, nodes]);
+
+  const renderWorkflowBadge = (status: WorkflowStepStatus) => (
+    <Badge variant={status === "ready" ? "success" : status === "in_progress" ? "info" : "warning"}>
+      {status === "ready" ? "Ready" : status === "in_progress" ? "In Progress" : "Needs Setup"}
+    </Badge>
+  );
+  const areaSuggestions = useMemo(() => {
+    const seen = new Set<string>();
+    return customers
+      .map((customer) => {
+        const label = customer.serviceLocation?.split(",")[0]?.trim() || customer.address.split(",")[0]?.trim();
+        if (!label) return null;
+        const key = `${label.toLowerCase()}-${customer.location.lat.toFixed(4)}-${customer.location.lng.toFixed(4)}`;
+        if (seen.has(key)) return null;
+        seen.add(key);
+        return { label, location: customer.location };
+      })
+      .filter((entry): entry is { label: string; location: GeoPoint } => Boolean(entry));
+  }, [customers]);
+
+  useEffect(() => {
+    if (!isResizingWorkflowPanel) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const resizeState = panelResizeRef.current;
+      if (!resizeState) return;
+      const nextWidth = resizeState.startWidth + (event.clientX - resizeState.startX);
+      const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
+      const maxWidth = Math.min(760, viewportWidth - 32);
+      setWorkflowPanelWidth(Math.max(360, Math.min(maxWidth, nextWidth)));
+    };
+
+    const handlePointerUp = () => {
+      setIsResizingWorkflowPanel(false);
+      panelResizeRef.current = null;
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [isResizingWorkflowPanel]);
 
   const renderNodeMarker = (node: NetworkNode) => {
     if (flowView) {
@@ -1179,23 +1279,65 @@ export function MapComponent({
 
 
       {!flowView ? (
-        <div className="pointer-events-none absolute left-3 top-3 z-10 grid w-[min(95vw,460px)] gap-2">
-          <div className="pointer-events-auto overflow-hidden rounded-2xl border border-border/70 bg-card/92 shadow-soft backdrop-blur">
+        <div
+          className="pointer-events-none absolute inset-y-3 left-3 z-10 grid gap-2"
+          style={{ width: `min(96vw, ${workflowPanelWidth}px)` }}
+        >
+          <div className="pointer-events-auto flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card/92 shadow-soft backdrop-blur">
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize field workflow panel"
+              className={cn(
+                "absolute inset-y-0 right-0 z-20 hidden w-3 cursor-col-resize md:block",
+                "before:absolute before:bottom-6 before:right-1 before:top-6 before:w-px before:bg-border/80",
+                isResizingWorkflowPanel && "before:bg-primary",
+              )}
+              onPointerDown={(event) => {
+                panelResizeRef.current = { startX: event.clientX, startWidth: workflowPanelWidth };
+                setIsResizingWorkflowPanel(true);
+              }}
+            >
+              <div className="absolute right-0 top-1/2 flex -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full border border-border/70 bg-background/95 p-0.5 text-muted-foreground shadow-sm">
+                <GripVertical className="h-3.5 w-3.5" />
+              </div>
+            </div>
             <div className="flex items-center justify-between border-b border-border/60 bg-muted/25 px-3 py-2">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 <MapPinPlusInside className="h-3.5 w-3.5" />
                 Field Workflow
               </div>
-              <Button type="button" variant="outline" size="icon" className="h-7 w-7" onClick={() => setControlsOpen((current) => !current)}>
-                <Menu className="h-3.5 w-3.5" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="hidden md:inline-flex"
+                  onClick={() => setWorkflowPanelWidth(560)}
+                >
+                  Reset width
+                </Button>
+                <Button type="button" variant="outline" size="icon" className="h-7 w-7" onClick={() => setControlsOpen((current) => !current)}>
+                  <Menu className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
 
           {controlsOpen ? (
-            <div className="grid gap-3 p-3">
+            <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto p-3 pb-8 pr-2 [scrollbar-width:thin] [scrollbar-color:hsl(var(--border))_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/80 [&::-webkit-scrollbar-track]:bg-transparent">
               <div className="rounded-xl border border-border/70 bg-background/70 p-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step 1: Add Infrastructure</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step 1: Add Infrastructure</p>
+                  {renderWorkflowBadge(workflowGuidance.step1Status)}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Start with POP, OLT, ODF, cabinet, MST, closure, pole, and manhole assets before drawing fibre paths.
+                </p>
+                <p className="mt-2 rounded-lg border border-dashed border-border/70 bg-background/80 px-2 py-1.5 text-[11px] text-muted-foreground">
+                  {workflowGuidance.step1}
+                </p>
                 <AddNodeForm
+                  areaSuggestions={areaSuggestions}
                   onSubmit={(payload) => {
                     if (!canAdd) {
                       toast.error("Your role is read-only on the map.");
@@ -1210,7 +1352,13 @@ export function MapComponent({
                 />
               </div>
               <div className="rounded-xl border border-border/70 bg-background/70 p-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step 2: Connect Infrastructure</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step 2: Connect Infrastructure</p>
+                  {renderWorkflowBadge(workflowGuidance.step2Status)}
+                </div>
+                <p className="mt-2 rounded-lg border border-dashed border-border/70 bg-background/80 px-2 py-1.5 text-[11px] text-muted-foreground">
+                  {workflowGuidance.step2}
+                </p>
                 <AddFiberForm
                   nodes={nodes}
                   drawnPoints={drawnRoutePoints}
@@ -1247,9 +1395,15 @@ export function MapComponent({
                 />
               </div>
               <div className="rounded-xl border border-border/70 bg-background/70 p-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step 3: Define Flow</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step 3: Define Flow</p>
+                  {renderWorkflowBadge(workflowGuidance.step3Status)}
+                </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Use the infrastructure panel to mark incoming (power) and outgoing (distribution) paths.
+                  Open ODF and cabinet details to attach incoming and outgoing cables, then use the infrastructure panel to track power and distribution flow.
+                </p>
+                <p className="mt-2 rounded-lg border border-dashed border-border/70 bg-background/80 px-2 py-1.5 text-[11px] text-muted-foreground">
+                  {workflowGuidance.step3}
                 </p>
                 <Button type="button" size="sm" className="mt-2 w-full" disabled={!canAdd} onClick={seedFacilityDemo}>
                   Seed ODF + Cabinet
@@ -1266,7 +1420,13 @@ export function MapComponent({
                 </Button>
               </div>
               <div className="rounded-xl border border-border/70 bg-background/70 p-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step 4: Field Measurement</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step 4: Field Measurement</p>
+                  {renderWorkflowBadge(workflowGuidance.step4Status)}
+                </div>
+                <p className="mt-2 rounded-lg border border-dashed border-border/70 bg-background/80 px-2 py-1.5 text-[11px] text-muted-foreground">
+                  {workflowGuidance.step4}
+                </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {[
                     { label: "Distance", value: "distance" as const },
@@ -1310,8 +1470,14 @@ export function MapComponent({
                 </p>
               </div>
               <div className="rounded-xl border border-border/70 bg-background/70 p-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step 5: Assign Clients</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step 5: Assign Clients</p>
+                  {renderWorkflowBadge(workflowGuidance.step5Status)}
+                </div>
                 <p className="mt-1 text-xs text-muted-foreground">Click an MST, then use Assign Client to draw a drop line.</p>
+                <p className="mt-2 rounded-lg border border-dashed border-border/70 bg-background/80 px-2 py-1.5 text-[11px] text-muted-foreground">
+                  {workflowGuidance.step5}
+                </p>
               </div>
             </div>
           ) : null}

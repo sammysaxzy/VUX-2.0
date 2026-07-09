@@ -1,0 +1,40 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+*.out
+*.err
+outputs/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build caches
+.vite/
+.cache/
+
+# Local build artifacts
+dist/
+
