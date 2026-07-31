@@ -10,7 +10,9 @@ import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { apiClient } from "@/lib/api/client";
 import {
+  usePortalChangePassword,
   usePortalCreatePayment,
   usePortalCreateTicket,
   usePortalNotifications,
@@ -21,25 +23,45 @@ import {
   usePortalUpgradePlan,
   usePortalUsage,
 } from "@/hooks/api/use-portal";
-import type { CustomerPayment, CustomerTicketCategory } from "@/types";
+import type { CustomerPayment, CustomerPortalSession, CustomerTicketCategory } from "@/types";
 
-type PortalSession = {
-  token: string;
-  customerId: string;
-};
-
-function readPortalSession(): PortalSession | null {
+function readPortalSession(): CustomerPortalSession | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.sessionStorage.getItem("portal-session");
-    return raw ? (JSON.parse(raw) as PortalSession) : null;
+    return raw ? (JSON.parse(raw) as CustomerPortalSession) : null;
   } catch {
     return null;
   }
 }
 
+function openHtmlDocument(html: string) {
+  const popup = window.open("", "_blank", "noopener,noreferrer");
+  if (!popup) {
+    toast.error("Allow popups to view the document.");
+    return;
+  }
+  popup.document.open();
+  popup.document.write(html);
+  popup.document.close();
+}
+
+
+function openPdfDocument(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const popup = window.open(url, "_blank", "noopener,noreferrer");
+  if (!popup) {
+    const link = window.document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+  }
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+}
+
 export function CustomerPortalPage() {
-  const [session, setSession] = useState<PortalSession | null>(() => readPortalSession());
+  const [session, setSession] = useState<CustomerPortalSession | null>(() => readPortalSession());
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "" });
   const [ticketForm, setTicketForm] = useState<{ subject: string; description: string; category: CustomerTicketCategory }>({
     subject: "",
     description: "",
@@ -48,15 +70,18 @@ export function CustomerPortalPage() {
   const [paymentPlanId, setPaymentPlanId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<CustomerPayment["method"]>("paystack");
 
-  const profileQuery = usePortalProfile(session?.customerId, session?.token);
-  const plansQuery = usePortalPlans();
-  const ticketsQuery = usePortalTickets(session?.customerId, session?.token);
-  const notificationsQuery = usePortalNotifications(session?.customerId, session?.token);
-  const paymentsQuery = usePortalPayments(session?.customerId, session?.token);
-  const usageQuery = usePortalUsage(session?.customerId, session?.token);
-  const createTicketMutation = usePortalCreateTicket(session?.customerId, session?.token);
-  const createPaymentMutation = usePortalCreatePayment(session?.customerId, session?.token);
-  const upgradePlanMutation = usePortalUpgradePlan(session?.customerId, session?.token);
+  const token = session?.access_token;
+  const customerId = session?.customer_id;
+  const profileQuery = usePortalProfile(customerId, token);
+  const plansQuery = usePortalPlans(token);
+  const ticketsQuery = usePortalTickets(customerId, token);
+  const notificationsQuery = usePortalNotifications(customerId, token);
+  const paymentsQuery = usePortalPayments(customerId, token);
+  const usageQuery = usePortalUsage(customerId, token);
+  const createTicketMutation = usePortalCreateTicket(customerId, token);
+  const createPaymentMutation = usePortalCreatePayment(customerId, token);
+  const upgradePlanMutation = usePortalUpgradePlan(customerId, token);
+  const changePasswordMutation = usePortalChangePassword(token);
 
   const activePlan = profileQuery.data?.planName ?? "Unknown plan";
   const availablePlans = plansQuery.data ?? [];
@@ -75,6 +100,21 @@ export function CustomerPortalPage() {
     setSession(null);
   };
 
+  const triggerPaymentRequest = (planId: string) => {
+    createPaymentMutation.mutate(
+      { planId, method: paymentMethod },
+      {
+        onSuccess: (payment) => {
+          if (payment.checkout_url) {
+            window.open(payment.checkout_url, "_blank", "noopener,noreferrer");
+          } else {
+            toast.success(`Payment request ${payment.reference} created.`);
+          }
+        },
+      },
+    );
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -91,6 +131,53 @@ export function CustomerPortalPage() {
           </Button>
         </div>
 
+        {session.first_login_required ? (
+          <Card className="border-warning/40 bg-warning/5">
+            <CardHeader>
+              <CardTitle>Change Temporary Password</CardTitle>
+              <CardDescription>
+                Your ISP created this portal account with a temporary password. Set a new password before using the rest of the portal.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+              <Field label="Current Password">
+                <Input
+                  type="password"
+                  value={passwordForm.currentPassword}
+                  onChange={(event) => setPasswordForm((current) => ({ ...current, currentPassword: event.target.value }))}
+                />
+              </Field>
+              <Field label="New Password">
+                <Input
+                  type="password"
+                  value={passwordForm.newPassword}
+                  onChange={(event) => setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))}
+                />
+              </Field>
+              <div className="flex items-end">
+                <Button
+                  disabled={changePasswordMutation.isPending || !passwordForm.currentPassword || !passwordForm.newPassword}
+                  onClick={() =>
+                    changePasswordMutation.mutate(
+                      { currentPassword: passwordForm.currentPassword, newPassword: passwordForm.newPassword },
+                      {
+                        onSuccess: () => {
+                          const nextSession = { ...session, first_login_required: false };
+                          setSession(nextSession);
+                          window.sessionStorage.setItem("portal-session", JSON.stringify(nextSession));
+                          setPasswordForm({ currentPassword: "", newPassword: "" });
+                        },
+                      },
+                    )
+                  }
+                >
+                  {changePasswordMutation.isPending ? "Updating..." : "Update Password"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
         {profileQuery.isLoading ? (
           <PageSkeleton />
         ) : (
@@ -106,7 +193,7 @@ export function CustomerPortalPage() {
           <Card>
             <CardHeader>
               <CardTitle>Plan & Payments</CardTitle>
-              <CardDescription>Check your package, switch plans, and generate payment requests with Paystack-ready placeholders.</CardDescription>
+              <CardDescription>Check your package, request a plan change, and generate a backend-tracked payment reference.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
@@ -125,13 +212,13 @@ export function CustomerPortalPage() {
                         onClick={() => upgradePlanMutation.mutate({ planId: plan.id })}
                         disabled={upgradePlanMutation.isPending}
                       >
-                        Switch Plan
+                        Request Change
                       </Button>
                       <Button
-                        onClick={() => createPaymentMutation.mutate({ planId: plan.id, method: paymentMethod })}
+                        onClick={() => triggerPaymentRequest(plan.id)}
                         disabled={createPaymentMutation.isPending}
                       >
-                        Pay Now
+                        Generate Payment
                       </Button>
                     </div>
                   </div>
@@ -162,7 +249,7 @@ export function CustomerPortalPage() {
               <Button
                 variant="secondary"
                 disabled={!paymentPlanId || createPaymentMutation.isPending}
-                onClick={() => createPaymentMutation.mutate({ planId: paymentPlanId, method: paymentMethod })}
+                onClick={() => triggerPaymentRequest(paymentPlanId)}
               >
                 Create Payment Request
               </Button>
@@ -214,11 +301,11 @@ export function CustomerPortalPage() {
               <ActionTile title="Upgrade / Downgrade" body="Use the package cards above to switch your current plan." />
               <ActionTile
                 title="Renew Subscription"
-                body="Create a payment request for your active plan."
+                body="Create a pending payment request for your current plan."
                 onClick={() => {
                   const currentPlan = availablePlans.find((plan) => plan.name === activePlan);
                   if (currentPlan) {
-                    createPaymentMutation.mutate({ planId: currentPlan.id, method: paymentMethod });
+                    triggerPaymentRequest(currentPlan.id);
                     return;
                   }
                   toast.error("Current plan could not be resolved for renewal.");
@@ -226,8 +313,8 @@ export function CustomerPortalPage() {
               />
               <ActionTile
                 title="Download Invoice"
-                body="Generate invoice-ready output for billing follow-up."
-                onClick={() => toast.success("Invoice download placeholder ready. Connect backend PDF export for production.")}
+                body="Download branded invoice and receipt PDFs directly from your payment history."
+                onClick={() => toast.message("Open any payment row below to download its invoice or receipt PDF.")}
               />
               <ActionTile
                 title="Reset PPPoE Password"
@@ -278,6 +365,7 @@ export function CustomerPortalPage() {
                       <TableHead>Method</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Amount</TableHead>
+                      <TableHead>Documents</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -292,6 +380,37 @@ export function CustomerPortalPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>NGN {payment.amount.toLocaleString()}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={async () => {
+                                try {
+                                  const pdf = await apiClient.getPortalPaymentInvoicePdf(customerId as string, payment.id, token);
+                                  openPdfDocument(pdf, `${payment.invoice_number ?? payment.reference}-invoice.pdf`);
+                                } catch {
+                                  toast.error("Invoice is not available right now.");
+                                }
+                              }}
+                            >
+                              Invoice
+                            </Button>
+                            <Button
+                              variant="outline"
+                              disabled={payment.status !== "success"}
+                              onClick={async () => {
+                                try {
+                                  const pdf = await apiClient.getPortalPaymentReceiptPdf(customerId as string, payment.id, token);
+                                  openPdfDocument(pdf, `${payment.receipt_number ?? payment.reference}-receipt.pdf`);
+                                } catch {
+                                  toast.error("Receipt is not available yet.");
+                                }
+                              }}
+                            >
+                              Receipt
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

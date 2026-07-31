@@ -1126,3 +1126,245 @@ class WorkOrder(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PortalAccessStatus(BaseModel):
+    customer_id: str
+    username: str
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    is_active: bool
+    portal_access_enabled: bool
+    first_login_required: bool
+    password_reset_required: bool
+    last_login: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+
+class PortalAccessCreate(BaseModel):
+    customer_id: str
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    temporary_password: Optional[str] = None
+    reset_existing: bool = True
+
+
+class PortalAccessProvisionResponse(PortalAccessStatus):
+    temporary_password: str
+
+
+class CustomerPortalLoginRequest(BaseModel):
+    identity: str
+    password: str
+    tenant_id: Optional[str] = None
+
+
+class CustomerPortalSession(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    customer_id: str
+    tenant_id: str
+    username: str
+    first_login_required: bool
+
+
+class CustomerPortalPasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class CustomerPortalProfile(BaseModel):
+    id: str
+    name: str
+    pppoeUsername: str
+    planName: str
+    speedMbps: int
+    status: str
+    expiryDate: Optional[datetime] = None
+    usageGb: Optional[float] = 0
+    capGb: Optional[float] = None
+
+
+class CustomerPortalPlan(BaseModel):
+    id: str
+    name: str
+    speedMbps: int
+    priceMonthly: float
+    description: Optional[str] = None
+    recommended: bool = False
+
+
+class CustomerPortalTicketHistory(BaseModel):
+    id: str
+    message: str
+    createdAt: datetime
+    author: str
+
+
+class CustomerPortalTicket(BaseModel):
+    id: str
+    subject: str
+    description: str
+    category: str
+    status: str
+    createdAt: datetime
+    updatedAt: datetime
+    history: List[CustomerPortalTicketHistory] = []
+
+
+class CustomerPortalTicketCreate(BaseModel):
+    subject: str
+    description: str
+    category: str
+
+
+class CustomerPortalTicketUpdateRequest(BaseModel):
+    status: str
+    note: Optional[str] = None
+
+
+class CustomerPortalNotification(BaseModel):
+    id: str
+    title: str
+    message: str
+    severity: str
+    createdAt: datetime
+    read: bool
+
+
+class CustomerPortalPayment(BaseModel):
+    id: str
+    amount: float
+    status: str
+    reference: str
+    createdAt: datetime
+    method: str
+    planName: str
+
+
+class CustomerPortalPaymentCreate(BaseModel):
+    planId: str
+    method: str
+
+
+class CustomerPortalPlanChangeRequest(BaseModel):
+    planId: str
+
+
+class UsageSnapshot(BaseModel):
+    month: str
+    usedGb: float
+    capGb: Optional[float] = None
+
+
+class PaymentProviderConfigBase(BaseModel):
+    provider: str
+    public_key_env: Optional[str] = None
+    secret_key_env: Optional[str] = None
+    webhook_secret_env: Optional[str] = None
+    currency: str = "NGN"
+    enabled: bool = True
+    enabled_methods: List[str] = []
+    automatic_activation: bool = False
+    manual_confirmation: bool = False
+    callback_url: Optional[str] = None
+    receipt_branding: Dict = {}
+
+
+class PaymentProviderConfigCreate(PaymentProviderConfigBase):
+    pass
+
+
+class PaymentProviderConfig(PaymentProviderConfigBase):
+    id: int
+    tenant_id: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class BillingInvoice(BaseModel):
+    id: int
+    invoice_number: str
+    tenant_id: str
+    client_id: int
+    payment_id: Optional[int] = None
+    plan_name: str
+    amount: Decimal
+    currency: str
+    status: str
+    balance: Decimal
+    line_items: List[dict] = []
+    issued_at: Optional[datetime] = None
+    due_date: Optional[datetime] = None
+    paid_at: Optional[datetime] = None
+    billing_period_start: Optional[datetime] = None
+    billing_period_end: Optional[datetime] = None
+    notes: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class BillingReceipt(BaseModel):
+    id: int
+    receipt_number: str
+    tenant_id: str
+    client_id: int
+    invoice_id: int
+    payment_id: int
+    amount: Decimal
+    currency: str
+    payment_method: Optional[str] = None
+    payment_reference: str
+    issued_at: Optional[datetime] = None
+    rendered_html: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class PaymentWebhookProcessResponse(BaseModel):
+    processed: bool
+    payment_reference: Optional[str] = None
+    invoice_number: Optional[str] = None
+    receipt_number: Optional[str] = None
+
+
+class ActivationQueueRecord(BaseModel):
+    id: int
+    record_key: str
+    title: Optional[str] = None
+    status: str
+    client_id: Optional[int] = None
+    payload: Dict = {}
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ActivationRetryResponse(BaseModel):
+    success: bool
+    status: str
+    message: str
+    external_reference: Optional[str] = None
+
+
+class CustomerPortalPaymentInstruction(BaseModel):
+    checkout_url: Optional[str] = None
+    access_code: Optional[str] = None
+    provider_reference: Optional[str] = None
+    provider_message: Optional[str] = None
+
+
+class CustomerPortalPaymentDetailed(CustomerPortalPayment):
+    invoice_number: Optional[str] = None
+    provider: Optional[str] = None
+    checkout_url: Optional[str] = None
+    access_code: Optional[str] = None
+    receipt_number: Optional[str] = None

@@ -13,10 +13,11 @@ export function usePortalProfile(customerId?: string, token?: string) {
   });
 }
 
-export function usePortalPlans() {
+export function usePortalPlans(token?: string) {
   return useQuery({
-    queryKey: ["portal-plans"],
-    queryFn: () => apiClient.getCustomerPortalPlans(),
+    queryKey: ["portal-plans", Boolean(token)],
+    queryFn: () => apiClient.getCustomerPortalPlans(token),
+    enabled: Boolean(token),
   });
 }
 
@@ -97,9 +98,18 @@ export function usePortalUpgradePlan(customerId?: string, token?: string) {
   return useMutation({
     mutationFn: (payload: { planId: string }) => apiClient.upgradeCustomerPortalPlan(customerId as string, payload, token),
     onSuccess: () => {
-      toast.success("Plan updated.");
+      toast.success("Plan change request submitted.");
       queryClient.invalidateQueries({ queryKey: ["portal-profile", customerId] });
     },
-    onError: () => toast.error("Unable to update plan."),
+    onError: () => toast.error("Unable to submit plan change request."),
+  });
+}
+
+export function usePortalChangePassword(token?: string) {
+  return useMutation({
+    mutationFn: (payload: { currentPassword: string; newPassword: string }) =>
+      apiClient.changeCustomerPortalPassword(payload, token),
+    onSuccess: () => toast.success("Password updated."),
+    onError: () => toast.error("Unable to update password."),
   });
 }

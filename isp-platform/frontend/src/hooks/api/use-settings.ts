@@ -2,7 +2,16 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { MemberRole, NasEntry, PermissionFlags, PermissionRole, ServicePlan, Zone } from "@/types";
+import type {
+  ActivationQueueRecord,
+  MemberRole,
+  NasEntry,
+  PaymentProviderConfig,
+  PermissionFlags,
+  PermissionRole,
+  ServicePlan,
+  Zone,
+} from "@/types";
 import { apiClient } from "@/lib/api/client";
 import { useAppStore, useTenantId } from "@/store/app-store";
 
@@ -165,5 +174,57 @@ export function useSettingsLogs() {
     queryKey: ["settings-logs", tenantId],
     queryFn: () => apiClient.getSettingsLogs(tenantId, token),
     enabled: Boolean(tenantId),
+  });
+}
+
+export function usePaymentProviderConfigs() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["payment-provider-configs", tenantId],
+    queryFn: () => apiClient.getPaymentProviderConfigs(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useSavePaymentProviderConfig() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      payload: Omit<PaymentProviderConfig, "id" | "tenant_id" | "created_at" | "updated_at"> & {
+        provider: PaymentProviderConfig["provider"];
+      },
+    ) => apiClient.savePaymentProviderConfig(payload, tenantId, token),
+    onSuccess: () => {
+      toast.success("Payment provider settings saved.");
+      queryClient.invalidateQueries({ queryKey: ["payment-provider-configs", tenantId] });
+    },
+    onError: () => toast.error("Unable to save payment provider settings."),
+  });
+}
+
+export function useActivationQueue() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["activation-queue", tenantId],
+    queryFn: () => apiClient.getActivationQueue(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useRetryActivationQueueRecord() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (recordId: ActivationQueueRecord["id"]) => apiClient.retryActivationQueueRecord(recordId, tenantId, token),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      queryClient.invalidateQueries({ queryKey: ["activation-queue", tenantId] });
+    },
+    onError: () => toast.error("Unable to retry service activation."),
   });
 }

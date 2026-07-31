@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type {
+  ActivationQueueRecord,
   DemoModeSettings,
   MapAccessRole,
   NasEntry,
   NotificationRule,
+  PaymentProviderConfig,
   SecurityControlSettings,
   ServiceArea,
   ServicePlan,
@@ -16,8 +18,12 @@ import {
   useCreatePrivilegeAccount,
   useCreateServicePlan,
   useCreateZone,
+  useActivationQueue,
   useNasEntries,
+  usePaymentProviderConfigs,
   usePermissionRoles,
+  useRetryActivationQueueRecord,
+  useSavePaymentProviderConfig,
   useServicePlans,
   useSettingsLogs,
   useUpdateNasEntry,
@@ -107,6 +113,28 @@ const blankNotificationForm: NotificationRule = {
   enabled: true,
   audience: "customer",
 };
+const paymentProviders: PaymentProviderConfig["provider"][] = ["paystack", "flutterwave", "manual"];
+
+function blankPaymentProviderForm(provider: PaymentProviderConfig["provider"]): Omit<PaymentProviderConfig, "id" | "tenant_id" | "created_at" | "updated_at"> {
+  return {
+    provider,
+    public_key_env: provider === "manual" ? "" : provider === "paystack" ? "PAYSTACK_PUBLIC_KEY" : "FLUTTERWAVE_PUBLIC_KEY",
+    secret_key_env: provider === "manual" ? "" : provider === "paystack" ? "PAYSTACK_SECRET_KEY" : "FLUTTERWAVE_SECRET_KEY",
+    webhook_secret_env: provider === "manual" ? "" : provider === "paystack" ? "PAYSTACK_WEBHOOK_SECRET" : "FLUTTERWAVE_WEBHOOK_SECRET",
+    currency: "NGN",
+    enabled: provider !== "manual",
+    enabled_methods: provider === "manual" ? ["bank_transfer"] : ["card", "bank_transfer"],
+    automatic_activation: false,
+    manual_confirmation: provider === "manual",
+    callback_url: "",
+    receipt_branding: {
+      display_name: "",
+      support_email: "",
+      support_phone: "",
+      footer_note: "Thank you for choosing VUX.",
+    },
+  };
+}
 
 export function SettingsPage() {
   const [searchParams] = useSearchParams();
@@ -138,6 +166,10 @@ export function SettingsPage() {
   const serviceAreasQuery = useServiceAreas();
   const createServiceAreaMutation = useCreateServiceArea();
   const communicationTemplatesQuery = useCommunicationTemplates();
+  const paymentProviderConfigsQuery = usePaymentProviderConfigs();
+  const savePaymentProviderConfigMutation = useSavePaymentProviderConfig();
+  const activationQueueQuery = useActivationQueue();
+  const retryActivationQueueMutation = useRetryActivationQueueRecord();
   const approvalRequestsQuery = useApprovalRequests();
   const discountPromosQuery = useDiscountPromos();
   const demoModeQuery = useDemoModeSettings();
@@ -164,6 +196,10 @@ export function SettingsPage() {
   });
   const [roleModels, setRoleModels] = useState<Record<string, "Role Based" | "Approval Based" | "Hybrid">>({});
   const [profilePermissions, setProfilePermissions] = useState<Record<string, typeof EMPTY_PERMISSIONS>>({});
+  const [selectedPaymentProvider, setSelectedPaymentProvider] = useState<PaymentProviderConfig["provider"]>("paystack");
+  const [paymentConfigForm, setPaymentConfigForm] = useState<Omit<PaymentProviderConfig, "id" | "tenant_id" | "created_at" | "updated_at">>(
+    blankPaymentProviderForm("paystack"),
+  );
   const permissionAccess = useMemo(
     () => resolveMapAccess(currentUser, permissionsQuery.data ?? []),
     [currentUser, permissionsQuery.data],
@@ -207,6 +243,32 @@ export function SettingsPage() {
       Object.fromEntries(roles.map((role) => [role.id, role.permissionFlags ?? EMPTY_PERMISSIONS])),
     );
   }, [permissionsQuery.data, setMembers]);
+
+  useEffect(() => {
+    const existing = paymentProviderConfigsQuery.data?.find((entry) => entry.provider === selectedPaymentProvider);
+    if (existing) {
+      setPaymentConfigForm({
+        provider: existing.provider,
+        public_key_env: existing.public_key_env ?? "",
+        secret_key_env: existing.secret_key_env ?? "",
+        webhook_secret_env: existing.webhook_secret_env ?? "",
+        currency: existing.currency,
+        enabled: existing.enabled,
+        enabled_methods: existing.enabled_methods ?? [],
+        automatic_activation: existing.automatic_activation,
+        manual_confirmation: existing.manual_confirmation,
+        callback_url: existing.callback_url ?? "",
+        receipt_branding: {
+          display_name: String(existing.receipt_branding?.display_name ?? ""),
+          support_email: String(existing.receipt_branding?.support_email ?? ""),
+          support_phone: String(existing.receipt_branding?.support_phone ?? ""),
+          footer_note: String(existing.receipt_branding?.footer_note ?? "Thank you for choosing VUX."),
+        },
+      });
+      return;
+    }
+    setPaymentConfigForm(blankPaymentProviderForm(selectedPaymentProvider));
+  }, [paymentProviderConfigsQuery.data, selectedPaymentProvider]);
 
   const activeTab = useMemo<SettingsTab>(() => {
     const requestedTab = searchParams.get("tab");
@@ -389,6 +451,224 @@ export function SettingsPage() {
                       {saveSecurityControlsMutation.isPending ? "Saving..." : "Save Security Controls"}
                     </Button>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="xl:col-span-2">
+              <CardHeader>
+                <CardTitle>Payment Gateway Configuration</CardTitle>
+                <CardDescription>Configure provider environment keys, branded receipt metadata, and whether successful payments should queue service activation.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <Field label="Provider">
+                    <Select value={selectedPaymentProvider} onChange={(e) => setSelectedPaymentProvider(e.target.value as PaymentProviderConfig["provider"])}>
+                      {paymentProviders.map((provider) => (
+                        <option key={provider} value={provider}>{provider}</option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Currency">
+                    <Input value={paymentConfigForm.currency} onChange={(e) => setPaymentConfigForm((current) => ({ ...current, currency: e.target.value.toUpperCase() }))} />
+                  </Field>
+                  <Field label="Enabled Methods">
+                    <Input
+                      value={paymentConfigForm.enabled_methods.join(", ")}
+                      onChange={(e) =>
+                        setPaymentConfigForm((current) => ({
+                          ...current,
+                          enabled_methods: e.target.value.split(",").map((item) => item.trim()).filter(Boolean),
+                        }))
+                      }
+                      placeholder="card, bank_transfer"
+                    />
+                  </Field>
+                  <Field label="Public Key Env">
+                    <Input value={paymentConfigForm.public_key_env ?? ""} onChange={(e) => setPaymentConfigForm((current) => ({ ...current, public_key_env: e.target.value }))} />
+                  </Field>
+                  <Field label="Secret Key Env">
+                    <Input value={paymentConfigForm.secret_key_env ?? ""} onChange={(e) => setPaymentConfigForm((current) => ({ ...current, secret_key_env: e.target.value }))} />
+                  </Field>
+                  <Field label="Webhook Secret Env">
+                    <Input value={paymentConfigForm.webhook_secret_env ?? ""} onChange={(e) => setPaymentConfigForm((current) => ({ ...current, webhook_secret_env: e.target.value }))} />
+                  </Field>
+                </div>
+
+                <Field label="Callback URL">
+                  <Input value={paymentConfigForm.callback_url ?? ""} onChange={(e) => setPaymentConfigForm((current) => ({ ...current, callback_url: e.target.value }))} placeholder="https://your-portal.example.com/payments/callback" />
+                </Field>
+
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <Field label="Receipt Display Name">
+                    <Input
+                      value={String(paymentConfigForm.receipt_branding.display_name ?? "")}
+                      onChange={(e) =>
+                        setPaymentConfigForm((current) => ({
+                          ...current,
+                          receipt_branding: { ...current.receipt_branding, display_name: e.target.value },
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Support Email">
+                    <Input
+                      value={String(paymentConfigForm.receipt_branding.support_email ?? "")}
+                      onChange={(e) =>
+                        setPaymentConfigForm((current) => ({
+                          ...current,
+                          receipt_branding: { ...current.receipt_branding, support_email: e.target.value },
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Support Phone">
+                    <Input
+                      value={String(paymentConfigForm.receipt_branding.support_phone ?? "")}
+                      onChange={(e) =>
+                        setPaymentConfigForm((current) => ({
+                          ...current,
+                          receipt_branding: { ...current.receipt_branding, support_phone: e.target.value },
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Footer Note">
+                    <Input
+                      value={String(paymentConfigForm.receipt_branding.footer_note ?? "")}
+                      onChange={(e) =>
+                        setPaymentConfigForm((current) => ({
+                          ...current,
+                          receipt_branding: { ...current.receipt_branding, footer_note: e.target.value },
+                        }))
+                      }
+                    />
+                  </Field>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="flex items-center justify-between rounded-xl border border-border/70 px-4 py-3">
+                    <div>
+                      <p className="font-medium">Provider Enabled</p>
+                      <p className="text-sm text-muted-foreground">Use this provider for new portal payment requests.</p>
+                    </div>
+                    <Switch checked={paymentConfigForm.enabled} onCheckedChange={(checked) => setPaymentConfigForm((current) => ({ ...current, enabled: checked }))} />
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl border border-border/70 px-4 py-3">
+                    <div>
+                      <p className="font-medium">Automatic Activation</p>
+                      <p className="text-sm text-muted-foreground">Verified payments enter the activation queue and attempt the external activation service.</p>
+                    </div>
+                    <Switch checked={paymentConfigForm.automatic_activation} onCheckedChange={(checked) => setPaymentConfigForm((current) => ({ ...current, automatic_activation: checked }))} />
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl border border-border/70 px-4 py-3">
+                    <div>
+                      <p className="font-medium">Manual Confirmation</p>
+                      <p className="text-sm text-muted-foreground">Keep enabled when finance should confirm settlements before downstream action.</p>
+                    </div>
+                    <Switch checked={paymentConfigForm.manual_confirmation} onCheckedChange={(checked) => setPaymentConfigForm((current) => ({ ...current, manual_confirmation: checked }))} />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 p-4 text-sm">
+                  <div>
+                    <p className="font-medium">Configured Providers</p>
+                    <p className="text-muted-foreground">
+                      {paymentProviderConfigsQuery.data?.length ?? 0} provider records saved for this tenant.
+                    </p>
+                  </div>
+                  <Button onClick={() => savePaymentProviderConfigMutation.mutate(paymentConfigForm)} disabled={savePaymentProviderConfigMutation.isPending}>
+                    {savePaymentProviderConfigMutation.isPending ? "Saving..." : "Save Provider Configuration"}
+                  </Button>
+                </div>
+
+                <div className="overflow-x-auto rounded-2xl border border-border/70">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Provider</TableHead>
+                        <TableHead>Currency</TableHead>
+                        <TableHead>Methods</TableHead>
+                        <TableHead>Activation</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(paymentProviderConfigsQuery.data ?? []).map((config) => (
+                        <TableRow key={config.id}>
+                          <TableCell className="font-medium">{config.provider}</TableCell>
+                          <TableCell>{config.currency}</TableCell>
+                          <TableCell>{config.enabled_methods.join(", ") || "None"}</TableCell>
+                          <TableCell>{config.automatic_activation ? "automatic" : "manual"}</TableCell>
+                          <TableCell>
+                            <Badge variant={config.enabled ? "success" : "outline"}>{config.enabled ? "enabled" : "disabled"}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="xl:col-span-2">
+              <CardHeader>
+                <CardTitle>Service Activation Queue</CardTitle>
+                <CardDescription>Retry payment-driven activations through the approved external activation interface without touching RADIUS internals directly.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <InfoBlock title="Queued Jobs" body={String((activationQueueQuery.data ?? []).length)} />
+                  <InfoBlock
+                    title="Retry Pending"
+                    body={String((activationQueueQuery.data ?? []).filter((item) => item.status === "retry_pending" || item.status === "pending").length)}
+                  />
+                  <InfoBlock
+                    title="Completed"
+                    body={String((activationQueueQuery.data ?? []).filter((item) => item.status === "completed" || item.status === "processing").length)}
+                  />
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Attempts</TableHead>
+                        <TableHead>Last Error</TableHead>
+                        <TableHead>Updated</TableHead>
+                        <TableHead>Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(activationQueueQuery.data ?? []).map((record) => {
+                        const payload = record.payload as ActivationQueueRecord["payload"] & { attempt_count?: number; last_error?: string };
+                        return (
+                          <TableRow key={record.id}>
+                            <TableCell className="font-medium">{record.title ?? record.record_key}</TableCell>
+                            <TableCell>
+                              <Badge variant={record.status === "completed" ? "success" : record.status === "processing" ? "outline" : "warning"}>
+                                {titleCase(record.status.replace(/_/g, " "))}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{String(payload.attempt_count ?? 0)}</TableCell>
+                            <TableCell className="max-w-80 truncate">{String(payload.last_error ?? "None")}</TableCell>
+                            <TableCell>{record.updated_at ? formatRelativeDate(record.updated_at) : "Unknown"}</TableCell>
+                            <TableCell>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={retryActivationQueueMutation.isPending || record.status === "completed"}
+                                onClick={() => retryActivationQueueMutation.mutate(record.id)}
+                              >
+                                Retry
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
                 </div>
               </CardContent>
             </Card>
