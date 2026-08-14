@@ -340,6 +340,42 @@ export type SettingsTab =
   | "logs"
   | "configuration";
 
+export interface PaymentProviderConfig {
+  id: number;
+  tenant_id: string;
+  provider: "paystack" | "flutterwave" | "manual";
+  public_key_env?: string;
+  secret_key_env?: string;
+  webhook_secret_env?: string;
+  currency: string;
+  enabled: boolean;
+  enabled_methods: string[];
+  automatic_activation: boolean;
+  manual_confirmation: boolean;
+  callback_url?: string;
+  receipt_branding: Record<string, string>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ActivationQueueRecord {
+  id: number;
+  record_key: string;
+  title?: string;
+  status: string;
+  client_id?: number;
+  payload: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ActivationRetryResponse {
+  success: boolean;
+  status: string;
+  message: string;
+  external_reference?: string;
+}
+
 export interface NasEntry {
   id: string;
   name: string;
@@ -1080,6 +1116,32 @@ export interface CustomerPortalProfile {
   capGb?: number;
 }
 
+export interface CustomerPortalSession {
+  access_token: string;
+  token_type: "bearer";
+  customer_id: string;
+  tenant_id: string;
+  username: string;
+  first_login_required: boolean;
+}
+
+export interface PortalAccessStatus {
+  customer_id: string;
+  username: string;
+  email?: string;
+  phone?: string;
+  is_active: boolean;
+  portal_access_enabled: boolean;
+  first_login_required: boolean;
+  password_reset_required: boolean;
+  last_login?: string;
+  created_at?: string;
+}
+
+export interface PortalAccessProvisionResponse extends PortalAccessStatus {
+  temporary_password: string;
+}
+
 export interface CustomerPlan {
   id: string;
   name: string;
@@ -1124,6 +1186,11 @@ export interface CustomerPayment {
   createdAt: string;
   method: "paystack" | "flutterwave" | "stripe";
   planName: string;
+  invoice_number?: string;
+  provider?: string;
+  checkout_url?: string;
+  access_code?: string;
+  receipt_number?: string;
 }
 
 export interface UsageSnapshot {

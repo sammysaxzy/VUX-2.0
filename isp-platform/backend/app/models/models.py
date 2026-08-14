@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, DateTime, Text, 
-    ForeignKey, Enum as SQLEnum, JSON, Numeric
+    ForeignKey, Enum as SQLEnum, JSON, Numeric, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from geoalchemy2 import Geometry
@@ -173,6 +173,25 @@ class ApprovalStatus(str, enum.Enum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+
+
+class PortalNotificationSeverity(str, enum.Enum):
+    INFO = "info"
+    WARNING = "warning"
+    CRITICAL = "critical"
+
+
+class PaymentProvider(str, enum.Enum):
+    PAYSTACK = "paystack"
+    FLUTTERWAVE = "flutterwave"
+    MANUAL = "manual"
+
+
+class BillingInvoiceStatus(str, enum.Enum):
+    DRAFT = "draft"
+    ISSUED = "issued"
+    PAID = "paid"
+    OVERDUE = "overdue"
 
 
 class User(Base):
@@ -805,6 +824,149 @@ class OperationSetting(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     updated_by = relationship("User", foreign_keys=[updated_by_user_id])
+
+
+class CustomerPortalAccount(Base):
+    __tablename__ = "customer_portal_accounts"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "customer_id", name="uq_portal_account_tenant_customer"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String(100), index=True, nullable=False)
+    customer_id = Column(String(50), index=True, nullable=False)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
+    username = Column(String(100), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    email = Column(String(255), nullable=True)
+    phone = Column(String(50), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    portal_access_enabled = Column(Boolean, default=True, nullable=False)
+    first_login_required = Column(Boolean, default=True, nullable=False)
+    password_reset_required = Column(Boolean, default=False, nullable=False)
+    failed_login_attempts = Column(Integer, default=0, nullable=False)
+    locked_until = Column(DateTime, nullable=True)
+    last_login = Column(DateTime, nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    client = relationship("Client")
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
+    notifications = relationship(
+        "CustomerPortalNotification",
+        back_populates="portal_account",
+        cascade="all, delete-orphan",
+    )
+
+
+class CustomerPortalNotification(Base):
+    __tablename__ = "customer_portal_notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String(100), index=True, nullable=False)
+    portal_account_id = Column(Integer, ForeignKey("customer_portal_accounts.id"), nullable=False)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    severity = Column(SQLEnum(PortalNotificationSeverity), default=PortalNotificationSeverity.INFO, nullable=False)
+    is_read = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    portal_account = relationship("CustomerPortalAccount", back_populates="notifications")
+    client = relationship("Client")
+
+
+class PaymentProviderConfig(Base):
+    __tablename__ = "payment_provider_configs"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "provider", name="uq_payment_provider_tenant_provider"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String(100), index=True, nullable=False)
+    provider = Column(SQLEnum(PaymentProvider), nullable=False)
+    public_key_env = Column(String(100), nullable=True)
+    secret_key_env = Column(String(100), nullable=True)
+    webhook_secret_env = Column(String(100), nullable=True)
+    currency = Column(String(10), default="NGN", nullable=False)
+    enabled = Column(Boolean, default=True, nullable=False)
+    enabled_methods = Column(JSON, default=list, nullable=False)
+    automatic_activation = Column(Boolean, default=False, nullable=False)
+    manual_confirmation = Column(Boolean, default=False, nullable=False)
+    callback_url = Column(String(255), nullable=True)
+    receipt_branding = Column(JSON, default=dict, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class BillingInvoice(Base):
+    __tablename__ = "billing_invoices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_number = Column(String(100), unique=True, index=True, nullable=False)
+    tenant_id = Column(String(100), index=True, nullable=False)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
+    payment_id = Column(Integer, ForeignKey("billing_payments.id"), nullable=True)
+    plan_name = Column(String(150), nullable=False)
+    amount = Column(Numeric(12, 2), nullable=False)
+    currency = Column(String(10), default="NGN", nullable=False)
+    status = Column(SQLEnum(BillingInvoiceStatus), default=BillingInvoiceStatus.ISSUED, nullable=False)
+    balance = Column(Numeric(12, 2), nullable=False, default=0)
+    line_items = Column(JSON, default=list, nullable=False)
+    issued_at = Column(DateTime, default=datetime.utcnow)
+    due_date = Column(DateTime, nullable=True)
+    paid_at = Column(DateTime, nullable=True)
+    billing_period_start = Column(DateTime, nullable=True)
+    billing_period_end = Column(DateTime, nullable=True)
+    notes = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    client = relationship("Client")
+    payment = relationship("BillingPayment")
+    receipt = relationship("BillingReceipt", back_populates="invoice", uselist=False)
+
+
+class BillingReceipt(Base):
+    __tablename__ = "billing_receipts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    receipt_number = Column(String(100), unique=True, index=True, nullable=False)
+    tenant_id = Column(String(100), index=True, nullable=False)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
+    invoice_id = Column(Integer, ForeignKey("billing_invoices.id"), nullable=False)
+    payment_id = Column(Integer, ForeignKey("billing_payments.id"), nullable=False)
+    amount = Column(Numeric(12, 2), nullable=False)
+    currency = Column(String(10), default="NGN", nullable=False)
+    payment_method = Column(String(50), nullable=True)
+    payment_reference = Column(String(100), nullable=False)
+    issued_at = Column(DateTime, default=datetime.utcnow)
+    rendered_html = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    client = relationship("Client")
+    invoice = relationship("BillingInvoice", back_populates="receipt")
+    payment = relationship("BillingPayment")
+
+
+class PaymentWebhookEvent(Base):
+    __tablename__ = "payment_webhook_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String(100), index=True, nullable=True)
+    provider = Column(SQLEnum(PaymentProvider), nullable=False)
+    payment_id = Column(Integer, ForeignKey("billing_payments.id"), nullable=True)
+    event_reference = Column(String(150), index=True, nullable=True)
+    event_type = Column(String(100), nullable=True)
+    signature_valid = Column(Boolean, default=False, nullable=False)
+    verified_with_provider = Column(Boolean, default=False, nullable=False)
+    processed = Column(Boolean, default=False, nullable=False)
+    payload = Column(JSON, default=dict, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    payment = relationship("BillingPayment")
 
 
 # Standard Fiber Color Codes

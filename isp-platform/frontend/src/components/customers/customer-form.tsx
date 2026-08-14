@@ -16,6 +16,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { SplitterSelector } from "@/components/allocation/splitter-selector";
 import { FibreViewer } from "@/components/fibre/fibre-viewer";
+import { PortalAccessPanel } from "@/components/customers/portal-access-panel";
 
 const schema = z.object({
   name: z.string().min(3, "Name is required"),
@@ -301,6 +302,15 @@ export function CustomerForm({ initial, nodes, cables, tenantId, onSubmit, onDel
             {submitting ? "Saving..." : "Save Customer"}
           </Button>
         </div>
+
+        {initial ? (
+          <PortalAccessPanel
+            customerId={initial.id}
+            defaultUsername={initial.pppoeUsername ?? initial.id}
+            defaultEmail={initial.email}
+            defaultPhone={initial.phone}
+          />
+        ) : null}
       </form>
 
       <Dialog

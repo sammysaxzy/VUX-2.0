@@ -2,13 +2,17 @@ import axios from "axios";
 import type {
   AlertItem,
   AiNocResponse,
+  ActivationQueueRecord,
+  ActivationRetryResponse,
   AuthResponse,
+  PaymentProviderConfig,
   ClosureBox,
   Customer,
   CustomerNotification,
   CustomerPayment,
   CustomerPlan,
   CustomerPortalProfile,
+  CustomerPortalSession,
   CustomerDocument,
   CustomerKycRecord,
   CustomerSlaMetrics,
@@ -74,6 +78,8 @@ import type {
   SystemHealthSnapshot,
   TenantProfile,
   TenantBranding,
+  PortalAccessProvisionResponse,
+  PortalAccessStatus,
   User,
   UsageAnalyticsSnapshot,
   FaultWorkflowTicket,
@@ -3198,13 +3204,25 @@ export const apiClient = {
     return data;
   },
 
-  async customerPortalLogin(payload: { username: string; password: string }) {
+  async customerPortalLogin(payload: { identity: string; password: string; tenantId?: string }): Promise<CustomerPortalSession> {
     if (USE_MOCKS) {
       await sleep(200);
-      return portalLogin(payload.username, payload.password);
+      const session = portalLogin(payload.identity, payload.password);
+      return {
+        access_token: session.token,
+        token_type: "bearer",
+        customer_id: session.customerId,
+        tenant_id: "tenant-west-001",
+        username: payload.identity,
+        first_login_required: false,
+      };
     }
-    const { data } = await api.post<{ token: string; customer_id: string }>("/customer-portal/login", payload);
-    return { token: data.token, customerId: data.customer_id };
+    const { data } = await api.post<CustomerPortalSession>("/api/customer-portal/login", {
+      identity: payload.identity,
+      password: payload.password,
+      tenant_id: payload.tenantId,
+    });
+    return data;
   },
 
   async getCustomerPortalProfile(customerId: string, token?: string): Promise<CustomerPortalProfile> {
@@ -3212,18 +3230,20 @@ export const apiClient = {
       await sleep(180);
       return getPortalProfile(customerId);
     }
-    const { data } = await api.get<CustomerPortalProfile>(`/customer-portal/${customerId}/profile`, {
+    const { data } = await api.get<CustomerPortalProfile>(`/api/customer-portal/${customerId}/profile`, {
       headers: authHeaders(token),
     });
     return data;
   },
 
-  async getCustomerPortalPlans(): Promise<CustomerPlan[]> {
+  async getCustomerPortalPlans(token?: string): Promise<CustomerPlan[]> {
     if (USE_MOCKS) {
       await sleep(160);
       return getPortalPlans();
     }
-    const { data } = await api.get<CustomerPlan[]>("/customer-portal/plans");
+    const { data } = await api.get<CustomerPlan[]>("/api/customer-portal/plans", {
+      headers: authHeaders(token),
+    });
     return data;
   },
 
@@ -3232,7 +3252,7 @@ export const apiClient = {
       await sleep(160);
       return getPortalTickets(customerId);
     }
-    const { data } = await api.get<CustomerTicket[]>(`/customer-portal/${customerId}/tickets`, {
+    const { data } = await api.get<CustomerTicket[]>(`/api/customer-portal/${customerId}/tickets`, {
       headers: authHeaders(token),
     });
     return data;
@@ -3247,7 +3267,7 @@ export const apiClient = {
       await sleep(180);
       return addPortalTicket(customerId, payload);
     }
-    const { data } = await api.post<CustomerTicket>(`/customer-portal/${customerId}/tickets`, payload, {
+    const { data } = await api.post<CustomerTicket>(`/api/customer-portal/${customerId}/tickets`, payload, {
       headers: authHeaders(token),
     });
     return data;
@@ -3265,7 +3285,7 @@ export const apiClient = {
       return updated;
     }
     const { data } = await api.patch<CustomerTicket>(
-      `/customer-portal/${customerId}/tickets/${payload.ticketId}`,
+      `/api/customer-portal/${customerId}/tickets/${payload.ticketId}`,
       payload,
       { headers: authHeaders(token) },
     );
@@ -3277,7 +3297,7 @@ export const apiClient = {
       await sleep(160);
       return getPortalNotifications(customerId);
     }
-    const { data } = await api.get<CustomerNotification[]>(`/customer-portal/${customerId}/notifications`, {
+    const { data } = await api.get<CustomerNotification[]>(`/api/customer-portal/${customerId}/notifications`, {
       headers: authHeaders(token),
     });
     return data;
@@ -3288,7 +3308,7 @@ export const apiClient = {
       await sleep(160);
       return getPortalPayments(customerId);
     }
-    const { data } = await api.get<CustomerPayment[]>(`/customer-portal/${customerId}/payments`, {
+    const { data } = await api.get<CustomerPayment[]>(`/api/customer-portal/${customerId}/payments`, {
       headers: authHeaders(token),
     });
     return data;
@@ -3303,7 +3323,7 @@ export const apiClient = {
       await sleep(180);
       return createPortalPayment(customerId, payload);
     }
-    const { data } = await api.post<CustomerPayment>(`/customer-portal/${customerId}/payments`, payload, {
+    const { data } = await api.post<CustomerPayment>(`/api/customer-portal/${customerId}/payments`, payload, {
       headers: authHeaders(token),
     });
     return data;
@@ -3318,7 +3338,7 @@ export const apiClient = {
       await sleep(180);
       return upgradePortalPlan(customerId, payload.planId);
     }
-    const { data } = await api.post<CustomerPortalProfile>(`/customer-portal/${customerId}/upgrade`, payload, {
+    const { data } = await api.post<CustomerPortalProfile>(`/api/customer-portal/${customerId}/upgrade`, payload, {
       headers: authHeaders(token),
     });
     return data;
@@ -3329,8 +3349,116 @@ export const apiClient = {
       await sleep(140);
       return getPortalUsage(customerId);
     }
-    const { data } = await api.get<UsageSnapshot[]>(`/customer-portal/${customerId}/usage`, {
+    const { data } = await api.get<UsageSnapshot[]>(`/api/customer-portal/${customerId}/usage`, {
       headers: authHeaders(token),
+    });
+    return data;
+  },
+
+  async changeCustomerPortalPassword(payload: { currentPassword: string; newPassword: string }, token?: string) {
+    const { data } = await api.post<{ success: boolean }>(
+      "/api/customer-portal/change-password",
+      {
+        current_password: payload.currentPassword,
+        new_password: payload.newPassword,
+      },
+      { headers: authHeaders(token) },
+    );
+    return data;
+  },
+
+  async getPortalAccessStatus(customerId: string, tenantId: string, token?: string): Promise<PortalAccessStatus> {
+    const { data } = await api.get<PortalAccessStatus>(`/api/customer-portal/access/${customerId}`, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async provisionPortalAccess(
+    payload: {
+      customerId: string;
+      username?: string;
+      email?: string;
+      phone?: string;
+      temporaryPassword?: string;
+    },
+    tenantId: string,
+    token?: string,
+  ): Promise<PortalAccessProvisionResponse> {
+    const { data } = await api.post<PortalAccessProvisionResponse>(
+      "/api/customer-portal/access",
+      {
+        customer_id: payload.customerId,
+        username: payload.username,
+        email: payload.email,
+        phone: payload.phone,
+        temporary_password: payload.temporaryPassword,
+      },
+      { headers: { ...tenantHeaders(tenantId), ...authHeaders(token) } },
+    );
+    return data;
+  },
+
+  async getPortalPaymentInvoiceHtml(customerId: string, paymentId: string, token?: string): Promise<string> {
+    const { data } = await api.get<string>(`/api/payment-gateway/portal/${customerId}/payments/${paymentId}/invoice`, {
+      headers: authHeaders(token),
+      responseType: "text" as "json",
+    });
+    return data;
+  },
+
+  async getPortalPaymentInvoicePdf(customerId: string, paymentId: string, token?: string): Promise<Blob> {
+    const { data } = await api.get<Blob>(`/api/payment-gateway/portal/${customerId}/payments/${paymentId}/invoice.pdf`, {
+      headers: authHeaders(token),
+      responseType: "blob",
+    });
+    return data;
+  },
+
+  async getPortalPaymentReceiptHtml(customerId: string, paymentId: string, token?: string): Promise<string> {
+    const { data } = await api.get<string>(`/api/payment-gateway/portal/${customerId}/payments/${paymentId}/receipt`, {
+      headers: authHeaders(token),
+      responseType: "text" as "json",
+    });
+    return data;
+  },
+
+  async getPortalPaymentReceiptPdf(customerId: string, paymentId: string, token?: string): Promise<Blob> {
+    const { data } = await api.get<Blob>(`/api/payment-gateway/portal/${customerId}/payments/${paymentId}/receipt.pdf`, {
+      headers: authHeaders(token),
+      responseType: "blob",
+    });
+    return data;
+  },
+
+  async getPaymentProviderConfigs(tenantId: string, token?: string): Promise<PaymentProviderConfig[]> {
+    const { data } = await api.get<PaymentProviderConfig[]>("/api/payment-gateway/configs", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async savePaymentProviderConfig(
+    payload: Omit<PaymentProviderConfig, "id" | "tenant_id" | "created_at" | "updated_at"> & { provider: PaymentProviderConfig["provider"] },
+    tenantId: string,
+    token?: string,
+  ): Promise<PaymentProviderConfig> {
+    const { data } = await api.post<PaymentProviderConfig>("/api/payment-gateway/configs", payload, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async getActivationQueue(tenantId: string, token?: string): Promise<ActivationQueueRecord[]> {
+    const { data } = await api.get<ActivationQueueRecord[]>("/api/payment-gateway/activation-queue", {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
+    });
+    return data;
+  },
+
+  async retryActivationQueueRecord(recordId: number, tenantId: string, token?: string): Promise<ActivationRetryResponse> {
+    const { data } = await api.post<ActivationRetryResponse>(`/api/payment-gateway/activation-queue/${recordId}/retry`, null, {
+      headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
     return data;
   },
