@@ -6,6 +6,7 @@ import type {
   ActivationQueueRecord,
   MemberRole,
   NasEntry,
+  NotificationSettings,
   PaymentProviderConfig,
   PermissionFlags,
   PermissionRole,
@@ -78,6 +79,20 @@ export function useUpdateNasEntry() {
   });
 }
 
+export function useDeleteNasEntries() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => apiClient.deleteNasEntries(ids, tenantId, token),
+    onSuccess: (_, ids) => {
+      toast.success(`${ids.length} NAS entr${ids.length === 1 ? "y" : "ies"} deleted.`);
+      queryClient.invalidateQueries({ queryKey: ["settings-nas", tenantId] });
+    },
+    onError: () => toast.error("Unable to delete NAS entries."),
+  });
+}
+
 export function useZones() {
   const tenantId = useTenantId();
   const token = useAppStore((state) => state.token);
@@ -103,6 +118,20 @@ export function useCreateZone() {
   });
 }
 
+export function useDeleteZones() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => apiClient.deleteZones(ids, tenantId, token),
+    onSuccess: (_, ids) => {
+      toast.success(`${ids.length} zone${ids.length === 1 ? "" : "s"} deleted.`);
+      queryClient.invalidateQueries({ queryKey: ["settings-zones", tenantId] });
+    },
+    onError: () => toast.error("Unable to delete zones."),
+  });
+}
+
 export function usePermissionRoles() {
   const tenantId = useTenantId();
   const token = useAppStore((state) => state.token);
@@ -125,6 +154,20 @@ export function useUpdatePermissionRole() {
       queryClient.invalidateQueries({ queryKey: ["settings-permissions", tenantId] });
     },
     onError: () => toast.error("Unable to update permission profile."),
+  });
+}
+
+export function useDeletePermissionRoles() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => apiClient.deletePermissionRoles(ids, tenantId, token),
+    onSuccess: (_, ids) => {
+      toast.success(`${ids.length} permission profile${ids.length === 1 ? "" : "s"} deleted.`);
+      queryClient.invalidateQueries({ queryKey: ["settings-permissions", tenantId] });
+    },
+    onError: () => toast.error("Unable to delete permission profiles."),
   });
 }
 
@@ -167,6 +210,49 @@ export function useSavePermissionMemberAccess() {
   });
 }
 
+export function useUpdatePrivilegeAccount() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: { permissionProfileId: string } }) =>
+      apiClient.updatePrivilegeAccount(id, payload, tenantId, token),
+    onSuccess: () => {
+      toast.success("Member permission profile updated.");
+      queryClient.invalidateQueries({ queryKey: ["settings-permissions", tenantId] });
+    },
+    onError: () => toast.error("Unable to update member permission profile."),
+  });
+}
+
+export function useDeletePrivilegeAccount() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.deletePrivilegeAccount(id, tenantId, token),
+    onSuccess: () => {
+      toast.success("Member removed from permissions.");
+      queryClient.invalidateQueries({ queryKey: ["settings-permissions", tenantId] });
+    },
+    onError: () => toast.error("Unable to remove member."),
+  });
+}
+
+export function useDeletePrivilegeAccounts() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => apiClient.deletePrivilegeAccounts(ids, tenantId, token),
+    onSuccess: (_, ids) => {
+      toast.success(`${ids.length} member${ids.length === 1 ? "" : "s"} deleted successfully.`);
+      queryClient.invalidateQueries({ queryKey: ["settings-permissions", tenantId] });
+    },
+    onError: () => toast.error("Unable to delete selected members."),
+  });
+}
+
 export function useSettingsLogs() {
   const tenantId = useTenantId();
   const token = useAppStore((state) => state.token);
@@ -174,6 +260,44 @@ export function useSettingsLogs() {
     queryKey: ["settings-logs", tenantId],
     queryFn: () => apiClient.getSettingsLogs(tenantId, token),
     enabled: Boolean(tenantId),
+  });
+}
+
+export function useNotificationSettings() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  return useQuery({
+    queryKey: ["settings-notifications", tenantId],
+    queryFn: () => apiClient.getNotificationSettings(tenantId, token),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useUpdateNotificationSettings() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: NotificationSettings) => apiClient.updateNotificationSettings(payload, tenantId, token),
+    onSuccess: () => {
+      toast.success("Notification settings saved.");
+      queryClient.invalidateQueries({ queryKey: ["settings-notifications", tenantId] });
+    },
+    onError: () => toast.error("Unable to save notification settings."),
+  });
+}
+
+export function useDeleteServicePlans() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (names: string[]) => apiClient.deleteServicePlans(names, tenantId, token),
+    onSuccess: (_, names) => {
+      toast.success(`${names.length} service plan${names.length === 1 ? "" : "s"} deleted.`);
+      queryClient.invalidateQueries({ queryKey: ["settings-services", tenantId] });
+    },
+    onError: () => toast.error("Unable to delete service plans."),
   });
 }
 

@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useCustomers } from "@/hooks/api/use-customers";
 import { hasPermission } from "@/lib/permissions";
 import { useAppStore } from "@/store/app-store";
-import type { CustomerType, PriorityLevel, RadiusTab } from "@/types";
+import type { RadiusTab } from "@/types";
 import {
   useBulkImportRadiusUsers,
   useCreateRadiusUser,
@@ -22,6 +23,7 @@ import { ExportButton } from "@/components/import-export/export-button";
 import { ImportModal } from "@/components/import-export/import-modal";
 import { useRadiusRealtime } from "@/hooks/use-radius-realtime";
 import { RadiusSessionTable } from "@/components/radius/radius-session-table";
+import { SessionDetailsModal } from "@/components/radius/session-details-modal";
 import { RadiusTabs } from "@/components/radius/radius-tabs";
 import { UsersTable } from "@/components/radius/users-table";
 import { toDateTimeLocalValue } from "@/lib/utils";
@@ -40,25 +42,19 @@ import { downloadBlob, normalizeExportBlob, mapRadiusUsersToExportRows, mapSessi
 type RadiusUserForm = {
   username: string;
   password: string;
+  customerId: string;
   plan: string;
   zoneId: string;
-  customerType: CustomerType | "";
   expirationDate: string;
-  staticIp: string;
-  priority: PriorityLevel | "";
-  slaProfile: string;
 };
 
 const baseForm: RadiusUserForm = {
   username: "",
   password: "",
+  customerId: "",
   plan: "",
   zoneId: "",
-  customerType: "",
   expirationDate: "",
-  staticIp: "",
-  priority: "",
-  slaProfile: "",
 };
 
 export function RadiusPage() {
@@ -66,12 +62,16 @@ export function RadiusPage() {
   const [activeTab, setActiveTab] = useState<RadiusTab>("sessions");
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [sessionDetailsOpen, setSessionDetailsOpen] = useState(false);
+  const [selectedSessionUsername, setSelectedSessionUsername] = useState<string>();
   const [importOpen, setImportOpen] = useState(false);
   const [selectedUsernames, setSelectedUsernames] = useState<string[]>([]);
   const [deleteUsersOpen, setDeleteUsersOpen] = useState(false);
   const [newUser, setNewUser] = useState<RadiusUserForm>(baseForm);
+  const [customerLookup, setCustomerLookup] = useState("");
   const [now, setNow] = useState(() => Date.now());
 
+  const customersQuery = useCustomers();
   const sessionsQuery = useRadiusSessions();
   const disconnectMutation = useDisconnectSession();
   const reconnectMutation = useReconnectSession();
@@ -107,12 +107,8 @@ export function RadiusPage() {
   }, []);
 
   const serviceOptions = useMemo(() => servicesQuery.data ?? [], [servicesQuery.data]);
-  const availablePlans = useMemo(() => {
-    if (newUser.customerType === "individual") {
-      return serviceOptions.filter((plan) => !/enterprise|50\/50/i.test(`${plan.name} ${plan.description ?? ""}`));
-    }
-    return serviceOptions;
-  }, [newUser.customerType, serviceOptions]);
+  const availablePlans = useMemo(() => serviceOptions, [serviceOptions]);
+  const customerOptions = useMemo(() => customersQuery.data ?? [], [customersQuery.data]);
   const filteredUsers = useMemo(() => {
     const users = usersQuery.data ?? [];
     const query = search.trim().toLowerCase();
@@ -135,15 +131,6 @@ export function RadiusPage() {
   useEffect(() => {
     setNewUser((current) => {
       const nextPlan = availablePlans.some((plan) => plan.name === current.plan) ? current.plan : availablePlans[0]?.name ?? "";
-      if (current.customerType === "individual") {
-        return {
-          ...current,
-          plan: nextPlan,
-          staticIp: "",
-          priority: "",
-          slaProfile: "",
-        };
-      }
       return { ...current, plan: nextPlan };
     });
   }, [availablePlans]);
@@ -155,6 +142,7 @@ export function RadiusPage() {
       plan: availablePlans[0]?.name ?? serviceOptions[0]?.name ?? "",
       zoneId: zonesQuery.data?.[0]?.id ?? "",
     });
+    setCustomerLookup("");
     setCreateOpen(false);
     createUserMutation.reset();
   }, [availablePlans, createUserMutation, serviceOptions, zonesQuery.data]);
@@ -168,6 +156,10 @@ export function RadiusPage() {
     () => (zonesQuery.data ?? []).find((zone) => zone.id === newUser.zoneId),
     [newUser.zoneId, zonesQuery.data],
   );
+  const selectedCustomer = useMemo(
+    () => customerOptions.find((customer) => customer.id === newUser.customerId),
+    [customerOptions, newUser.customerId],
+  );
   const selectedNasEntry = useMemo(
     () => (nasQuery.data ?? []).find((entry) => entry.id === selectedZone?.nasId),
     [nasQuery.data, selectedZone?.nasId],
@@ -179,9 +171,9 @@ export function RadiusPage() {
   const canCreateUser =
     Boolean(newUser.username.trim()) &&
     Boolean(newUser.password.trim()) &&
+    Boolean(newUser.customerId.trim()) &&
     Boolean(newUser.plan.trim()) &&
     Boolean(newUser.zoneId.trim()) &&
-    Boolean(newUser.customerType) &&
     hasValidExpirationDate;
 
   const handleCreateUser = () => {
@@ -189,12 +181,8 @@ export function RadiusPage() {
       toast.error("Your permission profile cannot create PPPoE users.");
       return;
     }
-    if (!newUser.username.trim() || !newUser.password.trim() || !newUser.plan.trim() || !newUser.zoneId.trim()) {
+    if (!newUser.username.trim() || !newUser.password.trim() || !newUser.customerId.trim() || !newUser.plan.trim() || !newUser.zoneId.trim()) {
       toast.error("Fill in the required PPPoE fields.");
-      return;
-    }
-    if (!newUser.customerType) {
-      toast.error("Select a customer type.");
       return;
     }
     if (!hasValidExpirationDate) {
@@ -205,13 +193,10 @@ export function RadiusPage() {
     createUserMutation.mutate({
       username: newUser.username,
       password: newUser.password,
+      customerId: newUser.customerId,
       plan: newUser.plan,
       zoneId: newUser.zoneId,
-      customerType: newUser.customerType as CustomerType,
       expirationDate: new Date(newUser.expirationDate).toISOString(),
-      staticIp: newUser.customerType === "corporate" ? newUser.staticIp.trim() || undefined : undefined,
-      priority: newUser.customerType === "corporate" ? newUser.priority || undefined : undefined,
-      slaProfile: newUser.customerType === "corporate" ? newUser.slaProfile.trim() || undefined : undefined,
     });
   };
 
@@ -301,7 +286,7 @@ export function RadiusPage() {
           )}
           {activeTab === "sessions" ? (
             <Button type="button" disabled={!canCreatePppoe} onClick={() => setCreateOpen(true)}>
-              Create PPPoE
+              Create User
             </Button>
           ) : null}
         </div>
@@ -314,6 +299,10 @@ export function RadiusPage() {
           ) : (
             <RadiusSessionTable
               sessions={sessionsQuery.data}
+              onSelect={(username) => {
+                setSelectedSessionUsername(username);
+                setSessionDetailsOpen(true);
+              }}
               onSync={(username) => syncUserMutation.mutate(username)}
               busySync={syncUserMutation.variables}
               canSync={canCreatePppoe}
@@ -388,6 +377,15 @@ export function RadiusPage() {
         </div>
       </Dialog>
 
+      <SessionDetailsModal
+        open={sessionDetailsOpen}
+        username={selectedSessionUsername}
+        onOpenChange={(open) => {
+          setSessionDetailsOpen(open);
+          if (!open) setSelectedSessionUsername(undefined);
+        }}
+      />
+
       <Dialog
         open={createOpen}
         title="Create PPPoE User"
@@ -400,12 +398,46 @@ export function RadiusPage() {
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1">
+              <Label htmlFor="radius-customer-lookup">Linked Customer</Label>
+              <Input
+                id="radius-customer-lookup"
+                list="radius-customer-options"
+                value={customerLookup}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setCustomerLookup(nextValue);
+                  const matchedCustomer = customerOptions.find(
+                    (customer) => `${customer.name} (${customer.email})` === nextValue,
+                  );
+                  setNewUser((prev) => ({
+                    ...prev,
+                    customerId: matchedCustomer?.id ?? "",
+                    username:
+                      !prev.username.trim() || prev.username === `cust_${prev.customerId}`
+                        ? matchedCustomer
+                          ? `cust_${matchedCustomer.id}`
+                          : ""
+                        : prev.username,
+                  }));
+                }}
+                placeholder="Search customer by name or email"
+              />
+              <datalist id="radius-customer-options">
+                {customerOptions.map((customer) => (
+                  <option key={customer.id} value={`${customer.name} (${customer.email})`} />
+                ))}
+              </datalist>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1">
               <Label htmlFor="radius-username">Username</Label>
               <Input
                 id="radius-username"
                 value={newUser.username}
                 onChange={(event) => setNewUser((prev) => ({ ...prev, username: event.target.value }))}
-                placeholder="jdoe_pppoe"
+                placeholder={selectedCustomer ? `cust_${selectedCustomer.id}` : "jdoe_pppoe"}
               />
             </div>
             <div className="space-y-1">
@@ -455,20 +487,6 @@ export function RadiusPage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1">
-              <Label htmlFor="radius-customer-type">Customer Type</Label>
-              <Select
-                id="radius-customer-type"
-                value={newUser.customerType}
-                onChange={(event) =>
-                  setNewUser((prev) => ({ ...prev, customerType: event.target.value as CustomerType | "" }))
-                }
-              >
-                <option value="">Select customer type</option>
-                <option value="individual">Individual</option>
-                <option value="corporate">Corporate</option>
-              </Select>
-            </div>
-            <div className="space-y-1">
               <Label htmlFor="radius-nas-readonly">NAS</Label>
               <Input
                 id="radius-nas-readonly"
@@ -477,66 +495,23 @@ export function RadiusPage() {
                 placeholder="Determined by zone"
               />
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="radius-expiration-date">Expiration Date</Label>
+              <Input
+                id="radius-expiration-date"
+                type="datetime-local"
+                value={newUser.expirationDate}
+                min={minDateTime}
+                onChange={(event) => setNewUser((prev) => ({ ...prev, expirationDate: event.target.value }))}
+              />
+              {!hasValidExpirationDate && newUser.expirationDate ? (
+                <p className="text-sm text-destructive">Expiration date must be in the future.</p>
+              ) : null}
+            </div>
           </div>
-
-          <div className="space-y-1">
-            <Label htmlFor="radius-expiration-date">Expiration Date</Label>
-            <Input
-              id="radius-expiration-date"
-              type="datetime-local"
-              value={newUser.expirationDate}
-              min={minDateTime}
-              onChange={(event) => setNewUser((prev) => ({ ...prev, expirationDate: event.target.value }))}
-            />
-            {!hasValidExpirationDate && newUser.expirationDate ? (
-              <p className="text-sm text-destructive">Expiration date must be in the future.</p>
-            ) : null}
-          </div>
-
-          {newUser.customerType === "corporate" ? (
-            <>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1">
-                  <Label htmlFor="radius-static-ip">Static IP</Label>
-                  <Input
-                    id="radius-static-ip"
-                    value={newUser.staticIp}
-                    onChange={(event) => setNewUser((prev) => ({ ...prev, staticIp: event.target.value }))}
-                    placeholder="Optional"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="radius-priority">Priority Level</Label>
-                  <Select
-                    id="radius-priority"
-                    value={newUser.priority}
-                    onChange={(event) =>
-                      setNewUser((prev) => ({ ...prev, priority: event.target.value as PriorityLevel | "" }))
-                    }
-                  >
-                    <option value="">Select priority</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="radius-sla-profile">SLA Profile</Label>
-                <Input
-                  id="radius-sla-profile"
-                  value={newUser.slaProfile}
-                  onChange={(event) => setNewUser((prev) => ({ ...prev, slaProfile: event.target.value }))}
-                  placeholder="Optional"
-                />
-              </div>
-            </>
-          ) : null}
 
           <p className="text-sm text-muted-foreground">
-            NAS routing is determined by the selected zone. Individual users stay lightweight, while corporate users can
-            carry optional static IP, priority, and SLA metadata.
+            NAS routing is determined by the selected zone. Customer selection is required and the PPPoE account stays linked to CRM through the internal customer record.
           </p>
 
           <div className="flex justify-end gap-2">
@@ -548,7 +523,7 @@ export function RadiusPage() {
               onClick={handleCreateUser}
               disabled={createUserMutation.isPending || !canCreateUser}
             >
-              {createUserMutation.isPending ? "Creating..." : "Create PPPoE"}
+              {createUserMutation.isPending ? "Creating..." : "Create User"}
             </Button>
           </div>
         </div>
