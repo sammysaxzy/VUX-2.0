@@ -4,6 +4,8 @@ import { buildCustomerServiceLabel, formatPlanAndFee, getCustomerPaymentStatus }
 import { formatCurrency, formatDateOrDash, formatDateTimeOrDash, titleCase } from "@/lib/utils";
 import { useCustomer } from "@/hooks/api/use-customers";
 import { useCustomerTimeline } from "@/hooks/api/use-operations";
+import { CustomerNetworkAssignmentPanel } from "@/components/customers/customer-network-assignment-panel";
+import { PortalAccessPanel } from "@/components/customers/portal-access-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -75,7 +77,7 @@ export function CustomerProfilePage() {
               <p>MST: {customer.mstId ?? "Not mapped"}</p>
               <p>Splitter port: {customer.splitterPort ?? "Not assigned"}</p>
               <p>Fibre core: {customer.fibreCoreId ?? "Not assigned"}</p>
-              <p>PPPoE: {customer.pppoeUsername ?? "Not assigned"}</p>
+              <p>Drop cable: {customer.dropCableId ?? "Not generated"}</p>
             </DetailCard>
           </div>
           <div className="space-y-3">
@@ -117,6 +119,16 @@ export function CustomerProfilePage() {
           </div>
         </CardContent>
       </Card>
+
+      <CustomerNetworkAssignmentPanel customer={customer} />
+
+      <PortalAccessPanel
+        customerId={customer.id}
+        tenantId={customer.tenantId}
+        defaultUsername={customer.id}
+        defaultEmail={customer.email}
+        defaultPhone={customer.phone}
+      />
 
       <div className="grid gap-4 xl:grid-cols-[1.15fr_1fr_1fr]">
         <Card>

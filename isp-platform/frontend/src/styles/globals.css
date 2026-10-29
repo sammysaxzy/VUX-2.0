@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&display=swap");
 @import "mapbox-gl/dist/mapbox-gl.css";
 @tailwind base;
 @tailwind components;
@@ -41,6 +42,7 @@
 
 body {
   @apply bg-background text-foreground antialiased;
+  font-family: "Manrope", sans-serif;
   background-image:
     radial-gradient(circle at 8% 12%, rgb(14 165 233 / 0.08), transparent 32%),
     radial-gradient(circle at 92% 6%, rgb(249 115 22 / 0.07), transparent 28%),
@@ -52,4 +54,34 @@ body {
     radial-gradient(circle at 8% 12%, rgb(56 189 248 / 0.2), transparent 34%),
     radial-gradient(circle at 92% 6%, rgb(249 115 22 / 0.14), transparent 30%),
     radial-gradient(circle at 55% 94%, rgb(20 184 166 / 0.15), transparent 34%);
+}
+
+.portal-display {
+  font-family: "Sora", sans-serif;
+  letter-spacing: -0.03em;
+}
+
+.portal-ui {
+  font-family: "Manrope", sans-serif;
+}
+
+@keyframes fade_up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -18px, 0);
+  }
 }

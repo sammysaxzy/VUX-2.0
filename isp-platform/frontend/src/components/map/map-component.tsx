@@ -25,6 +25,29 @@ import type { ClosureBox, Customer, FibreCable, FibreCoreCount, Fault, GeoPoint,
 
 const mapToken = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
 
+// Keep the infrastructure workspace usable when Mapbox assets cannot be
+// reached (for example, a blocked network or an invalid/deactivated token).
+// The overlays are still rendered by Mapbox GL; only the base map switches to
+// OpenStreetMap tiles, which do not require an application token.
+const openStreetMapStyle = {
+  version: 8 as const,
+  sources: {
+    openstreetmap: {
+      type: "raster" as const,
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      attribution: "© OpenStreetMap contributors",
+    },
+  },
+  layers: [
+    {
+      id: "openstreetmap",
+      type: "raster" as const,
+      source: "openstreetmap",
+    },
+  ],
+};
+
 type Props = {
   nodes: NetworkNode[];
   cables: FibreCable[];
@@ -101,6 +124,9 @@ type Props = {
   onDeleteSplice?: (payload: { closureId: string; spliceId: string }) => void;
   highlightedCableId?: string;
   focusCustomerId?: string;
+  externalLocationPickMode?: boolean;
+  externalLocationPickLabel?: string;
+  onExternalLocationPick?: (payload: { location: GeoPoint }) => void;
   canAdd?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
@@ -189,6 +215,9 @@ export function MapComponent({
   className,
   highlightedCableId,
   focusCustomerId,
+  externalLocationPickMode = false,
+  externalLocationPickLabel = "customer location",
+  onExternalLocationPick,
   onInfrastructureAdded,
   onUpdateNode,
   onUpdateClosure,
@@ -233,6 +262,9 @@ export function MapComponent({
   const [measurementPoints, setMeasurementPoints] = useState<GeoPoint[]>([]);
   const [workflowPanelWidth, setWorkflowPanelWidth] = useState(560);
   const [isResizingWorkflowPanel, setIsResizingWorkflowPanel] = useState(false);
+  const [mapLoadError, setMapLoadError] = useState<string | null>(null);
+  const [hasMapLoaded, setHasMapLoaded] = useState(false);
+  const [useOpenStreetMapFallback, setUseOpenStreetMapFallback] = useState(!mapToken);
 
   const selectedMSTId = useAppStore((state) => state.selectedMSTId);
   const selectedFiberId = useAppStore((state) => state.selectedFiberId);
@@ -651,8 +683,9 @@ export function MapComponent({
   }, [nodes]);
 
   const resolvedTheme = resolveTheme(theme);
-  const mapStyle =
-    mapStyleMode === "satellite"
+  const mapStyle = useOpenStreetMapFallback
+    ? openStreetMapStyle
+    : mapStyleMode === "satellite"
       ? "mapbox://styles/mapbox/satellite-streets-v12"
       : mapStyleMode === "dark" || resolvedTheme === "dark" && mapStyleMode === "street"
         ? "mapbox://styles/mapbox/dark-v11"
@@ -957,6 +990,12 @@ export function MapComponent({
   };
 
   const handleMapClick = (event: MapMouseEvent) => {
+    if (externalLocationPickMode && onExternalLocationPick) {
+      onExternalLocationPick({ location: { lat: event.lngLat.lat, lng: event.lngLat.lng } });
+      toast.success(`${externalLocationPickLabel} captured from map.`);
+      return;
+    }
+
     if (isPickingClientLocation) {
       setPickedClientLocation({ lat: event.lngLat.lat, lng: event.lngLat.lng });
       setIsPickingClientLocation(false);
@@ -992,15 +1031,6 @@ export function MapComponent({
     }
   };
 
-  if (!mapToken) {
-    return (
-      <Card className={cn("grid min-h-[580px] place-content-center p-6 text-center", className)}>
-        <p className="font-medium">Mapbox token is missing.</p>
-        <p className="mt-1 text-sm text-muted-foreground">Set `VITE_MAPBOX_TOKEN` in your `.env` file.</p>
-      </Card>
-    );
-  }
-
   return (
     <div className={cn("relative h-[calc(100vh-11rem)] overflow-hidden rounded-2xl border border-border/60", className)}>
       <Map
@@ -1009,6 +1039,26 @@ export function MapComponent({
         mapboxAccessToken={mapToken}
         mapStyle={mapStyle}
         interactiveLayerIds={[...FIBER_ROUTE_LAYER_IDS]}
+        onLoad={() => {
+          setHasMapLoaded(true);
+          setMapLoadError(null);
+        }}
+        onError={(event) => {
+          const reason =
+            event.error instanceof Error
+              ? event.error.message
+              : typeof event.error === "string"
+                ? event.error
+                : "Unknown map rendering error.";
+          if (!useOpenStreetMapFallback) {
+            setUseOpenStreetMapFallback(true);
+            setMapLoadError(null);
+            toast.warning("Mapbox could not load. Switched to the OpenStreetMap backup.");
+            return;
+          }
+          setMapLoadError(reason);
+          toast.error(`Map failed to load: ${reason}`);
+        }}
         onClick={handleMapClick}
         onMouseMove={(event) => {
           const feature = event.features?.find((entry) => entry.layer.id === "fibre-lines");
@@ -1173,6 +1223,26 @@ export function MapComponent({
         ) : null}
       </Map>
 
+      {useOpenStreetMapFallback && !mapLoadError ? (
+        <div className="pointer-events-none absolute left-3 top-3 z-30 rounded-xl border border-warning/35 bg-background/92 px-3 py-2 text-xs text-muted-foreground shadow-soft backdrop-blur">
+          Using OpenStreetMap backup tiles.
+        </div>
+      ) : null}
+
+      {mapLoadError ? (
+        <div className="pointer-events-none absolute inset-x-3 bottom-3 z-30 rounded-2xl border border-danger/35 bg-background/96 p-3 shadow-soft backdrop-blur">
+          <p className="text-sm font-semibold text-danger">Map failed to render</p>
+          <p className="mt-1 text-xs text-muted-foreground">{mapLoadError}</p>
+          <p className="mt-2 text-xs text-muted-foreground">Check your browser’s WebGL support and whether map tiles are blocked on this network.</p>
+        </div>
+      ) : null}
+
+      {!hasMapLoaded && !mapLoadError && !useOpenStreetMapFallback ? (
+        <div className="pointer-events-none absolute left-3 top-3 z-30 rounded-xl border border-border/70 bg-background/92 px-3 py-2 text-xs text-muted-foreground shadow-soft backdrop-blur">
+          Loading map workspace...
+        </div>
+      ) : null}
+
       <div className="pointer-events-none absolute right-3 top-3 z-20 w-[min(95vw,380px)]">
         <div className="pointer-events-auto rounded-2xl border border-border/70 bg-card/95 p-2 shadow-soft backdrop-blur">
           <div className="flex items-center justify-between gap-2">
@@ -1208,6 +1278,11 @@ export function MapComponent({
                 <Mountain className="mr-1 h-3.5 w-3.5" />
                 Dark
               </Button>
+              {externalLocationPickMode ? (
+                <Badge variant="outline" className="border-info/40 bg-info/10 text-info">
+                  Click map to set {externalLocationPickLabel}
+                </Badge>
+              ) : null}
             </div>
           ) : null}
           {!flowView ? (

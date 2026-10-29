@@ -195,3 +195,45 @@ export function useApproveWorkOrderUsage() {
     onError: () => toast.error("Unable to approve work order usage."),
   });
 }
+
+export function useCompleteWorkOrder() {
+  const tenantId = useTenantId();
+  const token = useAppStore((state) => state.token);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ workOrderId, notes }: { workOrderId: number; notes?: string }) => {
+      const workOrder = queryClient.getQueryData<WorkOrder[]>(["work-orders", tenantId])?.find((entry) => entry.id === workOrderId);
+      if (!workOrder) throw new Error("Work order not found.");
+      return apiClient.completeWorkOrder(workOrderId, {
+        notes,
+        photos: workOrder.photos,
+        onu_serial: workOrder.onu_serial,
+        onu_mac: workOrder.onu_mac,
+        router_mac: workOrder.router_mac,
+        latitude: workOrder.latitude,
+        longitude: workOrder.longitude,
+        materials: workOrder.materials.map((material) => ({
+          item_id: material.item_id,
+          quantity_planned: material.quantity_planned,
+          quantity_used: material.quantity_used || material.quantity_planned,
+          unit_cost: material.unit_cost,
+          serial_number: material.serial_number,
+          mac_address: material.mac_address,
+          cable_length_used: material.cable_length_used,
+          notes: material.notes,
+        })),
+      }, tenantId, token);
+    },
+    onSuccess: () => {
+      toast.success("Work order marked complete.");
+      queryClient.invalidateQueries({ queryKey: ["work-orders", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-items", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-movements", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-summary", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["finance-summary", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["finance-transactions", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", tenantId] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Unable to complete work order."),
+  });
+}

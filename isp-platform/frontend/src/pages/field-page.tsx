@@ -1,19 +1,25 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useCustomers } from "@/hooks/api/use-customers";
-import { useWorkOrders } from "@/hooks/api/use-inventory";
+import { useCompleteWorkOrder, useWorkOrders } from "@/hooks/api/use-inventory";
 import { useSplicingActivities } from "@/hooks/api/use-network";
 import { formatCurrency, formatDateOrDash, titleCase } from "@/lib/utils";
 import { getWorkOrderStatusTone } from "@/lib/isp";
 import { ActivityTimeline } from "@/components/field/activity-timeline";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export function FieldPage() {
+  const [completionTarget, setCompletionTarget] = useState<number | null>(null);
+  const [completionNotes, setCompletionNotes] = useState("");
   const activities = useSplicingActivities();
   const workOrders = useWorkOrders();
   const customers = useCustomers();
+  const completeWorkOrder = useCompleteWorkOrder();
 
   const stats = useMemo(() => {
     const list = workOrders.data ?? [];
@@ -87,6 +93,9 @@ export function FieldPage() {
                     </TableCell>
                   </TableRow>
                 ))}
+                {!workOrders.data?.length ? (
+                  <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">No work orders yet. Create one from Inventory to start tracking field jobs.</TableCell></TableRow>
+                ) : null}
               </TableBody>
             </Table>
           </CardContent>
@@ -121,15 +130,42 @@ export function FieldPage() {
                 <p>Photos: {(workOrder.photos ?? []).length} uploaded</p>
                 <p>Notes: {workOrder.notes ? "Available" : "Pending update"}</p>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Badge variant="outline">Update status</Badge>
-                <Badge variant="outline">Upload photos</Badge>
-                <Badge variant="outline">Mark complete</Badge>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {workOrder.approval_status === "pending" ? <Badge variant="warning">Usage approval pending</Badge> : null}
+                {workOrder.status !== "completed" && workOrder.status !== "cancelled" ? (
+                  <Button size="sm" disabled={completeWorkOrder.isPending} onClick={() => { setCompletionTarget(workOrder.id); setCompletionNotes(workOrder.completion_notes ?? ""); }}>
+                    Mark complete
+                  </Button>
+                ) : <span className="text-xs text-muted-foreground">{workOrder.status === "completed" ? "Job closed" : "Job cancelled"}</span>}
               </div>
             </div>
           ))}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={completionTarget !== null}
+        title="Complete work order"
+        description="Record a short field note before closing this job. Planned material quantities will be submitted as used unless edited in the work order."
+        onOpenChange={(open) => { if (!open && !completeWorkOrder.isPending) setCompletionTarget(null); }}
+      >
+        <form className="space-y-4" onSubmit={(event) => {
+          event.preventDefault();
+          if (completionTarget === null) return;
+          completeWorkOrder.mutate({ workOrderId: completionTarget, notes: completionNotes }, {
+            onSuccess: () => setCompletionTarget(null),
+          });
+        }}>
+          <label className="block space-y-2 text-sm font-medium">
+            Completion notes
+            <Textarea value={completionNotes} onChange={(event) => setCompletionNotes(event.target.value)} placeholder="Work completed, signal reading, equipment installed, or follow-up needed" />
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" disabled={completeWorkOrder.isPending} onClick={() => setCompletionTarget(null)}>Cancel</Button>
+            <Button type="submit" disabled={completeWorkOrder.isPending}>{completeWorkOrder.isPending ? "Saving…" : "Close work order"}</Button>
+          </div>
+        </form>
+      </Dialog>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { KeyRound, RefreshCw } from "lucide-react";
+import { ExternalLink, KeyRound, RefreshCw } from "lucide-react";
 import { usePortalAccessStatus, useProvisionPortalAccess } from "@/hooks/api/use-portal-access";
 import { formatDateTimeOrDash } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -11,26 +11,31 @@ import { Label } from "@/components/ui/label";
 
 type Props = {
   customerId: string;
+  tenantId: string;
   defaultUsername?: string;
   defaultEmail?: string;
   defaultPhone?: string;
 };
 
-export function PortalAccessPanel({ customerId, defaultUsername, defaultEmail, defaultPhone }: Props) {
+export function PortalAccessPanel({ customerId, tenantId, defaultUsername, defaultEmail, defaultPhone }: Props) {
   const statusQuery = usePortalAccessStatus(customerId);
   const provisionMutation = useProvisionPortalAccess(customerId);
   const [username, setUsername] = useState(defaultUsername ?? customerId);
   const [email, setEmail] = useState(defaultEmail ?? "");
   const [phone, setPhone] = useState(defaultPhone ?? "");
-  const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const portalIdentity = statusQuery.data?.username ?? username;
+  const portalLoginHref = `/portal/login?tenantId=${encodeURIComponent(tenantId)}&identity=${encodeURIComponent(portalIdentity)}`;
 
   const hasAccess = statusQuery.isSuccess && Boolean(statusQuery.data);
-  const temporaryResult = provisionMutation.data?.temporary_password;
-  const actionLabel = hasAccess ? "Reset Portal Access" : "Create Portal Access";
+  const visiblePassword = provisionMutation.data?.temporary_password ?? statusQuery.data?.admin_visible_password;
+  const actionLabel = hasAccess ? "Reset Client Password" : "Create Portal Access";
   const helperText = useMemo(() => {
-    if (temporaryResult) return "Temporary password generated below. Share it securely and require the customer to change it on first login.";
-    return "Create a customer portal identity without exposing the customer's permanent service password.";
-  }, [temporaryResult]);
+    if (visiblePassword) return "This is the latest portal password visible to the admin. Share it securely and ask the customer to change it after login.";
+    return hasAccess
+      ? "Reset access to set a fresh customer portal password from the admin side."
+      : "Create a customer portal identity and set the customer's first portal password.";
+  }, [hasAccess, visiblePassword]);
 
   return (
     <Card className="border-dashed">
@@ -57,38 +62,46 @@ export function PortalAccessPanel({ customerId, defaultUsername, defaultEmail, d
         </div>
 
         <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-          <Field label="Optional Temporary Password">
+          <Field label="New Portal Password">
             <Input
-              value={temporaryPassword}
-              onChange={(event) => setTemporaryPassword(event.target.value)}
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
               placeholder="Leave blank to auto-generate"
             />
           </Field>
           <div className="flex items-end">
-            <Button
-              type="button"
-              onClick={() =>
-                provisionMutation.mutate({
-                  username,
-                  email: email || undefined,
-                  phone: phone || undefined,
-                  temporaryPassword: temporaryPassword || undefined,
-                })
-              }
-              disabled={provisionMutation.isPending || !username.trim()}
-              className="w-full md:w-auto"
-            >
-              {provisionMutation.isPending ? (
-                "Processing..."
-              ) : hasAccess ? (
-                <>
-                  <RefreshCw className="mr-1 h-4 w-4" />
-                  {actionLabel}
-                </>
-              ) : (
-                actionLabel
-              )}
-            </Button>
+            <div className="flex w-full flex-col gap-2 md:w-auto">
+              <Button
+                type="button"
+                onClick={() =>
+                  provisionMutation.mutate({
+                    username,
+                    email: email || undefined,
+                    phone: phone || undefined,
+                    temporaryPassword: newPassword || undefined,
+                  })
+                }
+                disabled={provisionMutation.isPending || !username.trim()}
+                className="w-full md:w-auto"
+              >
+                {provisionMutation.isPending ? (
+                  "Processing..."
+                ) : hasAccess ? (
+                  <>
+                    <RefreshCw className="mr-1 h-4 w-4" />
+                    {actionLabel}
+                  </>
+                ) : (
+                  actionLabel
+                )}
+              </Button>
+              <a href={portalLoginHref} target="_blank" rel="noreferrer" className="w-full md:w-auto">
+                <Button type="button" variant="outline" className="w-full md:w-auto">
+                  <ExternalLink className="mr-1 h-4 w-4" />
+                  Open Portal Login
+                </Button>
+              </a>
+            </div>
           </div>
         </div>
 
@@ -97,6 +110,8 @@ export function PortalAccessPanel({ customerId, defaultUsername, defaultEmail, d
           {hasAccess ? (
             <div className="mt-2 space-y-1 text-muted-foreground">
               <p>Username: {statusQuery.data.username}</p>
+              <p>Password: {statusQuery.data.admin_visible_password ?? "Not returned by backend yet"}</p>
+              <p>Portal status: {statusQuery.data.is_active ? "Active" : "Inactive"}</p>
               <p>Last login: {formatDateTimeOrDash(statusQuery.data.last_login)}</p>
               <p>First login reset required: {statusQuery.data.first_login_required ? "Yes" : "No"}</p>
             </div>
@@ -104,10 +119,11 @@ export function PortalAccessPanel({ customerId, defaultUsername, defaultEmail, d
             <p className="mt-2 text-muted-foreground">Portal access has not been created for this customer yet.</p>
           )}
           <p className="mt-3 text-muted-foreground">{helperText}</p>
-          {temporaryResult ? (
+          {visiblePassword ? (
             <div className="mt-3 rounded-xl border border-success/30 bg-success/10 p-3 text-foreground">
-              <p className="font-medium">Temporary password</p>
-              <p className="mt-1 font-mono text-sm">{temporaryResult}</p>
+              <p className="font-medium">Latest portal credentials</p>
+              <p className="mt-1 text-sm">Username: <span className="font-mono">{portalIdentity}</span></p>
+              <p className="mt-1 text-sm">Password: <span className="font-mono">{visiblePassword}</span></p>
             </div>
           ) : null}
         </div>

@@ -7,6 +7,8 @@ import type {
   CustomerPayment,
   CustomerPlan,
   CustomerPortalProfile,
+  PortalAccessProvisionResponse,
+  PortalAccessStatus,
   CustomerTicket,
   CustomerTicketCategory,
   OnuTelemetryPayload,
@@ -1862,9 +1864,16 @@ export function simulateMockBackendTick() {
 }
 
 type PortalCredential = {
-  username: string;
+  loginId: string;
+  aliases?: string[];
   password: string;
   customerId: string;
+  tenantId: string;
+};
+
+type PortalAccessRecord = PortalAccessStatus & {
+  tenantId: string;
+  password: string;
 };
 
 export const mockCustomerPlans: CustomerPlan[] = [
@@ -1875,11 +1884,34 @@ export const mockCustomerPlans: CustomerPlan[] = [
 ];
 
 const portalCredentials: PortalCredential[] = [
-  { username: "adebayo_hub", password: "pppoe-1234", customerId: "cust-1001" },
-  { username: "marina_view", password: "pppoe-1234", customerId: "cust-1002" },
-  { username: "korede_home", password: "pppoe-1234", customerId: "cust-1003" },
-  { username: "demo_user", password: "pppoe-1234", customerId: "cust-demo" },
+  { loginId: "JUD000213", aliases: ["DRT00213"], password: "A23R", customerId: "cust-1001", tenantId: "tenant-west-001" },
+  { loginId: "FH000214", aliases: ["DRT00214"], password: "B41K", customerId: "cust-1002", tenantId: "tenant-north-002" },
+  { loginId: "FO000215", aliases: ["DRT00215"], password: "C77M", customerId: "cust-1003", tenantId: "tenant-fibreone-003" },
+  { loginId: "JUD00999", aliases: ["DRT00999"], password: "D3MO", customerId: "cust-demo", tenantId: "tenant-west-001" },
 ];
+
+const portalAccessRecords = new Map<string, PortalAccessRecord>(
+  portalCredentials.map((credential) => {
+    const customer = mockCustomers.find((entry) => entry.id === credential.customerId);
+    return [
+      credential.customerId,
+      {
+        customer_id: credential.customerId,
+        username: credential.loginId,
+        email: customer?.email,
+        phone: customer?.phone,
+        is_active: true,
+        portal_access_enabled: true,
+        first_login_required: false,
+        password_reset_required: false,
+        created_at: new Date(now - 1000 * 60 * 60 * 24 * 30).toISOString(),
+        admin_visible_password: credential.password,
+        tenantId: credential.tenantId,
+        password: credential.password,
+      },
+    ] satisfies [string, PortalAccessRecord];
+  }),
+);
 
 const portalProfiles = new Map<string, CustomerPortalProfile>([
   [
@@ -2017,15 +2049,119 @@ const portalUsage = new Map<string, UsageSnapshot[]>([
   ],
 ]);
 
-export function portalLogin(username: string, password: string) {
-  const match = portalCredentials.find((entry) => entry.username === username);
-  if (!match || match.password !== password) {
-    throw new Error("Invalid PPPoE credentials.");
+export function portalLogin(identity: string, password: string, tenantId?: string) {
+  const normalizedIdentity = identity.trim().toUpperCase();
+  const normalizedPassword = password.trim();
+  const match = portalCredentials.find((entry) => {
+    const aliases = [entry.loginId, ...(entry.aliases ?? [])].map((value) => value.toUpperCase());
+    return aliases.includes(normalizedIdentity);
+  });
+  if (!match || match.password !== normalizedPassword || (tenantId && match.tenantId !== tenantId)) {
+    throw new Error("Invalid customer portal credentials.");
+  }
+  const accessRecord = portalAccessRecords.get(match.customerId);
+  if (accessRecord) {
+    portalAccessRecords.set(match.customerId, {
+      ...accessRecord,
+      last_login: new Date().toISOString(),
+      password_reset_required: false,
+    });
   }
   return {
     token: `portal-${match.customerId}-${Date.now()}`,
     customerId: match.customerId,
+    tenantId: match.tenantId,
+    loginId: match.loginId,
+    firstLoginRequired: accessRecord?.first_login_required ?? false,
   };
+}
+
+export function getPortalAccessStatus(customerId: string) {
+  const record = portalAccessRecords.get(customerId);
+  if (!record) throw new Error("Portal access not found.");
+  const { tenantId: _tenantId, password: _password, ...status } = record;
+  return status;
+}
+
+export function provisionPortalAccess(payload: {
+  customerId: string;
+  username?: string;
+  email?: string;
+  phone?: string;
+  temporaryPassword?: string;
+}): PortalAccessProvisionResponse {
+  const customer = mockCustomers.find((entry) => entry.id === payload.customerId);
+  if (!customer) throw new Error("Customer not found.");
+
+  const existingCredentialIndex = portalCredentials.findIndex((entry) => entry.customerId === payload.customerId);
+  const existingCredential = existingCredentialIndex >= 0 ? portalCredentials[existingCredentialIndex] : undefined;
+  const username = payload.username?.trim() || existingCredential?.loginId || customer.id.toUpperCase();
+  const temporaryPassword =
+    payload.temporaryPassword?.trim() ||
+    Math.random().toString(36).slice(2, 6).toUpperCase();
+
+  const nextCredential: PortalCredential = {
+    loginId: username,
+    aliases: existingCredential?.aliases ?? [customer.pppoeUsername, customer.id].filter(Boolean),
+    password: temporaryPassword,
+    customerId: payload.customerId,
+    tenantId: customer.tenantId,
+  };
+
+  if (existingCredentialIndex >= 0) {
+    portalCredentials[existingCredentialIndex] = nextCredential;
+  } else {
+    portalCredentials.push(nextCredential);
+  }
+
+  const nextRecord: PortalAccessRecord = {
+    customer_id: payload.customerId,
+    username,
+    email: payload.email ?? customer.email,
+    phone: payload.phone ?? customer.phone,
+    is_active: true,
+    portal_access_enabled: true,
+    first_login_required: true,
+    password_reset_required: true,
+    last_login: portalAccessRecords.get(payload.customerId)?.last_login,
+    created_at: portalAccessRecords.get(payload.customerId)?.created_at ?? new Date().toISOString(),
+    admin_visible_password: temporaryPassword,
+    tenantId: customer.tenantId,
+    password: temporaryPassword,
+  };
+  portalAccessRecords.set(payload.customerId, nextRecord);
+
+  const { tenantId: _tenantId, password: _password, ...status } = nextRecord;
+  return {
+    ...status,
+    temporary_password: temporaryPassword,
+  };
+}
+
+export function changePortalPassword(payload: { customerId: string; currentPassword: string; newPassword: string }) {
+  const credentialIndex = portalCredentials.findIndex((entry) => entry.customerId === payload.customerId);
+  if (credentialIndex === -1) throw new Error("Portal access not found.");
+  if (portalCredentials[credentialIndex].password !== payload.currentPassword.trim()) {
+    throw new Error("Current password is invalid.");
+  }
+
+  portalCredentials[credentialIndex] = {
+    ...portalCredentials[credentialIndex],
+    password: payload.newPassword.trim(),
+  };
+
+  const record = portalAccessRecords.get(payload.customerId);
+  if (record) {
+    portalAccessRecords.set(payload.customerId, {
+      ...record,
+      password: payload.newPassword.trim(),
+      admin_visible_password: payload.newPassword.trim(),
+      first_login_required: false,
+      password_reset_required: false,
+    });
+  }
+
+  return { success: true };
 }
 
 export function getPortalProfile(customerId: string) {

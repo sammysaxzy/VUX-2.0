@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateLead, useLeads, useServiceAreas } from "@/hooks/api/use-business";
 import { useResellerAgents } from "@/hooks/api/use-operations";
-import { randomId } from "@/lib/utils";
+import { formatCurrency, randomId } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 import type { Lead } from "@/types";
 
@@ -235,7 +235,7 @@ export function LeadsPage() {
                 <p>Assigned leads: {agent.assignedLeads}</p>
                 <p>Referrals: {agent.referrals}</p>
                 <p>Converted customers: {agent.convertedCustomers}</p>
-                <p>Commission earned: NGN {agent.commissionEarned.toLocaleString()}</p>
+                <p>Commission earned: {formatCurrency(agent.commissionEarned)}</p>
               </div>
             </div>
           ))}

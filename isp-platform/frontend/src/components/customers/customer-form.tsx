@@ -306,6 +306,7 @@ export function CustomerForm({ initial, nodes, cables, tenantId, onSubmit, onDel
         {initial ? (
           <PortalAccessPanel
             customerId={initial.id}
+            tenantId={tenantId}
             defaultUsername={initial.pppoeUsername ?? initial.id}
             defaultEmail={initial.email}
             defaultPhone={initial.phone}

@@ -12,6 +12,7 @@ import {
   useSuppliers,
   useWorkOrders,
 } from "@/hooks/api/use-inventory";
+import { formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -123,7 +124,7 @@ export function InventoryPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard title="Inventory Value" value={`NGN ${(summary.data?.inventory_value ?? 0).toLocaleString()}`} subtitle="Current stock at cost price" />
+        <MetricCard title="Inventory Value" value={formatCurrency(summary.data?.inventory_value ?? 0)} subtitle="Current stock at cost price" />
         <MetricCard title="Stock Units" value={`${summary.data?.total_stock_units ?? 0}`} subtitle="Combined quantity across categories" />
         <MetricCard title="Low Stock Alerts" value={`${summary.data?.low_stock_items ?? 0}`} subtitle={lowStockNames.length ? lowStockNames.join(", ") : "No urgent stock alerts"} />
         <MetricCard title="Recent Movements" value={`${summary.data?.recent_movements.length ?? 0}`} subtitle="Latest deductions, purchases, and transfers" />
@@ -165,7 +166,7 @@ export function InventoryPage() {
                       </TableCell>
                       <TableCell className="capitalize">{item.category}</TableCell>
                       <TableCell>{item.quantity_in_stock} {item.unit_of_measure}</TableCell>
-                      <TableCell>NGN {item.unit_cost.toLocaleString()}</TableCell>
+                      <TableCell>{formatCurrency(item.unit_cost)}</TableCell>
                       <TableCell>{suppliers.data?.find((supplier) => supplier.id === item.supplier_id)?.name ?? "Unassigned"}</TableCell>
                       <TableCell>
                         <Badge variant={item.quantity_in_stock <= item.minimum_stock_level ? "warning" : "success"}>
@@ -515,7 +516,7 @@ export function InventoryPage() {
                 {(purchases.data ?? []).slice(0, 5).map((purchase) => (
                   <div key={purchase.id} className="rounded-lg border border-border/70 p-3">
                     <p className="font-medium">{purchase.purchase_code}</p>
-                    <p className="text-xs text-muted-foreground">NGN {purchase.total_cost.toLocaleString()} on {new Date(purchase.purchase_date).toLocaleDateString()}</p>
+                    <p className="text-xs text-muted-foreground">{formatCurrency(purchase.total_cost)} on {new Date(purchase.purchase_date).toLocaleDateString()}</p>
                   </div>
                 ))}
                 {!(purchases.data ?? []).length ? <p className="text-sm text-muted-foreground">No purchases recorded yet.</p> : null}

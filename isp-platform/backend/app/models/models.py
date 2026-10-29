@@ -541,6 +541,79 @@ class NetworkDevice(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class MonitoredDevice(Base):
+    """Tenant-scoped inventory for read-only monitoring; separate from demo/legacy devices."""
+    __tablename__ = "monitored_devices"
+    __table_args__ = (UniqueConstraint("tenant_id", "device_id", name="uq_monitored_device_tenant_id"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String(100), nullable=False, index=True)
+    device_id = Column(String(100), nullable=False)
+    name = Column(String(255), nullable=False)
+    device_type = Column(String(50), nullable=False)
+    management_ip = Column(String(45), nullable=False)
+    latitude = Column(Numeric(10, 8), nullable=True)
+    longitude = Column(Numeric(11, 8), nullable=True)
+    location_name = Column(String(255))
+    monitoring_method = Column(String(30), nullable=False, default="icmp")
+    monitoring_interval_seconds = Column(Integer, nullable=False, default=60)
+    timeout_seconds = Column(Integer, nullable=False, default=3)
+    dependency_device_ids = Column(JSON, nullable=False, default=list)
+    credential_reference = Column(String(255))
+    status = Column(String(30), nullable=False, default="unknown")
+    last_success_at = Column(DateTime)
+    last_failure_at = Column(DateTime)
+    last_checked_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class MonitoringObservation(Base):
+    __tablename__ = "monitoring_observations"
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String(100), nullable=False, index=True)
+    device_id = Column(Integer, ForeignKey("monitored_devices.id"), nullable=False, index=True)
+    method = Column(String(30), nullable=False)
+    result = Column(String(30), nullable=False)
+    evidence = Column(JSON, nullable=False, default=dict)
+    observed_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class NetworkEvent(Base):
+    __tablename__ = "network_events"
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String(100), nullable=False, index=True)
+    device_id = Column(Integer, ForeignKey("monitored_devices.id"), nullable=True, index=True)
+    event_type = Column(String(60), nullable=False)
+    severity = Column(String(20), nullable=False, default="warning")
+    status = Column(String(30), nullable=False, default="open")
+    confidence = Column(String(20), nullable=False, default="unknown")
+    evidence = Column(JSON, nullable=False, default=dict)
+    incident_id = Column(Integer, ForeignKey("network_incidents.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class NetworkIncident(Base):
+    __tablename__ = "network_incidents"
+    __table_args__ = (UniqueConstraint("tenant_id", "incident_code", name="uq_network_incident_tenant_code"),)
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String(100), nullable=False, index=True)
+    incident_code = Column(String(60), nullable=False)
+    title = Column(String(255), nullable=False)
+    category = Column(String(60), nullable=False)
+    severity = Column(String(20), nullable=False, default="warning")
+    status = Column(String(30), nullable=False, default="new")
+    confidence = Column(String(20), nullable=False, default="unknown")
+    affected_device_ids = Column(JSON, nullable=False, default=list)
+    affected_customer_ids = Column(JSON, nullable=False, default=list)
+    assigned_team = Column(String(100))
+    resolution_notes = Column(Text)
+    first_observed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    closed_at = Column(DateTime)
+
+
 class BillingPayment(Base):
     __tablename__ = "billing_payments"
 

@@ -73,6 +73,73 @@ export interface TenantProfile {
   companyNotes?: string;
 }
 
+export type PortalTemplate = "modern" | "corporate" | "telecom" | "premium-dark" | "compact";
+export type PortalThemeMode = "light" | "dark" | "system";
+export type PortalFeatureKey =
+  | "payments"
+  | "invoices"
+  | "supportTickets"
+  | "supportChat"
+  | "marketplace"
+  | "outages"
+  | "usage"
+  | "planChanges"
+  | "technicianBooking"
+  | "deviceInfo"
+  | "documents"
+  | "announcements"
+  | "referrals";
+
+export type PortalFeatureFlags = Record<PortalFeatureKey, boolean>;
+
+export interface TenantPortalTheme {
+  primary: string;
+  secondary: string;
+  accent: string;
+  background: string;
+  surface: string;
+  surfaceMuted: string;
+  text: string;
+  textMuted: string;
+  border: string;
+  success: string;
+  warning: string;
+  danger: string;
+  heroFrom: string;
+  heroVia: string;
+  heroTo: string;
+}
+
+export interface TenantPortalConfig {
+  tenantId: string;
+  slug: string;
+  portalName: string;
+  portalTitle: string;
+  portalSubtitle: string;
+  customerIdPrefix: string;
+  fallbackSubdomain: string;
+  customDomains: string[];
+  supportPhone: string;
+  supportWhatsApp?: string;
+  supportEmail: string;
+  website?: string;
+  officeAddress?: string;
+  welcomeMessage: string;
+  supportMessage: string;
+  footerInformation: string;
+  loginAppearance: string;
+  dashboardAppearance: string;
+  template: PortalTemplate;
+  themeMode: PortalThemeMode;
+  showPoweredByVux: boolean;
+  marketplaceName?: string;
+  paymentInstructions?: string;
+  announcement?: string;
+  socialLinks?: Array<{ label: string; url: string }>;
+  theme: TenantPortalTheme;
+  features: PortalFeatureFlags;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -1136,6 +1203,7 @@ export interface PortalAccessStatus {
   password_reset_required: boolean;
   last_login?: string;
   created_at?: string;
+  admin_visible_password?: string;
 }
 
 export interface PortalAccessProvisionResponse extends PortalAccessStatus {

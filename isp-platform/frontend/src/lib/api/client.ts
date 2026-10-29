@@ -114,6 +114,7 @@ import {
   createMockMstConnection,
   createMockPrivilegeAccount,
   createPortalPayment,
+  changePortalPassword,
   deleteMockCable,
   disconnectMockRadiusSession,
   extendMockRadiusUser,
@@ -122,6 +123,7 @@ import {
   deleteMockClosure,
   deleteMockNode,
   getPortalNotifications,
+  getPortalAccessStatus as getMockPortalAccessStatus,
   getPortalPayments,
   getPortalPlans,
   getPortalProfile,
@@ -149,6 +151,7 @@ import {
   removeMockClosureSplice,
   ingestOnuTelemetry,
   portalLogin,
+  provisionPortalAccess as provisionMockPortalAccess,
   setMockCableCoreState,
   upsertMockPermissionMemberAccess,
   syncMockRadiusUser,
@@ -231,14 +234,14 @@ const mockTenantProfiles: TenantProfile[] = [
   },
   {
     tenantId: "tenant-north-002",
-    companyName: "NorthWave Broadband",
-    legalName: "NorthWave Digital Infrastructure Ltd",
-    primaryColor: "#155EEF",
-    supportEmail: "care@northwave.ng",
-    supportPhone: "+234 809 NORTHWAVE",
-    billingEmail: "accounts@northwave.ng",
+    companyName: "FibreHub",
+    legalName: "FibreHub Broadband Services Ltd",
+    primaryColor: "#0F766E",
+    supportEmail: "care@fibrehub.example",
+    supportPhone: "+234 809 FIBREHUB",
+    billingEmail: "accounts@fibrehub.example",
     address: "Gwarinpa, Abuja, Nigeria",
-    website: "https://northwave.example",
+    website: "https://fibrehub.example",
     timezone: "Africa/Lagos",
     currency: "NGN",
     defaultBillingCycle: "monthly",
@@ -247,9 +250,28 @@ const mockTenantProfiles: TenantProfile[] = [
     whatsappEnabled: false,
     companyNotes: "Regional ISP serving mixed residential and enterprise clusters in Abuja.",
   },
+  {
+    tenantId: "tenant-fibreone-003",
+    companyName: "FibreOne Demo",
+    legalName: "FibreOne Demo Networks Ltd",
+    logoUrl: "https://images.unsplash.com/photo-1556740749-887f6717d7e4?q=80&w=300&auto=format&fit=crop",
+    primaryColor: "#8B5CF6",
+    supportEmail: "support@fibreone.example",
+    supportPhone: "+234 801 FIBREONE",
+    billingEmail: "billing@fibreone.example",
+    address: "Victoria Island, Lagos, Nigeria",
+    website: "https://fibreone.example",
+    timezone: "Africa/Lagos",
+    currency: "NGN",
+    defaultBillingCycle: "monthly",
+    paymentGateway: "paystack",
+    mapProvider: "mapbox",
+    whatsappEnabled: true,
+    companyNotes: "Demo enterprise-grade tenant for white-label portal previews.",
+  },
 ];
 
-let mockServiceAreas: ServiceArea[] = [
+const mockServiceAreas: ServiceArea[] = [
   {
     id: "area-1",
     tenantId: "tenant-west-001",
@@ -286,7 +308,7 @@ let mockServiceAreas: ServiceArea[] = [
   },
 ];
 
-let mockLeads: Lead[] = [
+const mockLeads: Lead[] = [
   {
     id: "lead-1",
     tenantId: "tenant-west-001",
@@ -334,7 +356,7 @@ let mockLeads: Lead[] = [
   },
 ];
 
-let mockNotificationRules: NotificationRule[] = [
+const mockNotificationRules: NotificationRule[] = [
   {
     id: "notify-1",
     tenantId: "tenant-west-001",
@@ -365,7 +387,7 @@ let mockNotificationRules: NotificationRule[] = [
   },
 ];
 
-let mockAiNocResponses: AiNocResponse[] = [];
+const mockAiNocResponses: AiNocResponse[] = [];
 
 const mockCustomerKycById: Record<string, CustomerKycRecord> = {
   "cust-1001": {
@@ -446,7 +468,7 @@ const mockCustomerSlaById: Record<string, CustomerSlaMetrics> = {
   },
 };
 
-let mockSites: SiteManagementRecord[] = [
+const mockSites: SiteManagementRecord[] = [
   {
     id: "site-1",
     name: "Lekki POP Alpha",
@@ -494,7 +516,7 @@ let mockSites: SiteManagementRecord[] = [
   },
 ];
 
-let mockNocAlerts: NocAlert[] = [
+const mockNocAlerts: NocAlert[] = [
   {
     id: "noc-1",
     category: "optical",
@@ -572,7 +594,7 @@ const mockSlaReports: EnterpriseSlaReport[] = [
   },
 ];
 
-let mockProcurementRecords: ProcurementRecord[] = [
+const mockProcurementRecords: ProcurementRecord[] = [
   {
     id: "proc-1",
     vendorName: "Metro Fiber Depot",
@@ -1104,7 +1126,7 @@ const mockLaunchReadiness: LaunchReadinessChecklist = {
   ],
 };
 
-let mockInventorySuppliers: Supplier[] = [
+const mockInventorySuppliers: Supplier[] = [
   { id: 1, name: "Main FTTH Supplier", contact_person: "Procurement Desk", phone: "08000000000", email: "supply@westlink.ng" },
   { id: 2, name: "Metro Fiber Depot", contact_person: "Ade Martins", phone: "08031234567", email: "procurement@metrofiber.ng" },
 ];
@@ -3207,14 +3229,14 @@ export const apiClient = {
   async customerPortalLogin(payload: { identity: string; password: string; tenantId?: string }): Promise<CustomerPortalSession> {
     if (USE_MOCKS) {
       await sleep(200);
-      const session = portalLogin(payload.identity, payload.password);
+      const session = portalLogin(payload.identity, payload.password, payload.tenantId);
       return {
         access_token: session.token,
         token_type: "bearer",
         customer_id: session.customerId,
-        tenant_id: "tenant-west-001",
-        username: payload.identity,
-        first_login_required: false,
+        tenant_id: session.tenantId,
+        username: session.loginId,
+        first_login_required: session.firstLoginRequired,
       };
     }
     const { data } = await api.post<CustomerPortalSession>("/api/customer-portal/login", {
@@ -3356,6 +3378,16 @@ export const apiClient = {
   },
 
   async changeCustomerPortalPassword(payload: { currentPassword: string; newPassword: string }, token?: string) {
+    if (USE_MOCKS) {
+      await sleep(160);
+      const customerId = String(token ?? "").match(/^portal-(.+)-\d+$/)?.[1];
+      if (!customerId) throw new Error("Portal session is invalid.");
+      return changePortalPassword({
+        customerId,
+        currentPassword: payload.currentPassword,
+        newPassword: payload.newPassword,
+      });
+    }
     const { data } = await api.post<{ success: boolean }>(
       "/api/customer-portal/change-password",
       {
@@ -3368,6 +3400,10 @@ export const apiClient = {
   },
 
   async getPortalAccessStatus(customerId: string, tenantId: string, token?: string): Promise<PortalAccessStatus> {
+    if (USE_MOCKS) {
+      await sleep(140);
+      return getMockPortalAccessStatus(customerId);
+    }
     const { data } = await api.get<PortalAccessStatus>(`/api/customer-portal/access/${customerId}`, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
     });
@@ -3385,6 +3421,10 @@ export const apiClient = {
     tenantId: string,
     token?: string,
   ): Promise<PortalAccessProvisionResponse> {
+    if (USE_MOCKS) {
+      await sleep(160);
+      return provisionMockPortalAccess(payload);
+    }
     const { data } = await api.post<PortalAccessProvisionResponse>(
       "/api/customer-portal/access",
       {
@@ -3817,7 +3857,41 @@ export const apiClient = {
   ): Promise<WorkOrder> {
     if (USE_MOCKS) {
       await sleep(180);
-      throw new Error("Mock completion is not implemented yet.");
+      const workOrder = mockWorkOrders.find((entry) => entry.id === workOrderId);
+      if (!workOrder) throw new Error("Work order not found.");
+      if (workOrder.status === "completed" || workOrder.status === "cancelled") {
+        throw new Error("This work order cannot be completed in its current status.");
+      }
+      workOrder.status = "completed";
+      workOrder.completed_at = new Date().toISOString();
+      workOrder.completion_notes = payload.notes?.trim() || undefined;
+      workOrder.notes = payload.notes?.trim() || workOrder.notes;
+      workOrder.photos = payload.photos ?? workOrder.photos;
+      workOrder.onu_serial = payload.onu_serial ?? workOrder.onu_serial;
+      workOrder.onu_mac = payload.onu_mac ?? workOrder.onu_mac;
+      workOrder.router_mac = payload.router_mac ?? workOrder.router_mac;
+      workOrder.latitude = payload.latitude ?? workOrder.latitude;
+      workOrder.longitude = payload.longitude ?? workOrder.longitude;
+      workOrder.materials = payload.materials.map((material) => {
+        const existing = workOrder.materials.find((entry) => entry.item_id === material.item_id);
+        const quantityUsed = material.quantity_used ?? material.quantity_planned;
+        const unitCost = material.unit_cost ?? existing?.unit_cost ?? 0;
+        return {
+          id: existing?.id ?? Date.now() + material.item_id,
+          item_id: material.item_id,
+          quantity_planned: material.quantity_planned,
+          quantity_used: quantityUsed,
+          unit_cost: unitCost,
+          total_cost: quantityUsed * unitCost,
+          serial_number: material.serial_number,
+          mac_address: material.mac_address,
+          cable_length_used: material.cable_length_used,
+          notes: material.notes,
+        };
+      });
+      workOrder.approval_status = workOrder.inventory_deduction_mode === "manual_approval" ? "pending" : "not_required";
+      workOrder.updated_at = workOrder.completed_at;
+      return workOrder;
     }
     const { data } = await api.post<WorkOrder>(`/api/inventory/work-orders/${workOrderId}/complete`, payload, {
       headers: { ...tenantHeaders(tenantId), ...authHeaders(token) },
