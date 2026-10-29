@@ -18,12 +18,34 @@ export function formatDateOnly(dateIso: string) {
   }).format(new Date(dateIso));
 }
 
+function getCurrencySymbol(currency: string) {
+  try {
+    const currencyPart = new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency,
+      currencyDisplay: "narrowSymbol",
+      maximumFractionDigits: 0,
+    }).formatToParts(0).find((part) => part.type === "currency")?.value;
+
+    return currencyPart && currencyPart !== currency ? currencyPart : `${currency} `;
+  } catch {
+    return `${currency} `;
+  }
+}
+
+export function formatCompactNumber(value: number, maximumFractionDigits = 1) {
+  return new Intl.NumberFormat("en-US", {
+    notation: "compact",
+    compactDisplay: "short",
+    maximumFractionDigits,
+  })
+    .format(value)
+    .replace(/([A-Z])$/, (suffix) => suffix.toLowerCase());
+}
+
 export function formatCurrency(amount: number, currency = "NGN") {
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount);
+  const sign = amount < 0 ? "-" : "";
+  return `${sign}${getCurrencySymbol(currency)}${formatCompactNumber(Math.abs(amount))}`;
 }
 
 export function formatDateTimeOrDash(dateIso?: string) {

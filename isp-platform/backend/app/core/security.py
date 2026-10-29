@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from .config import settings
 from .database import get_db
-from ..models import User
+from ..models import User, UserRole
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
@@ -88,6 +88,22 @@ async def get_current_user(
 ) -> User:
     """Compatibility alias used by route modules."""
     return await get_current_user_dependency(credentials, db)
+
+
+def require_roles(*allowed_roles: UserRole):
+    """Return a dependency that enforces server-side role checks for mutations."""
+    allowed_values = {role.value if isinstance(role, UserRole) else str(role) for role in allowed_roles}
+
+    async def enforce(current_user: User = Depends(get_current_user_dependency)) -> User:
+        role = current_user.role.value if isinstance(current_user.role, UserRole) else str(current_user.role)
+        if role not in allowed_values:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to perform this action",
+            )
+        return current_user
+
+    return enforce
 
 
 async def get_current_tenant_id(

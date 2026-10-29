@@ -26,7 +26,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { calculatePolylineDistanceMeters, formatCableDistance } from "@/lib/fibre-routing";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
+
+const CURRENCY = new Intl.NumberFormat("en-NG", {
+  style: "currency",
+  currency: "NGN",
+  maximumFractionDigits: 0,
+});
 
 type NetworkGisWorkbenchProps = {
   nodes: NetworkNode[];
@@ -42,12 +48,6 @@ type TopologyHop = {
   type: string;
   status: string;
 };
-
-const CURRENCY = new Intl.NumberFormat("en-NG", {
-  style: "currency",
-  currency: "NGN",
-  maximumFractionDigits: 0,
-});
 
 function summarizeNodeStatus(node?: NetworkNode) {
   if (!node) return "Not linked";
@@ -513,7 +513,7 @@ export function NetworkGisWorkbench({
                 </TableBody>
               </Table>
               <div className="rounded-2xl border border-emerald-300/60 bg-emerald-50/60 p-3 text-sm dark:border-emerald-900/50 dark:bg-emerald-950/20">
-                <span className="font-semibold">Estimated build total:</span> {CURRENCY.format(buildCost.total)}
+                <span className="font-semibold">Estimated build total:</span> {formatCurrency(buildCost.total)}
               </div>
             </CardContent>
           </Card>

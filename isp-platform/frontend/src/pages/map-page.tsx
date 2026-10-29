@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { MapPinned } from "lucide-react";
 import { toast } from "sonner";
 import { FIBRE_CORE_PALETTE } from "@/constants/fibre";
@@ -26,6 +26,7 @@ import { getFaultImpact } from "@/lib/isp";
 import type { ClosureBox, Customer, FibreCable, FibreCoreCount, Fault, NetworkNode } from "@/types";
 import { MapComponent } from "@/components/map/map-component";
 import { NetworkGisWorkbench } from "@/components/map/network-gis-workbench";
+import { NetworkOperationsPanel } from "@/components/map/network-operations-panel";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
@@ -37,6 +38,7 @@ import { useAppStore } from "@/store/app-store";
 
 export function MapPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const currentUser = useAppStore((state) => state.user);
   const selectedFiberId = useAppStore((state) => state.selectedFiberId);
   const selectedClientId = useAppStore((state) => state.selectedClientId);
@@ -121,8 +123,11 @@ export function MapPage() {
   );
 
   const focusCustomerId = searchParams.get("customer") ?? undefined;
+  const externalLocationPickMode = searchParams.get("pickCustomerLocation") === "1" && Boolean(focusCustomerId);
+  const returnTo = searchParams.get("returnTo") ?? (focusCustomerId ? `/customers/${focusCustomerId}` : "/customers");
   const activeFaults = faults?.filter((fault) => fault.status !== "resolved") ?? [];
   const affectedCustomerCount = activeFaults.reduce((sum, fault) => sum + getFaultImpact(fault, localCustomers).length, 0);
+  const pickerCustomer = focusCustomerId ? localCustomers.find((customer) => customer.id === focusCustomerId) : undefined;
 
   const activeFaultCableIds = useMemo(() => {
     if (!faults) return new Set<string>();
@@ -408,6 +413,12 @@ export function MapPage() {
           <p className="text-sm text-muted-foreground">
             Enterprise mapping workspace for planning, topology, outage impact, route design, and field operations.
           </p>
+          {externalLocationPickMode ? (
+            <div className="mt-3 rounded-2xl border border-info/30 bg-info/10 px-4 py-3 text-sm text-info">
+              Click the map to capture the service coordinates for <span className="font-semibold">{pickerCustomer?.name ?? focusCustomerId}</span>.
+              VUX will return straight to the CRM profile after selection.
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
@@ -523,6 +534,8 @@ export function MapPage() {
         </Card>
       </div>
 
+      <NetworkOperationsPanel />
+
       <div ref={workbenchRef}>
         <NetworkGisWorkbench
           nodes={localNodes}
@@ -541,6 +554,21 @@ export function MapPage() {
           closures={localClosures}
           customers={localCustomers}
           focusCustomerId={focusCustomerId}
+          externalLocationPickMode={externalLocationPickMode}
+          externalLocationPickLabel={pickerCustomer?.name ? `${pickerCustomer.name} location` : "customer location"}
+          onExternalLocationPick={({ location }) => {
+            if (!focusCustomerId) return;
+            localStorage.setItem(
+              `vux:crm-location-pick:${focusCustomerId}`,
+              JSON.stringify({
+                customerId: focusCustomerId,
+                lat: location.lat,
+                lng: location.lng,
+                pickedAt: new Date().toISOString(),
+              }),
+            );
+            navigate(returnTo);
+          }}
           faults={faults ?? []}
           highlightedCableId={highlightedCableId}
           onInfrastructureAdded={(node) => {

@@ -87,6 +87,27 @@ export function ClientDropDetailsDrawer({
               </div>
               <p className="text-xs text-muted-foreground">{customer.email}</p>
               <p>
+                <span className="text-muted-foreground">Phone:</span> {customer.phone}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Address:</span> {customer.serviceLocation ?? customer.address}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Plan:</span> {customer.planName ?? "Unassigned"}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Payment:</span> {customer.paymentStatus ?? "pending"}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Install status:</span> {customer.installStatus ?? "pending"}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Last payment:</span> {customer.lastPaymentDate ?? "Not captured"}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Assigned technician:</span> {customer.assignedEngineer ?? "Unassigned"}
+              </p>
+              <p>
                 <span className="text-muted-foreground">ONU:</span> {customer.onuSerial}
               </p>
               <p>
@@ -120,7 +141,7 @@ export function ClientDropDetailsDrawer({
                 ) : null}
                 <Link to={`/customers/${customer.id}`}>
                   <Button size="sm" variant="outline">
-                    Open CRM Profile
+                    View Full Customer Profile
                   </Button>
                 </Link>
               </div>

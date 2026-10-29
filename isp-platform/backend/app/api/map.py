@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db
-from ..core.security import get_current_user
+from ..core.security import get_current_user, require_roles
 from ..models import (
     ActivityLog,
     Client,
@@ -23,6 +23,7 @@ from ..models import (
     NetworkLink,
     NetworkNodeType,
     OLTOffice,
+    UserRole,
 )
 from ..schemas import (
     Closure as ClosureSchema,
@@ -312,8 +313,9 @@ def _build_trace_response(
             nodes=[],
             links=[],
             total_loss_db=0.0,
-            fault_detected=True,
-            fault_at={"reason": "No connected path found from any OLT to target"},
+            fault_detected=False,
+            fault_at={"reason": "No connected topology path is recorded from any OLT to target",
+                      "classification": "unknown"},
         )
 
     serialized_links = [
@@ -366,6 +368,7 @@ def _build_trace_response(
             "source_id": faulty_link.source_id,
             "destination_type": _enum_value(faulty_link.destination_type),
             "destination_id": faulty_link.destination_id,
+            "classification": "confirmed_cut" if faulty_link.health_status == LinkHealthStatus.CUT else "suspected_or_degraded",
         }
 
     return TracePathResponse(
@@ -375,7 +378,7 @@ def _build_trace_response(
         nodes=node_sequence,
         links=serialized_links,
         total_loss_db=round(total_loss, 3),
-        fault_detected=fault_at is not None,
+        fault_detected=bool(faulty_link and faulty_link.health_status == LinkHealthStatus.CUT),
         fault_at=fault_at,
     )
 
@@ -383,7 +386,7 @@ def _build_trace_response(
 @router.get("/data", response_model=MapTopologyData)
 async def get_map_data(
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
     """Return complete topology payload for advanced map rendering."""
     olt_rows = (await db.execute(select(OLTOffice))).scalars().all()
@@ -490,7 +493,7 @@ async def get_map_data(
 async def trace_customer_path(
     customer_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
     client = await db.get(Client, customer_id)
     if not client:
@@ -518,7 +521,7 @@ async def trace_customer_path(
 async def trace_mst_path(
     mst_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
     mst = await db.get(MSTBox, mst_id)
     if not mst:
@@ -546,7 +549,7 @@ async def trace_mst_path(
 async def trace_link_path(
     link_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
     link = await db.get(NetworkLink, link_id)
     if not link:
@@ -574,13 +577,11 @@ async def trace_link_path(
 async def detect_fault_for_customer(
     customer_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
     trace = await trace_customer_path(customer_id=customer_id, db=db, current_user=current_user)
-    probable_fault = trace.fault_at
-    break_detected = trace.fault_detected or not trace.found
-    if not probable_fault and break_detected:
-        probable_fault = {"reason": "Signal path could not be completed from OLT to customer"}
+    probable_fault = trace.fault_at if trace.fault_detected else None
+    break_detected = trace.fault_detected
 
     return FaultDetectionResponse(
         customer_id=customer_id,
@@ -594,7 +595,7 @@ async def detect_fault_for_customer(
 async def get_customer_loss_breakdown(
     customer_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
     trace = await trace_customer_path(customer_id=customer_id, db=db, current_user=current_user)
     if not trace.found:
@@ -638,7 +639,7 @@ async def disable_mst_port(
     mst_id: int,
     payload: DisablePortRequest,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
     mst = await db.get(MSTBox, mst_id)
     if not mst:
@@ -696,7 +697,7 @@ async def connect_client_to_mst_from_map(
     mst_id: int,
     payload: ConnectClientRequest,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
     mst = await db.get(MSTBox, mst_id)
     if not mst:
@@ -796,7 +797,7 @@ async def list_closures(
 async def create_closure(
     closure_data: ClosureCreate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
     existing = await db.execute(select(Closure).where(Closure.closure_id == closure_data.closure_id))
     if existing.scalar_one_or_none():
@@ -815,7 +816,7 @@ async def update_closure(
     closure_id: int,
     closure_data: ClosureUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
     closure = await db.get(Closure, closure_id)
     if not closure:
@@ -845,7 +846,7 @@ async def list_olts(
 async def create_olt(
     olt_data: OLTOfficeCreate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
     existing = await db.execute(select(OLTOffice).where(OLTOffice.olt_id == olt_data.olt_id))
     if existing.scalar_one_or_none():
@@ -863,7 +864,7 @@ async def update_olt(
     olt_id: int,
     olt_data: OLTOfficeUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
     olt = await db.get(OLTOffice, olt_id)
     if not olt:
@@ -892,7 +893,7 @@ async def list_links(
 async def create_link(
     link_data: NetworkLinkCreate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
     existing = await db.execute(select(NetworkLink).where(NetworkLink.link_id == link_data.link_id))
     if existing.scalar_one_or_none():
@@ -910,7 +911,7 @@ async def update_link(
     link_id: int,
     link_data: NetworkLinkUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
     link = await db.get(NetworkLink, link_id)
     if not link:

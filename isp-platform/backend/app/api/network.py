@@ -6,8 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db
-from ..core.security import get_current_user
-from ..models import ActivityLog, NetworkDevice as NetworkDeviceModel
+from ..core.security import get_current_user, require_roles
+from ..models import ActivityLog, NetworkDevice as NetworkDeviceModel, UserRole
 from ..schemas import NetworkDevice, NetworkDeviceCreate, NetworkDeviceUpdate
 
 router = APIRouter(prefix="/network", tags=["Network Devices"])
@@ -33,7 +33,7 @@ async def list_devices(
 async def create_device(
     payload: NetworkDeviceCreate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
     existing = await db.execute(
         select(NetworkDeviceModel).where(NetworkDeviceModel.device_id == payload.device_id)
@@ -61,7 +61,7 @@ async def update_device(
     device_id: int,
     payload: NetworkDeviceUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
     device = await db.get(NetworkDeviceModel, device_id)
     if not device:
@@ -88,27 +88,14 @@ async def update_device(
 async def reboot_device(
     device_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ISP_ADMIN, UserRole.FIELD_ENGINEER)),
 ):
-    device = await db.get(NetworkDeviceModel, device_id)
-    if not device:
-        raise HTTPException(status_code=404, detail="Device not found")
-
-    device.last_seen = datetime.utcnow()
-    device.status = "online"
-
-    db.add(
-        ActivityLog(
-            action_type="network_device_rebooted",
-            action_description=f"Device '{device.name}' reboot command issued",
-            user_id=current_user.id,
-            after_state={"device_id": device.device_id},
-        )
+    # This platform has no configured, audited reboot adapter. Never claim to
+    # queue a command or mutate health state when no command was sent.
+    raise HTTPException(
+        status_code=501,
+        detail="Remote reboot is unavailable. Configure an approved device-control integration first.",
     )
-    await db.commit()
-    await db.refresh(device)
-
-    return {"device_id": device.id, "status": "reboot_queued", "last_seen": device.last_seen}
 
 
 @router.get("/devices/{device_id}/traffic")
